@@ -54,7 +54,7 @@
 % \let\footnotesize\indexsize
 % \small                       9/10
 % \smallish                    9/11 Y figure caption size
-% \let\enotesize\smallish
+% \let\enotesize\smallisha
 % \let\tablesize\smallish      9/11 Y
 % \bibliosize                  9/12 Y
 % \runningheadsize           9.5/11 Y
@@ -362,8 +362,8 @@
 
 \@ifpackageloaded{sidecap}{%
   \renewcommand\sidecaptionsep{1pc}%
-  \newlength\abovecaptionskip%\setlength\abovecaptionskip{40pt}%
-  \newlength\belowcaptionskip%\setlength\belowcaptionskip{10pt}%
+  %\newlength\abovecaptionskip%\setlength\abovecaptionskip{40pt}%
+  %\newlength\belowcaptionskip%\setlength\belowcaptionskip{10pt}%
   \renewenvironment{SCtable}{\tablesize\SC@float[\SC@table@vpos]{table}}{\endSC@float}%
   \renewenvironment{SCtable*}{\tablesize\SC@dblfloat[\SC@table@vpos]{table}}{\endSC@dblfloat}%
   \renewenvironment{SCfigure}{\tablesize\SC@float[\SC@figure@vpos]{figure}}{\endSC@float}%
