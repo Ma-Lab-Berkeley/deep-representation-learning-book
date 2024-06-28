@@ -3,52 +3,141 @@
 $~$ \hfill --- High-dimensional Data Analysis, 2022   
 \end{quote}
 
-In Chapter \ref{ch:linear-independent}, we have studied how to learn special classes of distributions whose support is assumed to be  low-dimensional linear or piecewise linear subspaces and different (linear) modes are independent. As we have shown, for such special distributions, one can derive rather simple and effective learning algorithms with good performance and efficiency guarantees. 
+In Chapter \ref{ch:linear-independent}, we have shown how to learn simple classes of distributions whose supports are  assumed to be either a single or a mixture of low-dimensional  subspaces or low-rank Gaussians. For further simplicity, the different (hidden) linear or Gaussian modes are assumed to be orthogonal or independent. As we have shown, for such special distributions, one can derive rather simple and effective learning algorithms with correctness and efficiency guarantees. The geometric and statistical interpretation of operations in the associated algorithms is also very clear.
 
-However, in practice, both linearity and independence are rather idealistic assumptions that distributions of real-world high-dimensional data rarely satisfy. Nevertheless, it remains reasonable to assume that the intrinsic dimension(s) of the support of the distribution is rather low-dimensional, compared to the dimension of the ambient space in which the data are embedded. 
+In practice, both linearity and independence are rather idealistic assumptions that distributions of real-world high-dimensional data rarely satisfy. Nevertheless, it is plausible to assume that the intrinsic dimension(s) of the distribution is rather low-dimensional, compared to the dimension of the ambient space in which the data are embedded. 
 
-Hence in this chapter, we show how to learn a general low-dim distribution in a high-dimensional space that is not necessarily (piecewise) linear or independent. It is typical that the distribution of real data often contain multiple modes, say corresponding to different classes of objects in the case of images. These modes might not be statistically independent and they may have different intrinsic dimensions. It is also typical that we do not know much analytical nature of the distribution in advance  but only have access to a finite number of samples of the distribution. 
+In this chapter, we show how to learn a more general class of low-dimensional distributions in a high-dimensional space that is not necessarily (piecewise) linear and  independent. It is typical that the distribution of real data often contain multiple modes, say corresponding to different classes of objects in the case of images. These modes might not be statistically independent and they may even have different intrinsic dimensions. It is also typical that we only have access to a finite number of samples of the distribution. 
 
 To learn such a distribution, there are several fundamental questions we need to address: 
 \begin{itemize}
     \item How do we even represent or approximately represent a rather general low-dimensional distribution? 
     \item How do we measure the complexity of such distributions so that we can effectively exploit their low-dimensionality? 
     \item How do we make the learning process  computationally tractable and even scalable, as the ambient dimension is high and the number of samples large?
-\end{itemize} As we will see in this chapter, the fundamental idea of compression (or dimension reduction) that has been effective for the linear/independent case still serves as a general principle for the development of an effective computational framework for learning a general low-dimensional distribution.
+\end{itemize} As we will see, the fundamental idea of compression, or dimension reduction, that has been shown to be very effective for the linear/independent case still serves as a general principle for developing effective computational models and methods for learning general low-dimensional distributions.
 
-Arguably of the most practical significance, we will study in greater depth how this general framework of distribution learning via compression can become especially explicit and efficient for an important family of distributions when the distribution of interest can be well modeled or approximated by a mixture of multiple low-dimensional Gaussians (or subspaces). 
+Due to its most practical significance, we will study in greater depth how this general framework of learning distribution  via compression substantiates when the distribution of interest can be well modeled or approximated by a mixture of  low-dimensional subspaces or low-rank Gaussians. 
 
 
-\section{The General Principle of Compression} 
+\section{The Principle of Compression} 
 
-\subsection{The importance of low-dimensionality}
-Why is learning a low-dimensional distribution important and useful? 
+\subsection{Predictability and low-dimensionality}
+
+
 
 How can one be sure whether a low-dimensional distribution is learned correctly? Needs to be effective for denoising, completion, and prediction. 
 
-\subsection{The minimal description length principle}
 
-\subsection{Compression via denoising}
+\subsection{Compression via denoising and diffusion}\label{sub:compression_denoising}
+
+\DP{@YM: You may want to move part or whole of the following text to Ch 1 or Ch 2. I can't decide where it's best to put it; you already cover this point in a little detail in Ch 1 from a slightly different perspective. Definitely possible to put it in Ch 2 at the start, but it also is orthogonal to your proposed outline.}
+
+As stated, our central task is to learn a distribution which has low intrinsic dimension in a high-dimensional space. In the remainder of this section, we discuss a general approach to performing this task, and two classical methods which implement this approach. While these methods are interesting and useful, we discuss them here as they motivate, inspire, and serve as a predecessor or analogue to more modern methods involving deep (representation) learning.
+
+Our main approach can be summarized as:
+\begin{tcolorbox}
+    \textit{Given one or several (noisy or incomplete) observations of a ground truth sample from the data distribution, obtain an estimate of this sample.}
+\end{tcolorbox}
+This approach unifies several classical methods, which were discussed in Chapter \ref{ch:classic}: \DP{maybe this should go in chapter 2?}
+\begin{itemize}
+    \item PCA: Given a noisy version of a sample from a distribution supported on a low-dimensional subspace, obtain an estimate of the true sample which lies on this subspace.
+    \item ICA: Given a noisy version of a sample from a distribution with certain statistical properties, obtain an estimate of the true sample.
+    \item Sparse coding: Given a noisy version of a sample from a distribution supported on the coordinate axes, obtain an estimate of the true sample which lies on the coordinate axes as well.
+\end{itemize}
+As we will soon see, in the deep learning era, modern methods also use versions of this principle: classification, masked autoencoding \DP{cite kaiming, BERT}, autoregressive next-token-prediction \DP{cite gpt2}, and JEPA \DP{cite yann} are all instances of this approach. \DP{later/chapter notes? give basic methods first}
+
+In this section, we will focus on one such method not discussed so far: \textit{lossy compression}. At a high level, lossy compression removes all unnecessary details from a noisy observation to \textit{compress} it. What is ``unnecessary'' is defined information-theoretically, and depends on prior (learned) knowledge about the system. A compression algorithm which is finely tuned to the input distribution is very effective at reducing the deviations or disturbances that each sample has from the ground truth data distribution. 
+
+In the case where the observations are simply noisy copies of the ground truths, compression is very related to \textit{denoising}, a classical procedure in signal processing. Denoising is the process of removing noise from a noisy observation, and we will focus on this procedure for the rest of Section \ref{sub:compression_denoising}. For example, suppose that \(\vz_{o} \in \R^{d}\) is a random variable that we want to estimate (i.e., the \textit{plant} or \textit{ground truth}). For technical reasons we must also assume that \(\Ex\norm{\vz_{o}}_{2}^{2} < \infty\). Suppose that \(\vz\) is a perturbation of \(\vz_{o}\) by additive Gaussian noise, i.e., 
+\begin{equation}\label{eq:additive_gaussian_noise_model}
+    \vz_{\sigma} = \vz_{o} + \sigma \vg, \qquad \vg \sim \dNorm(\vzero, \vI).
+\end{equation}
+Then, an \textit{optimal denoiser} (i.e., best estimator of \(\vz_{o}\)) in this data model is simply the conditional expectation, i.e.,\footnote{If you aren't sure what \textit{measurable} means, don't worry about it; it's merely a technical condition, which holds for any function you can write down. Its exact definition can be looked up in any graduate-level real analysis or probability textbook.}\DP{cite something? true by any probability theory textbook...}
+\begin{equation}\label{eq:denoiser_conditional_expectation}
+    \vmu_{\sigma} \doteq \Ex[\vz_{o} \mid \vz_{\sigma} = \cdot] \in \argmin_{\substack{f \colon \R^{d} \to \R^{d} \\ \text{\(f\) measurable} \\ \Ex\norm{f(\vz)}_{2}^{2} < \infty}}\Ex\norm{\vz_{o} - f(\vz_{\sigma})}_{2}^{2}.
+\end{equation}
+ Thus, in order to learn a denoiser from clean samples of the probability distribution, one just needs to solve the minimization problem in \eqref{eq:denoiser_conditional_expectation}. Namely, for some function class \(\cF\), one solves the denoising problem
+\begin{equation}\label{eq:denoiser_learning_problem}
+    f^{\star} \in \argmin_{f \in \cF}\Ex\norm{\vz_{o} - f(\vz_{\sigma})}_{2}^{2}.
+\end{equation}
+(approximating \(\vz_{o}\) and \(\vz_{\sigma}\) via finite samples, if need be).
+
+At a very high level, denoising follows the general approach we declared in order to learn a distribution. However, there \textit{also} exist very concrete connections between the conditional expectation, i.e., the optimal denoiser, to (perturbed versions of) the data distribution. These mostly follow from \textit{Tweedie's formula} \DP{cite: Robbins 1957, or before?} \DP{cite: Jong-Chul Ye DPM, which has the most general form of Tweedie's formula that I know} \DP{cite: Druv's MAE paper}, whose simplest form is as follows. Consider the model \eqref{eq:additive_gaussian_noise_model}, let \(p_{\sigma}\) be the probability density of \(\vz\), and let \(\vs_{\sigma} \doteq \nabla \log p_{\sigma}\). Then
+\begin{equation}\label{eq:tweedie_simple}
+    \vmu_{\sigma}(\vz) \doteq \Ex[\vz_{o} \mid \vz_{\sigma} = \vz] = \vz + \sigma^{2}\nabla \log p_{\sigma}(\vz) \doteq \vz + \sigma^{2}\vs_{\sigma}(\vz).
+\end{equation}
+Thus, it is equivalent to learn a perturbed version of the data distribution via \(\nabla \log p^{\sigma}\), also called the (Hyvarinen) score \DP{cite: aapo score matching} \DP{cite: sohl-dickstein, ganguli}, and to solve the simple conditional expectation regression problem \eqref{eq:denoiser_learning_problem}, which is much more tractable. 
+ 
+Learning \(\vs_{\sigma} = \nabla \log p_{\sigma}\) is useful because it provides a sample-efficient way to learn a parametric statistical model \DP{cite: aapo}, and also gives ways to sample from the perturbed distribution \(p^{\sigma}\) (and, if \(\sigma\) is small or approaches to \(0\), then also sample from the ground truth distribution \(p\)). One such classical sampling procedure is obtained by the so-called \textit{Langevin dynamics}, recently supplanted by the more modern \textit{diffusion models}. In what follows, we give a brief overview of both methods.
+
+To sample from a distribution \(p_{\sigma}\) using Langevin dynamics \DP{not actually sure the correct citation here... in the worst case, look at sources in Lee/Risteski blog}, we use the following iterative procedure:
+\begin{equation}\label{eq:langevin}
+    \vz_{t + 1} = \vz_{t} + \eta_{t} \vs_{\sigma}(\vz_{t}) + \sqrt{2\eta_{t}} \vg_{t}, \qquad \vg_{t} \sim \dNorm(\vzero, \vI), \quad \forall t \in [T].
+\end{equation}
+Here \(\eta_{t}\) are step-sizes and \(\vg_{t}\) is sampled independently from the whole trajectory up until time step \(t\). Some brief intuition for this iteration is as follows. When sampling from a desired distribution \(p_{\sigma}\), we want to move our iterate \(\vz_{t}\) closer to the regions of high probability for \(p_{\sigma}\) (equivalently, \(\log p_{\sigma}\), whose gradient we use because it does not require the intractable computation of a normalizing constant present in \(p_{\sigma}\) itself). Thus, we take a gradient step on \(\log p_{\sigma}\). But we do not want to just concentrate our samples on local or global optima of \(\log p_{\sigma}\), so to perturb the current iterate out of such optima, we add some appropriately-scaled noise. One can prove that the iteration \eqref{eq:langevin} will converge to a random variable which has the target distribution of interest. \DP{figure denoting gradient descent on smoothed form of low-dimensional density: like MAE paper picture, but with curved data} \DP{series of pictures: generic data, linear data, piecewise linear data, transforming the data into linear structure}
+
+The main issue that we take with Langevin dynamics here is that it does not allow us to sample from real-world data distributions, i.e., those which are high-dimensional but with low-dimensional structure. In particular, those distributions do not have well-defined densities, and so Langevin dynamics is not well-defined. For this reason, \DP{cite: song \& ermon 2019} proposed a form of \textit{annealed Langevin dynamics}: run trajectories of \eqref{eq:langevin} with smaller and smaller \(\sigma = \sigma^{\ell}\), using the previous trajectory's terminal state as the current trajectory's input state, until the output has a distribution close to the data distribution, i.e., 
+\begin{align}
+    \vz_{t + 1}^{\ell} 
+    &= \vz_{t}^{\ell} + \eta_{t}^{\ell} \nabla \vs_{\sigma^{\ell}}(\vz_{t}^{\ell}) + \sqrt{2\eta_{t}^{\ell}} \vg_{t}^{\ell}, \qquad \vg_{t}^{\ell} \sim \dNorm(\vzero, \vI), \\ 
+    \vz_{1}^{\ell}
+    &= \vz_{T + 1}^{\ell - 1}, \qquad \forall t \in [T], \quad \forall \ell \in [L].
+\end{align}
+By choosing the \(\sigma^{\ell}\) properly, we obtain the following simplified process:
+\begin{equation}\label{eq:diffusion_sampling}
+    \vz^{\ell + 1} = \vz^{\ell} + \eta^{\ell} \vs_{\sigma^{\ell}}(\vz^{\ell}) + \sqrt{2\eta^{\ell}} \vg^{\ell}, \qquad \vg^{\ell} \sim \dNorm(\vzero, \vI), \quad \forall \ell \in [L].
+\end{equation}
+This is an iteration scheme associated with \textit{diffusion models}, which provably sample from the data distribution, assuming the score \(\nabla \log p^{\sigma}\) is estimated well, even if the distribution is low-dimensional.
+
+In particular, the iteration \eqref{eq:diffusion_sampling} provides a way to \textit{sample by denoising} from even arbitrary distributions. That is, by using \eqref{eq:tweedie_simple}, we can write \eqref{eq:diffusion_sampling} as 
+\begin{align}
+    \vz^{\ell + 1} 
+    &= \vz^{\ell} + \eta^{\ell}\left(\frac{\vmu_{\sigma^{\ell}}(\vz^{\ell}) - \vz^{\ell}}{(\sigma^{\ell})^{2}}\right) + \sqrt{2\eta^{\ell}}\vg^{\ell}, \quad \vg^{\ell} \sim \dNorm(\vzero, \vI), \quad \forall \ell \in [L], \\
+    &= \left(1 - \frac{\eta^{\ell}}{(\sigma^{\ell})^{2}}\right)\vz^{\ell} + \frac{\eta^{\ell}}{(\sigma^{\ell})^{2}}\vmu_{\sigma^{\ell}}(\vz^{\ell}) + \sqrt{2\eta^{\ell}}\vg^{\ell}.
+\end{align}
+In particular, each iteration takes a convex combination of the current iterate and the optimal denoiser, gradually moving towards the denoised sample, along with some appropriately scaled noise to sample along the posterior distribution. Hence, diffusion models learn the distribution via estimating the optimal denoiser, and sample by iterative denoising.
+
+
+\DP{outline}
 These also are the key ways to learn a distribution in a high-dimensional space with very low intrinsic dimension. More specifically denoising (and score function), or completion, or prediction... 
 
 Empirical Bayesian denoising, Tweedie's formula, score function, Lagevine dynamics, MCMC etc... (Can parameterize score function, but don't need to... denoising is well-defined in general)
 
-\section{Mixture of Low-Dimensional Gaussians}
-\subsection{Lossy compression and rate distortion}
-lossy compression, encoding and decoding via sphere packing, rate distortion for a Gaussian or a low-dimensional subspace. 
+\DP{TODO: DP}
 
-\subsection{Minimal coding length or rate}
-Minimal coding rate or rate reduction for the important/practical case when the distributions can be approximated by mixture of degenerate Gaussians or subspaces: \href{http://people.eecs.berkeley.edu/~yima/psfile/Ma-PAMI07.pdf}{for unsupervised clustering}.
+\subsection{Diffusion models for low-rank Gaussians}
 
-Properties of the rate reduction objective + MAE paper theorem connects rate distortion to Gaussian score.
+Diffusion models and denoisers are said to learn the distribution. It is a natural question to ask whether the information they learn is in some sense equivalent to the correct information learned by other classical methods to learn the distribution. It turns out that, in some restricted cases, it is possible to prove that the answer is yes. \DP{continue...}
 
-\section{Applications in Clustering and Classification}
+\DP{outline}
+Interpretation of PCA from the perspective of diffusion and denoising for a single low-rank Gaussian.
 
-\subsection{Image segmentation via lossy compression}
+Diffusion and denoising for a mixture of low-rank Gaussians, and subspace clustering.
+
+\DP{TODO: DP}
+
+\section{Measuring Parsimony via Coding Rate (Ma)}
+
+\subsection{Entropy and minimal description length}
+
+How to measure low-dimensionality? A measure of parsimony. 
+
+\subsection{Rate distortion and minimizing coding rate}
+Transition to measuring 
+
+Lossy coding length, encoding and decoding via sphere packing, rate distortion for a Gaussian or a low-dimensional subspace. Compression via minimum coding length.
+
+Minimal coding rate or rate reduction for the important/practical case when the distributions can be approximated by mixture of degenerate Gaussians or subspaces: \href{http://people.eecs.berkeley.edu/~yima/psfile/Ma-PAMI07.pdf}{for unsupervised subspace clustering}.
+
+
+
+%\subsection{Applications of Subspace  Clustering}
+
+\subsubsection{Example: image segmentation via lossy compression}
 Illustrative applications in \href{http://people.eecs.berkeley.edu/~yima/psfile/MobahiH2011-IJCV.pdf}{image segmentation}.
 
-\subsection{Classification via minimal incremental coding length}
-\href{http://people.eecs.berkeley.edu/~yima/psfile/MICL_SJIS.pdf}{supervised classification} from the perspective of (lossy) compression.
+%\subsection{Classification via minimal incremental coding length}
+%\href{http://people.eecs.berkeley.edu/~yima/psfile/MICL_SJIS.pdf}{supervised classification} from the perspective of (lossy) compression.
 
 \section{Summary and Notes}
 The main message: making compression computable and tractable...
