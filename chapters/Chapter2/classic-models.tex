@@ -4,27 +4,135 @@
 $~$\hfill -- David Hilbert
 \end{quote}
 
+\textit{Real data has low-dimensional structure.} To see why this is true, let us consider the unassuming case of static on a TV when the satellite isn't working. At each frame (approximately every \(\frac{1}{30}\) seconds), the RGB static on a screen of size \(H \times W\) is, roughly, sampled independently from a uniform distribution on \([0, 1]^{3 \times H \times W}\). In theory, the static \textit{could} resolve to a natural image on any given frame, but even if you spend a thousand years looking at the TV screen, it will not. This discrepancy is explained by the fact that the set of \(H \times W\) natural images takes up a vanishingly small fraction of the hypercube \([0, 1]^{3 \times H \times W}\). In particular, it is low-dimensional. Similar phenomena occur for all other types of natural data, such as text, audio, and video. Thus, when we design systems and methods to process natural data, this is a central property of natural data which we need to take into account.
 
-This chapter connects to the classic roots of data analysis with low-dimensional structures: geometrically linear, statistically independent.
+In this Chapter, we will discuss a few types of low-dimensional structures that have been useful as simplifying modeling assumptions for certain types of real data. We will use these modeling assumptions to derive useful algorithms for processing real data at scale. We stress that all models used in this Chapter are (perhaps overly) simple, and indeed make \textit{linearity} assumptions of some sort on the data. As a result, they are simple and tractable, but their capacity to model reality is not too high. In particular, \textit{they are usually not perfect models of the real data}. Thus the algorithms discussed in this chapter, when applied to real data, only approximately enjoy the mathematical guarantees provided in the context of the simplified model. Nonetheless, the presented models and algorithms serve as precursors and special cases of the more general paradigms we address later in this monograph when building an understanding of deep learning.
+
+
+%wacwwwwwwwwwwwwwwwwwwwdadwThis chapter connects to the classic roots of data analysis with low-dimensional structures: geometrically linear, statistically independent.
 
 
 
-Extrinsic/intrinsic? Representation?
+%Extrinsic/intrinsic? Representation?
 
-The three (?) things that are echoed in the sequel:
+%The three (?) things that are echoed in the sequel:
+%\begin{enumerate}
+%    \item \textbf{What do we assume about reality?} Our model; mathematical
+%        modeling.
+%    \item \textbf{How do we compute with the model?} Simple models $\implies$
+%        efficient computation.
+%    \item \textbf{Does it work?} When the model assumption is met $\implies$ math proves
+%        it works. (When it's ``okay'' $\implies$ bounded ``works'').
+%\end{enumerate}
+%Even if the model is too idealistic, its solution may convey the basic ideas that apply to the more general cases.
+
+%\section{Modeling Low-dimensional Structures and Distributions}
+
+\section{Low-Rank Data} \label{sec:lowrank}
+
+\subsection{Principal Components Analysis (PCA)} \label{sub:pca}
+
+Perhaps the simplest modeling assumption possible for low-dimensional structure is the so-called \textit{low-rank} assumption. Letting \(D\) be the dimension of our data space, we assume that our data belong on a low-dimensional subspace of dimension \(d \ll D\), possibly plus some small disturbances. This ends up being a nearly valid assumption for some surprisingly complex data, such as images of digits \cite{mnist}, face recognition data \cite{eigenfaces, BasriR2003-PAMI}, and motion data \cite{Vidal-GPCA}, yet as we will see, it will lend itself extremely well to comprehensive analysis. To write this in mathematical notation, we represent a subspace \(\cS \subseteq \R^{D}\) of dimension \(d\)  by an orthonormal matrix \(\vU \in \O(D, d) \subseteq \R^{D \times d}\), such that the columns of \(\vU\) span \(\cS\). Then, we say that our data \(\{\vx_{i}\}_{i = 1}^{N} \subseteq \R^{D}\) have (approximate) low-rank structure if and only if  there exists an orthonormal matrix \(\vU_{o} \in \O(D, d)\), vectors \(\{\vz_{o, i}\}_{i = 1}^{N} \subseteq \R^{d}\), and \textit{small} vectors \(\{\veps_{i}\}_{i = 1}^{N} \subseteq \R^{N}\) such that 
+\begin{equation}\label{eq:pca_dgp}
+    \vx_{i} = \vU_{o}\vz_{o, i} + \veps_{i}, \qquad \forall i \in [N].
+\end{equation}
+Here \(\veps_{i}\) are disturbances which perturb the data from being perfectly low rank; their presence in our model allows us to quantify the degree to which our analysis remains relevant in the presence of deviations from our model. Thus, to process all we can from this data, it amounts to recovering \(\vU_{o}\), also called the \textit{principal components}. Fortunately, this is a computationally tractable task named Principal Components Analysis, and we discuss now how to solve it.
+
+Given data \(\{\vx_{i}\}_{i = 1}^{N}\) distributed as in \eqref{eq:pca_dgp}, we aim to recover the model \(\vU_{o}\). A natural approach is to find the subspace \(\vU_{\star}\) and latent vectors \(\{\vz_{\star, i}\}_{i = 1}^{N}\) which are the closest to obtaining \(\vx_{i} \approx \vU_{\star}\vz_{\star, i}\). Namely, we aim to solve the problem 
+\begin{equation}\label{eq:pca_sparse_recovery_problem}
+    \min_{\vU, \{\vz_{i}\}_{i = 1}^{N}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vz_{i}}_{2}^{2}.
+\end{equation}
+We aim to simplify this problem. For a fixed \(\vU\), we have (proof as exercise):
+\begin{align}
+    \min_{\{\vz_{i}\}_{i = 1}^{N}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vz_{i}}_{2}^{2} 
+    &= \frac{1}{N}\sum_{i = 1}^{N}\min_{\vz_{i}}\norm{\vx_{i} - \vU\vz_{i}}_{2}^{2} \\
+    &= \frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vU^{\top}\vx_{i}}_{2}^{2}.
+\end{align}
+so that we can write the original optimization problem in \(\vU\) and \(\{\vz_{i}\}_{i = 1}^{N}\) as an optimization problem just over \(\vU\), i.e.,
+\begin{equation}\label{eq:pca_equals_denoising}
+    \min_{\vU, \{\vz_{i}\}_{i = 1}^{N}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vz_{i}}_{2}^{2} = \min_{\vU}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vU^{\top}\vx_{i}}_{2}^{2}.
+\end{equation}
+Note that the problem on the right-hand side of \eqref{eq:pca_equals_denoising} is a \textit{denoising} problem: given noisy observations \(\vx_{i}\) of low-rank data, we aim to find the most \textit{noise-free} copy of \(\vx_{i}\), in this case by solving the equivalent problem of finding the best subspace, parameterized by basis \(\vU\), to project the noisy data onto. In this case the \textit{denoiser} is the projection matrix \(\vU\vU^{\top}\).  Denoising is one of the fundamental building blocks of high-dimensional data analysis, and we will discuss it often in this book, as many algorithms we will discuss are essentially denoising with respect to a particular data model (such as in \eqref{eq:pca_dgp}, but a bit more complicated). For now, we continue our calculation. Let \(\vX = \mat{\vx_{1}, \dots, \vx_{N}} \in \R^{D \times N}\) be the matrix whose columns are the observations \(\vx_{i}\). We have (proof as exercise)
+\begin{align}
+    \argmin_{\vU}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vU^{\top}\vx_{i}}_{2}^{2}
+    &= \argmax_{\vU}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vU^{\top}\vx_{i}}_{F}^{2} \\ 
+    &= \argmax_{\vU}\tr\rc{\vU^{\top}\bp{\frac{\vX\vX^{\top}}{N}}\vU}.
+\end{align}
+Thus to compute the principal components, we find the orthogonal matrix \(\vU\) which maximizes \(\tr(\vU^{\top}(\vX\vX^{\top}/N)\vU)\). In fact, the best such matrix \(\vU^{\star}\) has columns which are these are the \textit{top \(d\) left singular vectors} of \(\vX\), i.e., the top \(d\) eigenvectors of \(\vX\vX^{\top}\). While this can be obtained via brute force calculation, such as an inductive proof, we do not do so here; we instead provide a little intuition by considering the case \(d = 1\). Then we only have a single unit vector \(\vu\) to recover, and solve the problem \(\max_{\vu} \vu^{\top}(\vX\vX^{\top}/N)\vu\). This is the so-called \textit{Rayleigh quotient} of \(\vX\vX^{\top}/N\) and the optimal solutions to this problem are eigenvectors corresponding to the maximum eigenvalue of \(\vX\vX^{\top}/N\). Since these eigenvectors also correspond to the maximum eigenvalue of \(\vX\vX^{\top}\), the worked out solution for the case \(d = 1\) corresponds to our proposed solution for the general \(d\) case. In summary:
+\begin{tcolorbox}
+    \textit{The principal components correspond to the optimal linear denoiser and are given by the top \(d\) left singular vectors of the data matrix \(\vX\).}
+\end{tcolorbox}
+
+There is a computationally efficient way to estimate the left singular vectors of a data matrix \(\vX\) called \textit{power iteration}. We discuss it in Section \ref{sec:power_iteration}.
+
+\begin{remark}
+    In some data analysis tasks, the data matrix \(\vX\) is formatted such that each data point is a \textit{row} rather than a \textit{column} as is presented here. In this case the principal components are the top \(d\) right singular vectors of \(\vX\), i.e., the top \(d\) eigenvectors of \(\vX^{\top}\vX\).
+\end{remark}
+
+\begin{exercise}
+    Prove that, for any symmetric matrix \(\vA\), the solution to the problem \(\max_{\vU \in \O(D, d)}\tr\bc{\vU^{\top}\vA\vU}\) is the matrix \(\vU^{\star}\) whose columns are the top \(d\) unit eigenvectors of \(\vA\).
+\end{exercise}
+
+\subsection{Probabilistic PCA}
+
+Notice that the above formulation makes no statistical assumptions on the data-generating process. However, it is common to include statistical elements within a given data model, as it may add further enlightening interpretations about the result of the analysis. As such, we ask the natural question: \textit{what is the statistical analogue to low-dimensional structure?} Our answer is that a low-dimensional \textit{distribution} is one whose support is concentrated around a low-dimensional geometric structure. To illustrate this point, we discuss \textit{probabilistic principal component analysis (PPCA).} This formulation can be viewed as a statistical variant of regular PCA. Mathematically, we now consider our data as samples from a random variable \(\vx\) taking values in \(\R^{D}\) (also sometimes called a \textit{random vector}). We say that \(\vx\) has (approximate) low-rank statistical structure if and only if there exists an orthonormal matrix \(\vU_{o} \in \O(D, d)\), a random variable \(\vz\) taking values in \(\R^{d}\), and a \textit{small} random variable \(\veps\) taking values in \(\R^{D}\) such that \(\vz\) and \(\veps\) are independent, and
+\begin{equation}
+    \vx = \vU_{o}\vz + \veps.
+\end{equation}
+Our goal is again to recover \(\vU_{o}\). Towards this end, we set up the analogous problem as in Subsection \eqref{sub:pca}, i.e.,
+\begin{equation}
+    \min_{\vU, \vz}\Ex\norm{\vx - \vU\vz}_{2}^{2}.
+\end{equation}
+Performing the same calculations as in Subsection \eqref{sub:pca}, we obtain 
+\begin{equation}
+    \min_{\vU, \vz}\Ex\norm{\vx - \vU\vz}_{2}^{2} = \min_{\vU}\Ex\norm{\vx - \vU\vU^{\top}\vx}_{2}^{2},
+\end{equation}
+again re-emphasizing the fact that the estimated subspace with principal components \(\vU\) corresponds to a denoiser \(\vU\vU^{\top}\) which projects onto that subspace. As before, we obtain 
+\begin{align}
+    \argmin_{\vU}\Ex\norm{\vx - \vU\vU^{\top}\vx}_{2}^{2} 
+    &= \argmax_{\vU}\Ex\norm{\vU^{\top}\vx}_{2}^{2} \\
+    &= \argmax_{\vU}\tr(\vU^{\top}\Cov[\vx]\vU),
+\end{align}
+and the solution to the latter problem is just the top \(d\) principal components of \(\Cov[\vx]\).
+Actually, the above problems are visually very similar to the equations for computing the principal components in the previous Subsection, except with \(\Cov[\vx]\) replacing \(\vX\vX^{\top}/N\). In fact, the latter quantity is an estimate for the former. Both formulations effectively do the same thing, and have the same practical solution --- compute the left singular vectors of the data matrix \(\vX\), or equivalently the top eigenvectors of the estimated covariance matrix \(\vX\vX^{\top}/N\). The statistical formulation, however, has an additional interpretation. We have
+\begin{equation}
+    \Ex[\vx] = \vU_{o}\Ex[\vz] + \Ex[\veps], \qquad \Cov[\vx] = \vU_{o}\Cov[\vz]\vU_{o}^{\top} + \Cov[\veps].
+\end{equation}
+In particular, if \(\Cov[\veps]\) is small, it holds that \(\Cov[\vx]\) is approximately a low-rank matrix, in particular rank \(d\). Thus the top \(d\) eigenvectors essentially summarize the whole covariance matrix. But they are also the principal components, so we can interpret principal component analysis as performing a low-rank decomposition of \(\Cov[\vx]\).
+
+The other examples in this Section will go similarly. We will introduce a motivating example, and geometric and statistical formulations of the problem.
+
+\subsection{Matrix Completion}
+
+\DP{TODO: Insert a connection to deep learning; this transition isn't very good...}
+To finish off this section, we consider a different class of non-additive errors which become increasingly important in deep learning. Let us consider the case where we have some data \(\{\vx_{i}\}_{i = 1}^{n}\) generated according to \eqref{eq:pca_dgp}. Now arrange them into a matrix \(\vX = \mat{\vx_{1}, \dots, \vx_{N}} \in \R^{D \times N}\). Unlike before, we do not observe \(\vX\) directly; we instead imagine that our observation was corrupted en route and we obtained 
+\begin{equation}
+    \vY = \vM \odot \vX,
+\end{equation}
+where \(\vM \in \{0, 1\}^{D \times N}\) and \(\odot\) is element-wise multiplication. In this case, our goal is to recover \(\vX\) (from which point we can use PCA to recover \(\vU_{o}\), etc), given only the corrupted observation \(\vY\), the mask \(\vM\), and the knowledge that \(\vX\) is (approximately) low-rank. This is called \textit{low-rank matrix completion}.
+
+An initial idea for solving this recovery problem is to set up an optimization problem, where the candidate solution matches the observation at all the unmasked indices and also has approximately low rank. This idea can be expressed by the following problem formulation:
+\begin{equation}
+    \min_{\substack{\vW \\ \vY = \vM \odot \vW}}\rank(\vW).
+\end{equation}
+However, this formulation runs into two issues:
 \begin{enumerate}
-    \item \textbf{What do we assume about reality?} Our model; mathematical
-        modeling.
-    \item \textbf{How do we compute with the model?} Simple models $\implies$
-        efficient computation.
-    \item \textbf{Does it work?} When the model assumption is met $\implies$ math proves
-        it works. (When it's ``okay'' $\implies$ bounded ``works'').
+    \item The \(\rank\) function is neither continuous nor convex, and thus it is computationally intractable to directly optimize.
+    \item The formulation may not properly account for approximately low-rank variables, which are ostensibly high rank but really just low rank plus noise.
 \end{enumerate}
-Even if the model is too idealistic, its solution may convey the basic ideas that apply to the more general cases.
-
-\section{Modeling Low-dimensional Structures and Distributions}
-
-\textit{Real data has low-dimensional structure.} To see why this is true, let us consider the unassuming case of static on a TV when the satellite isn't working. At each frame (approximately every \(\frac{1}{30}\) seconds), the RGB static on a screen of size \(H \times W\) is, roughly, sampled independently from a uniform distribution on \([0, 1]^{3 \times H \times W}\). In theory, the static \textit{could} resolve to a natural image on any given frame, but even if you spend a thousand years looking at the TV screen, it will not. This is because the set of \(H \times W\) natural images takes up a vanishingly small volume compared to the hypercube \([0, 1]^{3 \times H \times W}\).
+To address the first issue, we use the so-called \textit{convex relaxation} of the rank function, which is the nuclear norm \(\norm{\cdot}_{*}\), given by 
+\begin{equation}
+    \norm{\vA}_{*} = \tr([\vA^{\top}\vA]^{1/2})
+\end{equation}
+where \(\vB^{1/2}\) is the positive semidefinite square root. The three key properties of the nuclear norm are that (1) it is a convex function, (2) it forms an envelope for the rank function, i.e., \(\norm{\vA}_{*} \leq \rank(\vA)\) for all \(\vA\), providing an effective lower bound which can be optimized effectively, and (3) it is also efficient to compute. All three properties make it an attractive surrogate for the rank function in formulating the matrix completion problem. Thus, we use the following problem to recover \(\vX\):
+\begin{equation}
+    \min_{\substack{\vW \\ \vY = \vM \odot \vW}}\norm{\vW}_{*}.
+\end{equation}
+Finally, in order to address the second issue with the formulation, we use the Lagrangian form of this problem, obtaining 
+\begin{equation}
+    \min_{\vW}\bc{\frac{1}{2}\norm{\vY - \vM \odot \vW}_{F}^{2} + \lambda \norm{\vW}_{*}}.
+\end{equation}
+This formulation turns out to have attractive mathematical properties, as well as the conceptual grounding already discussed.
 
 \begin{itemize}
     \item Classical examples: random noise \(\neq\) coherent images \(\implies\) coherent images have some serious structure
@@ -42,7 +150,6 @@ Even if the model is too idealistic, its solution may convey the basic ideas tha
 
 \DP{main goals for this subsection: connect geometric and statistical structures for data; talk about how data is structured at a high level (low-rank or low-dimensional manifold); gaussian/gaussian mixture assumption, approximation}
 
-\section{Principal Component Analysis (PCA)} 
 \subsection{Learning a linear subspace via denoising} 
 Use the classic case of learning a single linear subspace to exemplify the general approaches to learn a low-dim model via compression (dimension reduction) from noising samples. Introduce the power-iteration algorithm... 
 
@@ -51,9 +158,10 @@ Maybe also connect to the recent  diffusion perspective: When the diffusion-deno
 \subsection{Learning via completion and error correction}
 Might worth mentioning variatnts such as Matrix Completion, Robust PCA for learning low-dimensional linear models under more general notion of ``noise'' or ``perturbantion''. 
 
-\section{Independent Component Analysis (ICA)} Problem formulation... independence and incoherence, sum of independent Gaussians... Kurtosis. Introduce the associated power-iteration algorithm.
+\section{Independent Component Analysis (ICA)} \label{sec:ica}
+Problem formulation... independence and incoherence, sum of independent Gaussians... Kurtosis. Introduce the associated power-iteration algorithm.
 
-\section{Sparse Coding and Dictionary Learning (DL)} 
+\section{Sparse Coding and Dictionary Learning (DL)} \label{sec:dictionary_learning}
 As a class of low-dimensional structures that generalize those considered in PCA and ICA: we assume the data distribution is a mixture of low-dimensional orthogonal subspaces or low-rank Gaussians.
 
 \subsection{Sparse coding} Mixture of low-dim linear independent structures.... Lasso and L1 minimization. Introduce basic algorithm for sparse coding such as ISTA.
@@ -62,7 +170,7 @@ As a class of low-dimensional structures that generalize those considered in PCA
 \subsection{Dictionary learning} 
 Mixture of low-dim linear independent structures without knowing the encoding,... L4 maximization. Our work on the complete case: \href{https://arxiv.org/abs/1906.02435}{L4-based dictionary learning} 
 
-\section{Pursuit Low-Dimensionality via Power Iteration}
+\section{Pursuit Low-Dimensionality via Power Iteration}\label{sec:power_iteration}
 \href{https://openreview.net/pdf?id=SJeY-1BKDS}{The ICLR paper} provides a unifying view on PCA, ICA, and Dicionary Learning and their algorithms (all power-iteration type). Interpretation of the algorithms as primitive deep networks.
 
 
