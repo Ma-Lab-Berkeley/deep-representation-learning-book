@@ -928,7 +928,7 @@
  \setcounter{chapter}{0}
  \setcounter{section}{0}
 % set tocdepth to chapter heads only whether multi-author or single-author
- \addtocontents{toc}{\protect\setcounter{tocdepth}{0}}
+ \addtocontents{toc}{\protect\setcounter{tocdepth}{1}}
  \def\@chapapp{\appendixname}
  \def\thechapter {\Alph{chapter}}
  \def\thesection {\thechapter.\arabic{section}}
