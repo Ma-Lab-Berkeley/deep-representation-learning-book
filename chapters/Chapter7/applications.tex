@@ -17,17 +17,47 @@ To help the readers understand the material in this book better and learn how to
 \section{Simplified Contrastive Learning}\label{sec:contrastive_learning}
 
 \paragraph{Motivation.} 
-Learning high-quality and faithful representations of data is a fundamental problem in deep learning, known as \textit{self-supervised learning}. There have been many approaches proposed for this task, many of which do not evidently use the techniques and principles outlined in this manuscript. One such approach is called \textit{contrastive learning}, so named because the learning objective is (roughly speaking) about ensuring that features of ``similar'' data are similar, and features of ``dis-similar'' data are far apart. Contrastive learning solutions are often highly-engineered, empirically designed approaches. In this section, we will describe one such approach named DINO v2 \citep{oquab2023dinov2}, and use the principles described in the previous chapters to drastically simplify their design decisions while improving the learned representations.
+Learning high-quality and faithful representations of data is a fundamental problem in deep learning, known as \textit{self-supervised learning}. There have been many approaches proposed for this task, many of which do not evidently use the techniques and principles outlined in this manuscript. One such approach is called \textit{contrastive learning}, so named because the learning objective is (roughly speaking) about ensuring that features of ``similar'' data are similar, and features of ``dis-similar'' data are far apart. Contrastive learning solutions are often highly-engineered, empirically designed approaches. In this section, we will describe one such approach named DINO \citep{caron2021emerging,oquab2023dinov2}, and use the principles described in the previous chapters to drastically simplify their design decisions while improving the learned representations.
 
 \paragraph{Data.}
 
 The data that we will use to explore and simplify the DINOv2 methodology is all 2-dimensional image data. For \textit{training}, we will use the ImageNet-1K and ImageNet-21K datasets. Each sample in the dataset is an RGB image, of varying resolution, and a label indicating the object or scene that the image contains (i.e., the \textit{class} of the image). The ImageNet-1K dataset contains 1.28M training images and 50K validation images partitioned into 1K classes. The ImageNet-21K dataset contains 14.2M training images and 21.8K classes, but the classes are not disjoint (i.e., some classes are subsets of others). Since we are doing self-supervised learning, the labels will not be used during training, only during evaluation. For \textit{evaluation}, we will use a litany of datasets. Of these, the most common is CIFAR-10. CIFAR-10 is a dataset of 60K RGB 32 \(\times\) 32 natural images partitioned into 10 classes, with a pre-established training set of 50K samples and a validation set of 10K samples. The purpose of using CIFAR-10 will be to ensure that models which train on one distribution of images (ImageNet) can generalize to another distribution of images (CIFAR-10).
 
-During training, we scale all images to 224 \(\times\) 224 resolution, so as to ensure that all inputs are the same shape.
+During training, we scale all images to 224 \(\times\) 224 resolution, so as to ensure that all inputs are the same shape. As is necessary with transformer-like sequence-to-sequence architectures, we \textit{tokenize} the image by chopping it up into several \textit{patches}, which are spatially contiguous sub-segments of the data, as follows.
+\begin{figure}[h]
+    \centering 
+    \includegraphics[width=0.5\textwidth]{figs_chap7/patchify.png}
+    \caption{An example of tokenizing an image into patches. \DP{NOTE: this image is from somewhere on the internet, and we should make our own before publishing anything.}}
+    \label{fig:patchify}
+\end{figure}
+Each patch, say of size \(P_{H} \times P_{W}\) pixels, is a vector in \(\R^{C \times P_{H} \times P_{W}}\). This vector corresponds to a token. The token vectors are flattened and stacked horizontally into the input data matrix \(\vX\). 
+
+For example, suppose that the above image in \Cref{fig:patchify} is a \(72 \times 72\) RGB image (so there are \(3\) channels). It is tokenized into \(9\) patches. Each would be of size \(24 \times 24\), and be represented by a vector of size \(3 \times 24 \times 24 = 1728\). So the input matrix \(\vX\) representing this data would live in the space \(\R^{1728 \times 9}\). For all applications we take \(P_{H} = P_{W}\) and \(C = 3\), and for nearly all applications we take \(P_{H} = P_{W} = 16\).
 
 \paragraph{Task and objective function.}
 
-\DP{I think the DINO writeup is still TODO (@Ziyang), will get finished ASAP.}
+Our task is to learn a good representation of the data. Contrastive learning, by and large, does this by defining what properties of the input image we wish the features to reflect, construct images which share these properties but vary others, and set up a loss which promotes that the features of images with shared properties are close and images with different properties are different. The naturally optimal solution to this learning problem is that the learned features preserve the desired properties of the input. However, there are many practical and empirical complications which arise in the course of training contrastive models.
+
+ In the case of DINO, the authors propose to use a methodology which produces a single feature vector for the whole image, and desires the feature vector to contain ``global'' (i.e., image-level) information. Accordingly the loss will promote that images with similar global information have similar features and images with different global information have different features.
+
+ This seems intuitive, but as previously mentioned, there are several empirical considerations, even while setting up the loss. First and foremost, how to promote similarities and differences? The answer of DINO \citep{caron2021emerging} and DINO v2 \citep{oquab2023dinov2} is\footnote{In the author's view, inexplicably...} to treat the output features as ``logits'' corresponding to some probability distribution and take their cross-entropy. More specifically, the ``cross entropy similarity'' is computed as
+ \begin{equation}\label{eq:cross_entropy_similarity}
+    \operatorname{sim}_{\mathrm{CE}}(\vx, \vy) = \operatorname{CE}(\softmax(\vx), \softmax(\vy)), \qquad \forall \vx, \vy \in \R^{d},
+ \end{equation}
+ where \(\softmax \colon \R^{d} \to \R^{d}\) is defined as
+ \begin{equation}\label{eq:expts_def_softmax}
+    \softmax(\vx) := \frac{1}{\sum_{i = 1}^{d}\e^{x_{i}}}\mat{\e^{x_{1}} \\ \vdots \\ \e^{x_{d}}}, \qquad  \forall \vx = (x_{1}, \dots, x_{d}) \in \R^{d},
+ \end{equation}
+ and \(\operatorname{CE} \colon \R^{d} \times \R^{d} \to \R\) is defined as 
+ \begin{equation}\label{eq:expts_def_ce}
+    \operatorname{CE}(\vu, \vv) = -\sum_{i = 1}^{d}u_{i}\log v_{i}, \qquad \forall \vu = (u_{1}, \dots, u_{d}), \vv = (v_{1}, \dots, v_{d}) \in \R^{d}.
+ \end{equation}
+ Using our hypothesis from \Cref{ch:representation} that good representations should have Euclidean (subspace) geometry, a much more natural measure of similarity is the \textit{cosine similarity} \(\operatorname{sim} \colon \R^{d} \times \R^{d} \to \R\), defined as 
+\begin{equation}\label{eq:cosine_similarity}
+    \operatorname{sim}(\vx, \vy) = \frac{\vx^{\top}\vy}{\|\vx\|_{2} \|\vy\|_{2}}, \qquad  \forall \vx, \vy \in \R^{d}.
+\end{equation}
+
+
 
 \paragraph{Architecture.}
 
@@ -36,6 +66,8 @@ During training, we scale all images to 224 \(\times\) 224 resolution, so as to 
 \paragraph{Evaluation pipeline.}
 
 \paragraph{Experimental results.}
+
+\DP{Rest is still TODO (@Ziyang, Jingyuan).}
 
 \section{Image Classification}\label{sec:image_classification}
 
