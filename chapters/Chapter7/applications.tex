@@ -24,15 +24,15 @@ Learning high-quality and faithful representations of data is a fundamental prob
 The data that we will use to explore and simplify the DINOv2 methodology is all 2-dimensional image data. For \textit{training}, we will use the ImageNet-1K and ImageNet-21K datasets. Each sample in the dataset is an RGB image, of varying resolution, and a label indicating the object or scene that the image contains (i.e., the \textit{class} of the image). The ImageNet-1K dataset contains 1.28M training images and 50K validation images partitioned into 1K classes. The ImageNet-21K dataset contains 14.2M training images and 21.8K classes, but the classes are not disjoint (i.e., some classes are subsets of others). Since we are doing self-supervised learning, the labels will not be used during training, only during evaluation. For \textit{evaluation}, we will use a litany of datasets. Of these, the most common is CIFAR-10. CIFAR-10 is a dataset of 60K RGB 32 \(\times\) 32 natural images partitioned into 10 classes, with a pre-established training set of 50K samples and a validation set of 10K samples. The purpose of using CIFAR-10 will be to ensure that models which train on one distribution of images (ImageNet) can generalize to another distribution of images (CIFAR-10).
 
 During training, we scale all images to 224 \(\times\) 224 resolution, so as to ensure that all inputs are the same shape. As is necessary with transformer-like sequence-to-sequence architectures, we \textit{tokenize} the image by chopping it up into several \textit{patches}, which are spatially contiguous sub-segments of the data, as follows.
-\begin{figure}[h]
+\begin{figure}[t]
     \centering 
     \includegraphics[width=0.5\textwidth]{figs_chap7/patchify.png}
     \caption{An example of tokenizing an image into patches. \DP{NOTE: this image is from somewhere on the internet, and we should make our own before publishing anything.}}
     \label{fig:patchify}
 \end{figure}
-Each patch, say of size \(P_{H} \times P_{W}\) pixels, is a vector in \(\R^{C \times P_{H} \times P_{W}}\). This vector corresponds to a token. The token vectors are flattened and stacked horizontally into the input data matrix \(\vX\). 
+Each patch, say of size \(P_{H} \times P_{W}\) pixels, is a vector in \(\R^{C \times P_{H} \times P_{W}}\). This vector corresponds to a token. The token vectors are flattened and stacked horizontally into the input data matrix \(\vX \in \R^{D \times N}\). 
 
-For example, suppose that the above image in \Cref{fig:patchify} is a \(72 \times 72\) RGB image (so there are \(3\) channels). It is tokenized into \(9\) patches. Each would be of size \(24 \times 24\), and be represented by a vector of size \(3 \times 24 \times 24 = 1728\). So the input matrix \(\vX\) representing this data would live in the space \(\R^{1728 \times 9}\). For all applications we take \(P_{H} = P_{W}\) and \(C = 3\), and for nearly all applications we take \(P_{H} = P_{W} = 16\).
+For example, suppose that the above image in \Cref{fig:patchify} is a \(72 \times 72\) RGB image (so there are \(3\) channels). It is tokenized into \(9\) patches. Each would be of size \(24 \times 24\), and be represented by a vector of size \(3 \times 24 \times 24 = 1728\). So the input matrix \(\vX\) representing this data would live in the space \(\R^{1728 \times 9}\), wherein we have \(D = 1728\) and \(N = 9\). For all applications we take \(P_{H} = P_{W}\) and \(C = 3\), and for nearly all applications we take \(P_{H} = P_{W} = 16\) so \(D = 256\).
 
 \paragraph{Task and objective function.}
 
@@ -40,9 +40,9 @@ Our task is to learn a good representation of the data. Contrastive learning, by
 
  In the case of DINO, the authors propose to use a methodology which produces a single feature vector for the whole image, and desires the feature vector to contain ``global'' (i.e., image-level) information. Accordingly the loss will promote that images with similar global information have similar features and images with different global information have different features.
 
- This seems intuitive, but as previously mentioned, there are several empirical considerations, even while setting up the loss. First and foremost, how to promote similarities and differences? The answer of DINO \citep{caron2021emerging} and DINO v2 \citep{oquab2023dinov2} is\footnote{In the author's view, inexplicably...} to treat the output features as ``logits'' corresponding to some probability distribution and take their cross-entropy. More specifically, the ``cross entropy similarity'' is computed as
+ This seems intuitive, but as previously mentioned, there are several empirical considerations, even while setting up the loss. First and foremost, how should we promote similarities and differences? The answer of DINO \citep{caron2021emerging} and DINO v2 \citep{oquab2023dinov2} is\footnote{In the author's view, inexplicably...} to treat the output features as ``logits'' corresponding to some probability distribution and take their cross-entropy. More specifically, the ``cross entropy difference\footnote{This is not a distance as it does not satisfy the axioms of a metric space.}'' is computed as
  \begin{equation}\label{eq:cross_entropy_similarity}
-    \operatorname{sim}_{\mathrm{CE}}(\vx, \vy) = \operatorname{CE}(\softmax(\vx), \softmax(\vy)), \qquad \forall \vx, \vy \in \R^{d},
+    d_{\mathrm{CE}}(\vx, \vy) = \operatorname{CE}(\softmax(\vx), \softmax(\vy)), \qquad \forall \vx, \vy \in \R^{d},
  \end{equation}
  where \(\softmax \colon \R^{d} \to \R^{d}\) is defined as
  \begin{equation}\label{eq:expts_def_softmax}
@@ -52,10 +52,35 @@ Our task is to learn a good representation of the data. Contrastive learning, by
  \begin{equation}\label{eq:expts_def_ce}
     \operatorname{CE}(\vu, \vv) = -\sum_{i = 1}^{d}u_{i}\log v_{i}, \qquad \forall \vu = (u_{1}, \dots, u_{d}), \vv = (v_{1}, \dots, v_{d}) \in \R^{d}.
  \end{equation}
- Using our hypothesis from \Cref{ch:representation} that good representations should have Euclidean (subspace) geometry, a much more natural measure of similarity is the \textit{cosine similarity} \(\operatorname{sim} \colon \R^{d} \times \R^{d} \to \R\), defined as 
-\begin{equation}\label{eq:cosine_similarity}
-    \operatorname{sim}(\vx, \vy) = \frac{\vx^{\top}\vy}{\|\vx\|_{2} \|\vy\|_{2}}, \qquad  \forall \vx, \vy \in \R^{d}.
+The next question is, how should we obtain samples with similar global information? The answer of DINO and DINO v2 (as well as nearly all contrastive learning) is \textit{data augmentation} --- from each sample, make several correlated samples which share the desired properties. In the DINO case, we use several different crops or \textit{views} of the input image. Specifically, from each input image \(\vX\) we obtain several randomly selected \textit{global views} (i.e., large crops) \(V_{\glo} := \{\vX_{\mathrm{glo}}^{1}, \dots, \vX_{\mathrm{glo}}^{G} \in \R^{D \times N_{G}}\}\) and several \textit{local views} (i.e., small crops) \(V_{\loc} := \{\vX_{\mathrm{loc}}^{1}, \dots, \vX_{\mathrm{loc}}^{L} \in \R^{D \times N_{L}}\}\), as in \Cref{fig:local_global_views}.
+
+\begin{figure}[t]
+    \centering 
+    \includegraphics[width=0.7\textwidth]{figs_chap7/global_local_views.png}
+    \caption{\small\textbf{Global and local views} to be used in DINO and its simplification. \DP{I took this picture off a random place in the internet, please note we have to replace it before publishing anything.}}
+    \label{fig:local_global_views}
+\end{figure}
+
+Now the question is, how to process the local and global views? The answer of DINO and DINO v2 is to use a transformer neural network \(f_{\theta}\), which can process input sequences of any length, i.e., with shape \(\R^{D \times M}\) for every \(M \geq 1\). The exact implementation will be discussed shortly, but for now it suffices that we can think of a transformer as a map \(f_{\theta} \colon \bigcup_{M \geq 1}\R^{D \times M} \to \R^{d}\). In this case, the network is used to compute \(f_{\theta}(\vX_{v})\) for each view \(\vX_{v} \in V_{\glo} \cup V_{\loc}\). 
+
+Now, how to make all of the local views similar to all of the global views and all the global views consistent with each other? The answer is to minimize the difference between \(f_{\theta}(\vX_{\glo}^{i})\) and \(f_{\theta}(\vX_{\loc}^{j})\), i.e., solve the following problem:
+\begin{equation}
+    \min_{\theta}\sum_{\vX_{\glo} \in V_{\glo}}\bc{\sum_{\vX_{\loc} \in V_{\loc}}d_{\mathrm{CE}}(f_{\theta}(\vX_{\loc}), f_{\theta}(\vX_{\glo})) + \sum_{\vX_{\glo}^{1}, \vX_{\glo}^{2} \in V_{\glo}}d_{\mathrm{CE}}(f_{\theta}(\vX_{\glo}^{1}), f_{\theta}(\vX_{\glo}^{2}))}.
 \end{equation}
+However, if you try to implement this and optimize it on a real network, it is very likely that you run into a problem: after running a few iterations of the learning algorithm, the feature mapping \(f_{\theta}\) will output only a single vector, \textit{no matter what the input is}! This certainly optimizes the above loss since it minimizes the distance between each pair of local and global features. But we obviously do not want to learn this solution. Actually this is a very common consideration in contrastive learning. So how to avoid this?
+
+The solution of DINO and DINO v2, again, is empirically designed. The basic idea is that in order to make sure that all samples do not return the same exact same features, we need different samples to have different features. Thus our loss should be computed over a \textit{batch} \(\vX_{1}, \dots, \vX_{B}\) of samples, and should have a term which ensures that the features \(f_{\theta}(\vX_{i, \glo}^{j})\) are different.
+
+
+\textit{two sets of weights for a transformer neural network}: \textit{teacher} weights \(\theta_{t}\) which processes \textit{global} views, and a \textit{student} network \(f_{s} \colon \R^{D \times N_{\loc}}\) which processes \textit{local} views. These two networks are instances of vision transformers, to be formally described in a subsequent discussion, and so they have exactly the same network architecture (again, to be discussed shortly) even while taking in token sequences with different lengths. By processing every view, we obtain 
+
+
+ Now let us discuss simplifications to the formulation. First, using our hypothesis from \Cref{ch:representation} that good representations should have Euclidean (subspace) geometry, a much more natural measure of similarity is the \textit{cosine similarity} \(\similarity \colon \R^{d} \times \R^{d} \to \R\), defined as 
+\begin{equation}\label{eq:cosine_similarity}
+    \similarity(\vx, \vy) = \frac{\vx^{\top}\vy}{\|\vx\|_{2} \|\vy\|_{2}}, \qquad  \forall \vx, \vy \in \R^{d}.
+\end{equation}
+Next, 
+
 
 
 
