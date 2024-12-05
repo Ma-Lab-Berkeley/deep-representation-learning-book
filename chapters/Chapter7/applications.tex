@@ -16,10 +16,9 @@ To help the readers understand the material in this book better and learn how to
 
 \section{Simplified Contrastive Learning}\label{sec:contrastive_learning}
 
-\paragraph{Motivation.} 
 Learning high-quality and faithful representations of data is a fundamental problem in deep learning, known as \textit{self-supervised learning}. There have been many approaches proposed for this task, many of which do not evidently use the techniques and principles outlined in this manuscript. One such approach is called \textit{contrastive learning}, so named because the learning objective is (roughly speaking) about ensuring that features of ``similar'' data are similar, and features of ``dis-similar'' data are far apart. Contrastive learning solutions are often highly-engineered, empirically designed approaches. In this section, we will describe one such approach named DINO \citep{caron2021emerging}, and use the principles described in the previous chapters to drastically simplify their design decisions while improving the learned representations.
 
-\paragraph{Data.}
+\subsection{Data}\label{sec:contrastive_learning_data}
 
 The data that we will use to explore and simplify the DINOv2 methodology is all 2-dimensional image data. For \textit{training}, we will use the ImageNet-1K and ImageNet-21K datasets. Each sample in the dataset is an RGB image, of varying resolution, and a label indicating the object or scene that the image contains (i.e., the \textit{class} of the image). The ImageNet-1K dataset contains 1.28M training images and 50K validation images partitioned into 1K classes. The ImageNet-21K dataset contains 14.2M training images and 21.8K classes, but the classes are not disjoint (i.e., some classes are subsets of others). Since we are doing self-supervised learning, the labels will not be used during training, only during evaluation. For \textit{evaluation}, we will use a litany of datasets. Of these, the most common is CIFAR-10. CIFAR-10 is a dataset of 60K RGB 32 \(\times\) 32 natural images partitioned into 10 classes, with a pre-established training set of 50K samples and a validation set of 10K samples. The purpose of using CIFAR-10 will be to ensure that models which train on one distribution of images (ImageNet) can generalize to another distribution of images (CIFAR-10).
 
@@ -34,7 +33,7 @@ Each patch, say of size \(P_{H} \times P_{W}\) pixels, is a vector in \(\R^{C \t
 
 For example, suppose that the above image in \Cref{fig:patchify} is a \(72 \times 72\) RGB image (so there are \(3\) channels). It is tokenized into \(9\) patches. Each would be of size \(24 \times 24\), and be represented by a vector of size \(3 \times 24 \times 24 = 1728\). So the input matrix \(\vX\) representing this data would live in the space \(\R^{1728 \times 9}\), wherein we have \(D = 1728\) and \(N = 9\). For all applications we take \(P_{H} = P_{W}\) and \(C = 3\), and for nearly all applications we take \(P_{H} = P_{W} = 16\) so \(D = 256\).
 
-\paragraph{Task and objective function.}
+\subsection{Task and Objective Function} \label{sub:contrastive_learning_objective}
 
 Our task is to learn a good representation of the data. Contrastive learning, by and large, does this by defining what properties of the input image we wish the features to reflect, construct images which share these properties but vary others, and set up a loss which promotes that the features of images with shared properties are close and images with different properties are different. The naturally optimal solution to this learning problem is that the learned features preserve the desired properties of the input. However, there are many practical and empirical complications which arise in the course of training contrastive models.
 
@@ -63,11 +62,11 @@ The next question is, how should we obtain samples with similar global informati
 
 Now the question is, how to process the local and global views? The answer of DINO is to use a transformer neural network \(f_{\theta}\), which can process input sequences of any length, i.e., with shape \(\R^{D \times T}\) for every \(T \geq 1\). The exact implementation will be discussed shortly, but for now it suffices that we can think of a transformer as a map \(f_{\theta} \colon \bigcup_{T = 1}^{\infty}\R^{D \times T} \to \R^{d}\). In this case, the network is used to compute \(f_{\theta}(\vX_{v})\) for each view \(\vX_{v} \in V_{\glo} \cup V_{\loc}\). 
 
-Now, how to make all of the features of local views similar to all of the features of global views and all the global views' features consistent with each other? The answer is to maximize the similarity between \(f_{\theta}(\vX_{\glo}^{i})\) and \(f_{\theta}(\vX_{\loc}^{j})\), i.e., solve the following problem:
+Now, how to make all of the features of local views similar to all of the features of global views and all the global views' features consistent with each other? The answer is to maximize the similarity between \(f_{\theta}(\vX_{\glo}^{i})\) and \(f_{\theta}(\vX_{\loc}^{j})\), i.e., solve the problem \(\min_{\theta}\cL_{\mathrm{DINO}}(\theta)\) where
 \begin{align}\label{eq:dino_loss}
-    \max_{\theta} \quad 
-    &\sum_{i = 1}^{N_{\glo}}\sum_{j = 1}^{N_{\loc}}\similarity_{\CE(f_{\theta}(\vX_{\loc}^{j}), f_{\theta}(\vX_{\glo}^{i})) \\
-    &+ \sum_{i = 1}^{N_{\glo}}\sum_{\substack{j = 1 \\ j \neq i}}^{N_{\glo}}\similarity_{\CE}(f_{\theta}(\vX_{\glo}^{j}), f_{\theta}(\vX_{\glo}^{i})). \nonumber
+    \cL_{\mathrm{DINO}}(\theta) :=
+    &-\Bigg(\sum_{i = 1}^{N_{\glo}}\sum_{j = 1}^{N_{\loc}}\similarity_{\CE}(f_{\theta}(\vX_{\loc}^{j}), f_{\theta}(\vX_{\glo}^{i})) \\
+    &+ \sum_{i = 1}^{N_{\glo}}\sum_{\substack{j = 1 \\ j \neq i}}^{N_{\glo}}\similarity_{\CE}(f_{\theta}(\vX_{\glo}^{j}), f_{\theta}(\vX_{\glo}^{i})).\Bigg) \nonumber
 \end{align}
 However, if you try to implement this and optimize it on a real network, it is very likely that you run into a problem: after running a few iterations of the learning algorithm, the feature mapping \(f_{\theta}\) will output only a single vector, \textit{no matter what the input is}! This certainly optimizes the above loss since it minimizes the distance between each pair of local and global features. But we obviously do not want to learn this solution. 
 
@@ -79,24 +78,106 @@ Actually avoiding collapse is a very common consideration in contrastive learnin
 \end{equation}
 This difference is even more efficient to compute than the softmax cross-entropy similarity measure. Thus, \(\similarity_{\cos}\) takes the place of \(\similarity_{\CE}\) in our simplification. 
 
-Now, to avoid collapse, we abandon the tricky setup of DINO. Instead, we return to the fundamentals. The basic idea of avoiding collapse is that in order to make sure that all samples do not return the same exact same features, we need different samples to have different features. Thus our loss should be computed over a \textit{batch} \(\vX_{1}, \dots, \vX_{B}\) of samples, each with their independently computed local views \(V_{b, \loc}\) and global views \(V_{b, \glo}\), and should have a term which ensures that the features \(f_{\theta}(\vX_{b, \glo}^{i})\) are different. But from \Cref{ch:compression,ch:representation}, we already have a quantity which tells us the extent to which a batch of features are different, or \textit{expanded}. Thus we use the straightforward \textit{Gaussian coding rate} \(R\) to ensure that the features of global views of different images, which have different global information, are well-separated and not collapsed (hence expanded). The overall modified loss becomes:
+Now, to avoid collapse, we abandon the tricky setup of DINO. Instead, we return to the fundamentals. The basic idea of avoiding collapse is that in order to make sure that all samples do not return the same exact same features, we need different samples to have different features. Thus our loss should be computed over a \textit{batch} \(\vX_{1}, \dots, \vX_{B}\) of samples, each with their independently computed local views \(V_{b, \loc}\) and global views \(V_{b, \glo}\), and should have a term which ensures that the features \(f_{\theta}(\vX_{b, \glo}^{i})\) are different. But from \Cref{ch:compression,ch:representation}, we already have a quantity which tells us the extent to which a batch of features are different, or \textit{expanded}. Thus we use the straightforward \textit{Gaussian coding rate} \(R\) to ensure that the features of global views of different images, which have different global information, are well-separated and not collapsed (hence expanded). The overall modified loss \(\cL_{\mathrm{SimDINO}}\) becomes:
 \begin{align}\label{eq:dino_loss}
-    \max_{\theta} \quad 
-    &\sum_{b = 1}^{B}\sum_{i = 1}^{N_{\glo}}\sum_{j = 1}^{N_{\loc}}\similarity_{\cos}(f_{\theta}(\vX_{b, \loc}^{j}), f_{\theta}(\vX_{b, \glo}^{i})) \\
-    &+ \sum_{b = 1}^{B}\sum_{i = 1}^{N_{\glo}}\sum_{\substack{j = 1 \\ j \neq i}}^{N_{\glo}}\similarity_{\cos}(f_{\theta}(\vX_{b, \glo}^{j}), f_{\theta}(\vX_{b, \glo}^{i})) \nonumber \\ 
-    &+ \frac{\gamma}{2}\sum_{i = 1}^{N_{\glo}}R(\mat{f_{\theta}(\vX_{1, \glo}^{i}), \dots, f_{\theta}(\vX_{B, \glo}^{i})}).
+    \cL_{\mathrm{SimDINO}}(\theta) :=
+    &-\Bigg(\sum_{b = 1}^{B}\sum_{i = 1}^{N_{\glo}}\sum_{j = 1}^{N_{\loc}}\similarity_{\cos}(f_{\theta}(\vX_{b, \loc}^{j}), f_{\theta}(\vX_{b, \glo}^{i})) \\
+    &\qquad + \sum_{b = 1}^{B}\sum_{i = 1}^{N_{\glo}}\sum_{\substack{j = 1 \\ j \neq i}}^{N_{\glo}}\similarity_{\cos}(f_{\theta}(\vX_{b, \glo}^{j}), f_{\theta}(\vX_{b, \glo}^{i})) \nonumber \\ 
+    &\qquad + \frac{\gamma}{2}\sum_{i = 1}^{N_{\glo}}R(\mat{f_{\theta}(\vX_{1, \glo}^{i}), \dots, f_{\theta}(\vX_{B, \glo}^{i})})\Bigg).
 \end{align}
 This is the loss used for the simplified DINO. As we will see, it works equally or better than the original DINO.
 
-\paragraph{Architecture and optimization.}
+\subsection{Architecture}\label{sub:contrastive_learning_architecture}
 
-For the architecture, we use a standard vision transformer. Upon recovering 
+For the architecture, we use a standard vision transformer. Here is how such an architecture works, formally, in the context of image data. Let \(\vX \in \R^{D \times N}\) be the matrix of patches corresponding to such an image. 
+\begin{enumerate}
+    \item First, the data \(\vX\) is \textit{preprocessed}, by a map \(f^{\pre} \colon \R^{D \times N} \to \R^{d \times n}\) where \(n = N + 1\), as follows:
+    \begin{equation}
+        f^{\pre}(\vX) = [\vz_{\cls}^{1}, \vW^{\pre}\vX] + \vE^{\pos}.
+    \end{equation}
+    Here we have three trainable parameters \(\vW^{\pre}\), \(\vz_{\cls}^{1}\), and \(\vE^{\pos}\) whose purpose is as follows:
+    \begin{itemize}
+        \item \(\vW^{\pre} \in \R^{d \times D}\) is a matrix which projects each patch vector to a token feature.
+        \item \(\vz_{\cls}^{1} \in \R^{d}\) is a so-called \textit{class token} or \textit{register token}. The class token heuristically holds global information of the whole data and is used for downstream tasks. In the framework of compressive deep networks from \Cref{ch:representation}, we expect that the class token is projected onto the same subspaces as the salient or semantically relevant tokens during the progression of the forward pass.
+        \item \(\vE^{\pos} \in \R^{d \times n}\) is a so-called \textit{positional encoding} which distinguishes different tokens from each other. That is, token features should have positional information, so that the overall map \(f^{\pre}\) is not invariant to permutations of the patches, and \(\vE^{\pos}\) inserts this positional information. 
+        \begin{itemize}
+            \item We previously discussed the encoding of certain sub-matrices of \(\vX\), where all rows are kept but only a few columns are removed during data augmentation. In these cases we use the sub-matrix of \(\vE^{\pos}\) corresponding to the original positions of the columns, instead of the full \(\vE^{\pos}\) matrix (which after all is the wrong shape).
+        \end{itemize}
+    \end{itemize}
+    \item Then, the data \(\vZ^{1} = f^{\pre}(\vX)\) is passed through \(L\) \textit{layers} \(f^{\ell}\). The iteration \(f^{\ell}\) has the following implementation:
+    \begin{align}
+        \vZ^{\ell + 1/2}
+        &= \vZ^{\ell} + \MHSA^{\ell}(\LN_{1}^{\ell}(\vZ^{\ell})) \\ 
+        \vZ^{\ell + 1}
+        &= \vZ^{\ell + 1/2} + \MLP^{\ell}(\LN_{2}^{\ell}(\vZ^{\ell + 1/2}))
+    \end{align}
+    and \(f^{\ell}(\vZ^{\ell}) := \vZ^{\ell + 1}\). Here we have used some operators, such as \(\MHSA, \MLP, \LN\) that are defined as follows:
+    \begin{itemize}
+        \item The \(\MHSA\) operator is multi-head-self-attention, the predecessor of the multi-head subspace self-attention (cf \Cref{ch:representation}). The formulation is as follows:
+        \begin{equation}
+            \MHSA(\vZ) := \vU_{o}\mat{(\vU_{v}^{1}\vZ)\vA^{1}(\vZ) \\ \vdots \\ (\vU_{v}^{K}\vZ)\vA^{K}(\vZ)}, \qquad \text{where} \qquad \vA^{k}(\vZ) := \softmax\rp{\frac{(\vU_{k}^{1}\vZ)^{\top}(\vU_{q}^{1}\vZ)}{\sqrt{d}}}
+        \end{equation}
+        where \(p\) is a positive integer, \(\vU_{q}^{i}, \vU_{k}^{i}, \vU_{v}^{i} \in \R^{p \times d}\) and \(\vU_{o} \in \R^{d \times Kp}\) are trainable parameters, and the \(\softmax\) is defined column-wise as 
+        \begin{equation}
+            \softmax(\vM) := \mat{\softmax(\vm_{1}) & \cdots & \softmax(\vm_{d})}, \qquad \forall \vM = \mat{\vm_{1}, \dots, \vm_{d}} \in \R^{d \times d}.
+        \end{equation}
+        In practice, the dimensions are usually picked is usually picked such that \(Kp = d\). The terms \(\vA^{k}(\vZ)\) and \((\vU_{v}^{K}\vZ)\vA^{K}(\vZ)\) are also known as the \textit{\(k\th\) attention map} and \textit{\(k\th\) attention head output} respectively.
+        \item The \(\MLP\) is a two-layer perceptron, a regular nonlinearity used in deep networks, and has the form 
+        \begin{equation}
+            \MLP(\vZ) := \vW_{2}\ReLU(\vW_{1}\vZ + \vb_{1}\vone_{n}^{\top}) + \vb_{2}\vone_{n}^{\top}
+        \end{equation}
+        where \(\vW_{1} \in \R^{m \times d}, \vW_{2} \in \R^{d \times m}, \vb_{1} \in \R^{m}, \vb_{2} \in \R^{d}\) are trainable parameters, and \(\ReLU\) is the element-wise ReLU nonlinearity, i.e., \(\ReLU(\vM)_{ij} = \max\{M_{ij}, 0\}\). 
+        \item The layer-norm \(\LN\) is a standard normalization, which applies column-wise to each token independently:
+        \begin{equation}
+            \LN(\vZ) = \LN(\mat{\vz_{1}, \dots, \vz_{n}}) = \mat{\LN(\vz_{1}), \dots, \LN(\vz_{n})}
+        \end{equation}
+        and has the form 
+        \begin{equation}
+            \LN(\vz) = \frac{\vz - \vmu(\vz)\vone_{d}}{\norm{\vz - \vmu(\vz)\vone_{d}}_{2}} \odot \valpha + \vbeta \qquad \text{where} \qquad \vmu(\vz) = \frac{1}{d}\vone_{d}^{\top}\vz
+        \end{equation}
+        where \(\odot\) denotes element-wise multiplication, and \(\valpha, \vbeta \in \R^{d}\). The layer-norm operator serves as a sort of normalization on each token, where the scale of each token afterwards is learnable and shared amongst all tokens.
+    \end{itemize}
+    \item After the data has made it through preprocessing and \(L\) layers, we obtain the features \(\vZ = \mat{\vz_{1}, \dots, \vz_{n}}\). In the DINO context, we want to use the class token representation (which, again, has global information), so we extract \(\vz_{1}\) from this matrix (mathematically it's equivalent to return the ressult of \(\vZ \ve_{1}\)).  We call this post-processing step \(f^{\post}\).
+\end{enumerate}
+Thus the neural network is of the form 
+\begin{equation}
+    f = f^{\post} \circ f^{L} \circ \cdots \circ f^{1} \circ f^{\pre} \colon \R^{D \times N} \to \R^{d}.
+\end{equation}
+The transformer is one of the most popular neural network architectures in history, powering applications in almost all fields of deep learning. We use this network architecture for DINO as well as our simplification of DINO.
 
-\textit{two sets of weights for a transformer neural network}: \textit{teacher} weights \(\theta_{t}\) which processes \textit{global} views, and a \textit{student} network \(f_{s} \colon \R^{D \times N_{\loc}}\) which processes \textit{local} views. These two networks are instances of vision transformers, to be formally described in a subsequent discussion, and so they have exactly the same network architecture (again, to be discussed shortly) even while taking in token sequences with different lengths. By processing every view, we obtain 
 
-\paragraph{Evaluation pipeline.}
 
-\paragraph{Experimental setup and results.}
+\subsection{Optimization Strategy}\label{sub:contrastive_learning_optimization}
+
+We have a loss function and an architecture, so we now discuss the optimization strategy. The optimization strategy for DINO uses \textit{two sets of weights for the same architecture}: \textit{teacher} weights \(\theta_{t}\) and \textit{student} weights \(\theta_{s}\). These correspond to two different neural networks, called the teacher network and student network, with the same architecture. The teacher network encodes all global views, while the student network encodes all local views and global views. Namely, we train on the loss \(\cL_{\mathrm{DINO}-ts}\):
+\begin{align}\label{eq:dino_loss_teacherstudent}
+    \cL_{\mathrm{DINO}-ts}(\theta_{t}, \theta_{s}) 
+    &:= -\Bigg(\sum_{i = 1}^{N_{\glo}}\sum_{j = 1}^{N_{\loc}}\similarity_{\CE}(f_{\theta_{s}}(\vX_{\loc}^{j}), f_{\theta_{t}}(\vX_{\glo}^{i})) \\ 
+    &\qquad + \sum_{i = 1}^{N_{\glo}}\sum_{\substack{j = 1 \\ j \neq i}}^{N_{\glo}}\similarity_{\CE}(f_{\theta_{s}}(\vX_{\glo}^{j}), f_{\theta_{t}}(\vX_{\glo}^{i}))\Bigg). \nonumber
+\end{align}
+The optimization strategy is also unconventional: only the student parameters \(\theta_{s}\) are optimized, while \(\theta_{t}\) is directly constructed via an exponential moving average. For SGD this looks like:
+\begin{align}
+    \theta_{s}^{(k + 1)}
+    &= \theta_{s}^{(k)} - \eta^{(k)}\nabla_{\theta_{s}}\cL_{\mathrm{DINO}-ts}(\theta_{t}^{(k)}, \theta_{s}^{(k)}) \\
+    \theta_{t}^{(k + 1)}
+    &= \lambda^{(k)}\theta_{t}^{(k)} + (1 - \lambda^{(k)})\theta_{s}^{(k + 1)}.
+\end{align}
+Analogous update rules can be constructed for Adam and other iterative optimizers, all having the general form
+\begin{align}
+    \theta_{s}^{(k + 1)}
+    &= \textsc{OptimizationUpdate}^{(k)}(\theta_{s}^{(k)}; \nabla_{\theta_{s}}\cL_{\mathrm{DINO}-ts}(\theta_{s}^{(k)}, \theta_{t}^{(k)})) \\
+    \theta_{t}^{(k + 1)}
+    &= \lambda^{(k)}\theta_{t}^{(k)} + (1 - \lambda^{(k)})\theta_{s}^{(k + 1)}.
+\end{align}
+Notice that in our optimization updates and gradients we treat \(\theta_{s}^{(k)}\) and \(\theta_{t}^{(k)}\) as if they were \textit{independent}. In other words, the teacher can be considered ``frozen'' or ``detached from the computational graph'' during the optimization step (which takes gradients w.r.t.~\(\theta_{s}\)), and only the student weights \(\theta_{s}\) are optimized.
+
+After training, we discard the student weights and use the teacher weights for our trained network \(f\).
+
+\subsection{Evaluation Methodology}
+
+There are several ways to evaluate a trained encoder model. 
+
+\subsection{Experimental Setup and Results} \label{sub:contrastive_learning_experiment_results}
 
 \DP{Rest is still TODO (@Ziyang, Jingyuan).}
 
