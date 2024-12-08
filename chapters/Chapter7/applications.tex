@@ -114,19 +114,22 @@ For the architecture, we use a standard vision transformer. Here is how such an 
     and \(f^{\ell}(\vZ^{\ell}) := \vZ^{\ell + 1}\). Here we have used some operators, such as \(\MHSA, \MLP, \LN\) that are defined as follows:
     \begin{itemize}
         \item The \(\MHSA\) operator is multi-head-self-attention, the predecessor of the multi-head subspace self-attention (cf \Cref{ch:representation}). The formulation is as follows:
+        \begin{align}
+            \MHSA(\vZ) \label{eq:mhsa}
+            &:= \vU_{\out}\mat{([\vU_{\val}^{1}]^{\top}\vZ)\vA^{1}(\vZ) \\ \vdots \\ ([\vU_{\val}^{K}]^{\top}\vZ)\vA^{K}(\vZ)}, \\
+            \text{where} \qquad \vA^{k}(\vZ) \label{eq:attention_map}
+            &:= \softmax\rp{\frac{([\vU_{\key}^{k}]^{\top}\vZ)^{\top}([\vU_{\query}^{k}]^{\top}\vZ)}{\sqrt{d}}}
+        \end{align}
+        where \(p\) is a positive integer, \(\vU_{\query}^{i}, \vU_{\key}^{i}, \vU_{\val}^{i} \in \R^{d \times p}\) and \(\vU_{\out} \in \R^{d \times Kp}\) are trainable parameters, and the \(\softmax\) is defined column-wise as 
         \begin{equation}
-            \MHSA(\vZ) := \vU_{o}\mat{(\vU_{v}^{1}\vZ)\vA^{1}(\vZ) \\ \vdots \\ (\vU_{v}^{K}\vZ)\vA^{K}(\vZ)}, \qquad \text{where} \qquad \vA^{k}(\vZ) := \softmax\rp{\frac{(\vU_{k}^{1}\vZ)^{\top}(\vU_{q}^{1}\vZ)}{\sqrt{d}}}
+            \softmax(\vM) := \mat{\softmax(\vm_{1}) & \cdots & \softmax(\vm_{p})}, \quad \forall \vM = \mat{\vm_{1}, \dots, \vm_{p}} \in \R^{n \times p}.
         \end{equation}
-        where \(p\) is a positive integer, \(\vU_{q}^{i}, \vU_{k}^{i}, \vU_{v}^{i} \in \R^{p \times d}\) and \(\vU_{o} \in \R^{d \times Kp}\) are trainable parameters, and the \(\softmax\) is defined column-wise as 
-        \begin{equation}
-            \softmax(\vM) := \mat{\softmax(\vm_{1}) & \cdots & \softmax(\vm_{d})}, \qquad \forall \vM = \mat{\vm_{1}, \dots, \vm_{d}} \in \R^{d \times d}.
-        \end{equation}
-        In practice, the dimensions are usually picked is usually picked such that \(Kp = d\). The terms \(\vA^{k}(\vZ)\) and \((\vU_{v}^{K}\vZ)\vA^{K}(\vZ)\) are also known as the \textit{\(k\th\) attention map} and \textit{\(k\th\) attention head output} respectively.
+        In practice, the dimensions are usually picked is usually picked such that \(Kp = d\). The terms \(\vA^{k}(\vZ)\) and \((\vU_{\val}^{k}\vZ)\vA^{k}(\vZ)\) are also known as the \textit{\(k\th\) attention map} and \textit{\(k\th\) attention head output} respectively.
         \item The \(\MLP\) is a two-layer perceptron, a regular nonlinearity used in deep networks, and has the form 
         \begin{equation}
-            \MLP(\vZ) := \vW_{2}\ReLU(\vW_{1}\vZ + \vb_{1}\vone_{n}^{\top}) + \vb_{2}\vone_{n}^{\top}
+            \MLP(\vZ) := \vW_{\down}\ReLU(\vW_{\up}\vZ + \vb_{\up}\vone_{n}^{\top}) + \vb_{\down}\vone_{n}^{\top}
         \end{equation}
-        where \(\vW_{1} \in \R^{m \times d}, \vW_{2} \in \R^{d \times m}, \vb_{1} \in \R^{m}, \vb_{2} \in \R^{d}\) are trainable parameters, and \(\ReLU\) is the element-wise ReLU nonlinearity, i.e., \(\ReLU(\vM)_{ij} = \max\{M_{ij}, 0\}\). 
+        where \(\vW_{\up} \in \R^{m \times d}, \vW_{\down} \in \R^{d \times m}, \vb_{\up} \in \R^{m}, \vb_{\down} \in \R^{d}\) are trainable parameters, and \(\ReLU\) is the element-wise ReLU nonlinearity, i.e., \(\ReLU(\vM)_{ij} = \max\{M_{ij}, 0\}\). 
         \item The layer-norm \(\LN\) is a standard normalization, which applies column-wise to each token independently:
         \begin{equation}
             \LN(\vZ) = \LN(\mat{\vz_{1}, \dots, \vz_{n}}) = \mat{\LN(\vz_{1}), \dots, \LN(\vz_{n})}
@@ -173,9 +176,52 @@ Notice that in our optimization updates and gradients we treat \(\theta_{s}^{(k)
 
 After training, we discard the student weights and use the teacher weights for our trained network \(f\).
 
-\subsection{Evaluation Methodology}
+\subsection{Evaluation Methodology}\label{sub:contrastive_learning_evals}
 
-There are several ways to evaluate a trained encoder model. 
+There are several ways to evaluate a trained transformer model, which we discuss in this section.
+
+\paragraph{Linear Probing}
+
+The first, and most architecture-agnostic, way to evaluate an encoder model \(f_{\theta} \colon \R^{D \times N} \to \R^{d}\) is to employ \textit{linear probing}. Linear probing is, in a sentence, running logistic regression on the features computed by the encoder. This tells us how much semantic information exists in the representations, as well as how easily extractable this information is. (That is: to what extent do the features of images with different semantics live on different subspaces of the feature space?)
+
+More formally, let us suppose that we want to evaluate the quality and faithfulness of the features of the encoder on a labeled dataset \(\{(\vX_{1}, \vy_{1}), \dots, (\vX_{B}, \vy_{B})\}\), where there are \(C\) classes and each \(\vy_{b} \in \{0, 1\}^{C}\) is a ``one-hot encoding'' (namely, zeros in all positions except a \(1\) in the \(c\th\) position if \(\vX_{b}\) is in the \(c\th\) class). One way to do this is to solve the logistic regression problem 
+\begin{equation}\label{eq:linear_probing}
+    \min_{\vW \in \R^{C \times d}}\frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}, \vW f_{\theta}(\vX_{b})).
+\end{equation}
+This problem is a convex optimization problem in \(\vW\), and thus can be solved efficiently via (stochastic) gradient descent or a litany of other algorithms. This linear probe, together with the encoder, may be used as a classifier, and we can evaluate the classification accuracy. The usual practice is to train the model first on a large dataset, then train the linear probe on a dataset, and evaluate it on a third (``holdout'') dataset which is drawn from the same distribution as the second one. This evaluation procedure is the most statistically sound.
+
+\begin{exercise}
+    Prove that \Cref{eq:linear_probing} is a convex optimization problem.
+\end{exercise}
+
+\paragraph{Fidelity of the attention maps.}
+
+Another way to check the performance of the representations is to examine the fidelity of the attention maps \(\vA^{L, k} \in \R^{n \times n}\) as defined in \Cref{eq:attention_map}, at the last layer \(L\), and given by the following pipeline:
+\begin{align}
+    \vX \mapsto \cdots \mapsto \vZ^{L - 1} = [\underbrace{\vz_{1}^{L - 1}}_{\text{class token}}, \underbrace{\vz_{2}^{L - 1} \dots, \vz_{n}^{L - 1}}_{\text{patch tokens}}] \mapsto \vA^{k, L} = \mat{\vA_{1, 1}^{k, L} & \vA_{1, 2:}^{k, L} \\ \vA_{2:, 1}^{k, L} & \vA_{2:, 2:}^{k, L}}.
+\end{align}
+In particular, we examine what the attention maps for a given input reveal about the salient objects in the input image, i.e., which parts of the image provide the most globally-relevant information to the class token. One particular way to do this is to examine the component of the attention map where the class token is extracted as the query and removed from the value matrix, i.e., \(\vA_{2:, 1}^{k, L} \in \R^{1 \times (n - 1)} \in \R^{1 \times N}\) or its transpose \(\va^{k, L} \in \R^{N}\). Namely,
+\begin{equation}
+    \va^{k}(\vZ) := \softmax\rp{\frac{([\vU_{\key}^{k}]^{\top}\mat{\vz_{2}, \dots, \vz_{n}})^{\top}([\vU_{\query}^{k}]^{\top}\vz_{1})}{\sqrt{d}}}
+\end{equation} 
+Notice that this vector \(\va^{k, L}\), which we label as the ``\textit{saliency vector} at the \(k\th\) attention head at layer \(L\),'' has a value for every patch, \(1, \dots, N\), and we use this value to describe how relevant each patch is towards the global information. In particular for visualization's sake we create a new image where each patch is replaced by its corresponding value in the saliency vector, showcasing the contribution of each patch; we call this image the ``\textit{saliency map} at the \(k\th\) attention head at layer \(L\)''. \Cref{fig:attention_maps_saliency_dino} show visualizations of saliency maps in DINO and our simplified DINO; note that selected saliency maps highlight the relevant parts of the input image.
+\begin{figure}
+    \begin{subfigure}[t]{0.45\textwidth}
+        \centering 
+        \includegraphics[width=0.75\textwidth]{figs_chap7/dino_attention_maps.png}
+        \caption{DINO.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.45\textwidth}
+        \centering 
+        % \includegraphics[width=0.75\textwidth]{figs_chap7/dino_attention_maps.png}
+        \caption{Simplified DINO. \DP{TODO @Ziyang}}
+    \end{subfigure}
+    \caption{\textbf{A qualitative comparison of saliency maps} generated by DINO \textit{(left)} and by our simplified DINO \textit{(right)}. For each image, three attention heads (denoted by \(k\)) in the last layer \(L\) are selected and their corresponding saliency maps are displayed.}
+    \label{fig:attention_maps_saliency_dino}
+\end{figure}
+
+Of course, we also wish to have quantitative evaluations of the power of the attention maps. For this, we use the existing methodology MaskCut \citep{wang2023cut} to obtain a segmentation of the input image into several objects from the saliency map. A full description of this methodology is highly involved and it uses several different computer vision techniques; as such a full description is out of scope of this book.\footnote{\citet{yu2023emergence} provides a mathematically precise description of the method.}
 
 \subsection{Experimental Setup and Results} \label{sub:contrastive_learning_experiment_results}
 
