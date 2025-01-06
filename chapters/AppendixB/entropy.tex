@@ -2,29 +2,79 @@ In this appendix, we give formal proofs of the assertions connecting diffusion, 
 These results rely on the theory of \textit{Markov diffusion processes}, an extremely rich area of mathematics that blends probability, analysis, and geometry, and which has recently been exploited as the foundation for diffusion generative models, as we have mentioned.
 For a general reference to this area of mathematics, consult \cite{Bakry2016-pl}.
 
+\section{An Important Note on Notation}
+
+In this appendix, we will dig into the mathematics underlying denoising,
+diffusion, and entropy. Adopting a mathematical focus demands that we adopt
+certain notational conventions which are unfortunately at odds with the
+notational conventions we have used in \Cref{ch:compression}, which emphasize
+connections to practical implementations of noise scheduling in diffusion models
+and other iterative denoising schemes.
+
+We call the reader's attention to three important changes that we will employ
+throughout these appendices. Both \Cref{thm:diffusion-and-entropy} and
+\Cref{thm:conditioning_reduces_entropy} concern themselves with the following
+setting:
+we observe
+a random variable $\vz_{\sigma} = \vz_o + \sigma \vg$, where $\vz_o$ is a random
+variable with finite variance and density $p$,\footnote{We will only need
+a density to exist for the proof of \Cref{thm:conditioning_reduces_entropy}. As
+we'll discuss, this can be seen as an assumption that $\vz_o$ has already had an
+(arbitrarily small) amount of Gaussian noise added to it. This leads us to
+interpret \Cref{thm:conditioning_reduces_entropy} as applying to entropy
+reduction via \textit{incremental denoising}, as we studied in
+\Cref{ch:compression}, at stages of the incremental denoising process where
+previously-added noise is being removed.} and we consider the corresponding
+minimum mean-squared error denoiser for this noise level, defined as
+\begin{equation*}
+  \vmu_{\sigma}(\vz_{\sigma}) = \bE[ \vz_o \mid \vz_{\sigma}
+  ] = \vz_{\sigma}
+  + \sigma^2 \nabla \log p_{\sigma}(\vz_{\sigma}),
+\end{equation*}
+where we applied Tweedie's formula (\Cref{thm:tweedie}).
+\textbf{Here is the change we will make to this notation in this appendix:}
+\textit{we will parameterize the noisy observation $\vz$, its density $p$, and
+the denoiser $\vmu$ in terms of variance $\sigma^2$, not standard deviation
+$\sigma$.} Indeed, the distribution of $\vz_{\sigma^2}$ conditional on $\vz_o$
+is Gaussian with mean $\vz_o$ and covariance $\sigma^2\vI$.
+This entails the modified definitions
+\begin{enumerate}[label={\arabic*.}]
+  \item For the observations,
+    \begin{equation*}
+      \vz_{\sigma^2} = \vz_o + \sigma \vg;
+    \end{equation*}
+  \item For the density, $p_{\sigma^2}$ denotes the density of $\vz_{\sigma^2}$;
+  \item For the denoiser,
+    \begin{equation}\label{eq:appendix-mmse-denoiser}
+      \vmu_{\sigma^2}(\vz_{\sigma^2}) = \bE[ \vz_o \mid \vz_{\sigma^2}
+      ] = \vz_{\sigma^2}
+      + \sigma^2 \nabla \log p_{\sigma^2}(\vz_{\sigma^2}).
+    \end{equation}
+\end{enumerate}
+Again, we emphasize that these changes unfortunately conflict with the
+practically-motivated notation used in \Cref{ch:compression}, but will lead to
+far greater alignment with the mathematical formalism underlying diffusion and
+denoising that we will explore in this appendix while proving
+\Cref{thm:conditioning_reduces_entropy,thm:diffusion-and-entropy}.
+
+
 \section{Diffusion Process}
 
-\Cref{thm:diffusion-and-entropy} concerns the following setting: we observe
-a random variable $\vz_{\sigma} = \vz_o + \sigma \vg$, where $\vz_o$ is a random
-variable with finite variance and density $p$.
+% \Cref{thm:diffusion-and-entropy} concerns the following setting: we observe
+% a random variable $\vz_{\sigma^2} = \vz_o + \sigma \vg$, where $\vz_o$ is a random
+% variable with finite variance and density $p$. %
 %Note that $\mu$ itself need not be a density: for example, $\vz_o$ could be a discrete random variable in everything that follows.
-
 The following \textit{continuous time} perspective is helpful in analyzing the
-relationship between the entropy of $\vz_{\sigma}$ and $\vz$: consider an
-auxiliary time variable $t \in [0, \sigma^2]$, and a random process $t\mapsto \vz(t)$
-such that for any $t$, one has $\vz(t) | \vz_o \sim \sN(\vz_o, t\vI)$.
-In words, the distribution of $\vz(t)$ conditional on $\vz_o$ is Gaussian with
-mean $\vz_o$ and covariance $t\vI$. This means in particular that
-$\vz(\sigma^2)$ has the same distribution as $\vz_{\sigma}$.
+relationship between the entropy of $\vz_{\sigma^2}$ and $\vz_o$: consider an
+auxiliary time variable $t \in [0, \sigma^2]$, and a random process $t\mapsto
+\vz_t$ such that for any $t$, one has $\vz_t | \vz_o \sim \cN(\vz_o, t\vI)$.
+Notice that at the terminal value of $t = \sigma^2$, this process is equal in
+distribution to the observation $\vz_{\sigma^2}$.
 By properties of Gaussian smoothing, for every $t > 0$,
-the random variable $\vz(t)$ has a density $p_t$, which can be expressed
+the random variable $\vz_t$ has a density $p_t$, which can be expressed
 analytically as $p_t = \varphi_{t} \mathop{\ast} p$, where $\varphi_t$ is the
 density of the standard Gaussian random variable with zero mean and covariance
-$t \vI$.\footnote{Note that although we use subscripts for the density $p_t$ for
-convenience, it does not follow the same notational conventions as we use for
-$\vz_{\sigma}$: in particular, the subscript $t$ in $p_t$ specifies the
-\textit{variance}, whereas it specifies the standard deviation of the noise
-added for $\vz_{\sigma}$.} A very fundamental fact about the density $p_t$ is
+$t \vI$. A very fundamental fact about the density $p_t$ is
 that it satisfies the \textit{heat equation}: specifically, the PDE
 \begin{equation*}
     \partial_t p_t = \frac{1}{2} \Delta p_t, 
@@ -41,7 +91,7 @@ By exploiting the heat equation, we find a very simple proof that \textit{entrop
 calculate
 \begin{equation}\label{eq:de-bruijn}
   \begin{split}
-    \partial_t h(\vz(t))
+    \partial_t h(\vz_t)
   &=
   -\frac{1}{2} \int (1 + \log p_t) \Delta p_t
   \\
@@ -53,27 +103,23 @@ calculate
   \end{split}
 \end{equation}
 where the first line uses the chain rule, the heat equation, and the expression
-$h(\vz(t)) = \int p_t \log p_t$; and the second line uses an integration by parts.
+$h(\vz_t) = \int p_t \log p_t$; and the second line uses an integration by parts.
 The identity in the final line of \Cref{eq:de-bruijn}, which equivalently
-relates the \textit{Fisher information} of $\vz(t)$ to the time derivative of its
-entropy, is called de Bruijn's identity. Because $\vz(0)$ has the same
-distribution as $\vz_o$ and $\vz(\sigma^2)$ has the same distribution as
-$\vz_{\sigma}$, \Cref{thm:diffusion-and-entropy} immediately follows from
-\Cref{eq:de-bruijn}.
+relates the \textit{Fisher information} of $\vz_t$ to the time derivative of its
+entropy, is called de Bruijn's identity. Because $t=0$ and $t=\sigma^2$
+correspond to our clean signal $\vz_o$ and the noisy observation
+$\vz_{\sigma^2}$, respectively, \Cref{thm:diffusion-and-entropy} immediately
+follows from \Cref{eq:de-bruijn}.
 
 \section{Denoising Process}
 
 \Cref{thm:conditioning_reduces_entropy} concerns the corresponding ``inverse''
-process: we start with the noisy random variable $\vz_{\sigma}$, and we seek to
+process: we start with the noisy random variable $\vz_{\sigma^2}$, and we seek to
 compare its entropy to that of the \textit{denoised} random variable
-\begin{equation*}
-  \vmu_{\sigma}(\vz_{\sigma}) = \bE[ \vz_o \mid \vz_{\sigma}
-  ] = \vz_{\sigma}
-  + \sigma^2 \nabla \log p_{\sigma^2}(\vz_{\sigma}),
-\end{equation*}
-where we applied Tweedie's formula (\Cref{thm:tweedie}).
-This can be seen as a perturbation of the distribution of the random variable
-$\vz_{\sigma}$ by the \textit{score function vector field}, suggesting
+$\vmu_{\sigma^2}(\vz_{\sigma^2})$, following \Cref{eq:appendix-mmse-denoiser}.
+By Tweedie's formula, this can be seen as a perturbation of the distribution of
+the random variable $\vz_{\sigma^2}$ by the \textit{score function vector field},
+suggesting
 a connection to stochastic differential equations (SDEs) and the theory of
 diffusion models \cite{song2020score}.
 Indeed, a proof of
@@ -87,7 +133,7 @@ On the other hand, we will need to deal with some slightly technical
 calculations due to the fact that the denoising process in
 \Cref{thm:conditioning_reduces_entropy} does \textit{not} correspond exactly to
 the ``reverse'' process associated to the noise addition process that generates
-the observation $\vz_{\sigma}$.\footnote{For those familiar with diffusion
+the observation $\vz_{\sigma^2}$.\footnote{For those familiar with diffusion
 models, we refer here to the time-reversed forward process not coinciding with
 the sequence of iterates generated by the process defined by
 \Cref{thm:conditioning_reduces_entropy}. These processes coincide in a certain
@@ -101,16 +147,16 @@ sophistication of our tools.}
 % diffusion-denoising processes, 
 
 The key to our approach will be to exploit the fact that the denoising process
-applies a deterministic map to the random variable $\vz_{\sigma}$, namely, the
-update map $\vmu_{\sigma}$. As in the previous section, we define a family of
-maps $\vmu(t)$ analogously to our definition of the intermediate noisy random
-variables $\vz(t)$ for $t \in [0, \sigma^2]$.
-It turns out that under rather general assumptions on the density $p$ of
+applies a deterministic map to the random variable $\vz_{\sigma^2}$, namely, the
+update map $\vmu_{\sigma^2}$. As in the previous section, we define a family of
+maps $\vmu_t$ analogously to our definition of the intermediate noisy random
+variables $\vz_t$ for $t \in [0, \sigma^2]$.
+It turns out that under rather general assumptions on the distribution of
 $\vz_o$---namely, that it is not supported entirely on an affine subspace of
-positive codimension---the maps $\vmu(t)$ are actually invertible for every
+positive codimension---the maps $\vmu_t$ are actually invertible for every
 $t>0$ \cite[Lemma II.1]{Gribonval2011-pf}.
-This implies that the density of the denoised signal $\vmu(t)(\vz(t))$
-\sdb{notational train wreck, fix todo...} is given precisely by
+This implies that the density of the denoised signal $\vmu_t(\vz_t)$ is given
+precisely by
 \begin{equation*}
   \frac{p_t \circ \vmu_t^{-1}}{\det(\vI + t \nabla^2 \log p_t)},
 \end{equation*}
@@ -129,9 +175,11 @@ the regularity of the score functions $\nabla \log p_t$.
   Lebesgue measure, which satisfies
   \begin{enumerate}[label={\arabic*.}]
     \item $p$ is strictly positive.
-    \item $p(\vx)$ is uniformly bounded in $\vx$.
+    % \item $p(\vx)$ is uniformly bounded in $\vx$.
     \item $\| \nabla p(\vx) \|_2$ is uniformly bounded in $\vx$.
     \item $| \Delta p(\vx) |$ is uniformly bounded in $\vx$.
+    % \item $p$ is not supported entirely on an affine subspace of positive
+    %   codimension.
   \end{enumerate}
   It can be shown that these hypotheses are all satisfied by adding an
   arbitrarily small amount of Gaussian noise to any random variable (see the
@@ -145,7 +193,14 @@ the regularity of the score functions $\nabla \log p_t$.
     =
     \frac{p_t \circ \vmu_t^{-1}}{\det(\vI + t \nabla^2 \log p_t)}.
   \end{equation*}
-  As a consequence, we have for its entropy
+  This expression is valid by an application of \cite[Lemma
+  II.1]{Gribonval2011-pf} given our assumption that $p$ is a density with respect
+  to the Lebesgue measure on $\R^d$,\footnote{If $p$ had support in an affine
+  subspace of $\R^d$ with strictly positive codimension, then $\int_{\R^d}
+  p = 0$ would necessarily follow, contradicting the assumption that $p$ is
+  a density.} which implies
+  that the maps $\vmu_t$ are actually invertible for every $t>0$. As
+  a consequence, we have for the entropy of $\vmu_t(\vz_t)$
   \begin{align*}
     h(\vmu_t(\vz_t))
     &=
@@ -252,30 +307,30 @@ the regularity of the score functions $\nabla \log p_t$.
     \leq
     \frac{t}{d} \tr\left(\nabla^2 \log p_t \right)
     \leq
-    \frac{1}{d},
+    \frac{1}{d}.
   \end{equation*}
-  which, together with convexity of the function $x \mapsto (1 + x/d)^d$ (for $x
-  \geq -1$) and the
-  fact that $(1 + 1/d)^d \leq e$, implies for all such $t\leq 1/L$
+  Meanwhile, the function $x \mapsto (1 + x)^d$ is convex, so for $-1/d \leq
+  x \leq 1/d$ we have
+  \begin{align*}
+    (1+x)^d &\leq \left( 1 - \frac{1}{d} \right)^d + \left[ \left(
+    1 + \frac{1}{d} \right)^d - \left( 1 - \frac{1}{d} \right)^d \right] x
+    \\
+    &\leq 1 + ex.
+  \end{align*}
+  Applying this bound, we get that for every $0 \leq t \leq 1/L$, one has
   \begin{equation*}
     \int p_t \left(
     1 + \frac{t}{d} \tr\left(\nabla^2 \log p_t \right)
     \right)^d
     \leq
-    \frac{et}{d}\int p_t \Delta \log p_t.
-    % \int p_t \left(
-    % 1 + \frac{(e-1)t}{d} \Delta \log p_t
-    % \right).
+    1 + \frac{et}{d}\int p_t \Delta \log p_t.
   \end{equation*}
   Combining this with our previous estimate, we get
   \begin{equation*}
     h(\vmu_t(\vz_t))
     -
     h(\vz_t)
-    \leq
-    -1 + 
-    % \frac{(e-1)t}{d} \int p_t \Delta \log p_t.
-    \frac{et}{d}\int p_t \Delta \log p_t.
+    \leq \frac{et}{d}\int p_t \Delta \log p_t.
   \end{equation*}
   Finally, via an integration by parts, we conclude
   \begin{align*}
@@ -283,42 +338,36 @@ the regularity of the score functions $\nabla \log p_t$.
     -
     h(\vz_t)
     &\leq
-    % -\frac{(e-1)t}{d} \int \ip{\nabla p_t}{ \nabla \log p_t }.
-    -\left(
-    1 + \frac{et}{d}\int \ip{\nabla p_t}{ \nabla \log p_t }
-    \right)
+    -\frac{et}{d} \int \ip{\nabla p_t}{ \nabla \log p_t }.
     \\
     &=
-    % -\frac{(e-1)t}{d} \int p_t \norm*{\nabla \log p_t}_2^2 \leq 0,
-    -\left(
-    1+
-    \frac{et}{d}\int p_t \norm*{\nabla \log p_t}_2^2
-    \right)
-    \leq 0,
+    -\frac{et}{d} \int p_t \norm*{\nabla \log p_t}_2^2 \leq 0,
   \end{align*}
   as claimed.
-
-  % By our assumption that $\Delta \log p$ is bounded, it follows from $C^2$
-  % regularity of $p$ that $\Delta \log p_t$ is bounded for all $0 \leq t \leq 1$.
-  % Then for any $t \leq 1/\sup_{\vx} \Delta \log p(\vx)$
-  %
-  %
-  % Because $\nabla \log p_t$ is Lipschitz, we conclude that for every $t$
-  % sufficiently small (depending only on $\nabla \log p$), it holds
-  % \begin{equation*}
-  %   h(\vmu_t(\vz_t))
-  %   -
-  %   h(\vz_t)
-  %   \leq 0,
-  % \end{equation*}
-  % as sought. \sdb{need details...}
 \end{proof}
+
+% \begin{remark}\label{rem:removing-subspace-hypothesis}
+%   We stated in the proof of \Cref{thm:conditioning_reduces_entropy} above that
+%   the extra hypothesis that $p$ is not supported on an affine subspace of
+%   $\R^d$ of strictly positive codimension, which we made for convenience in
+%   the proof, can be removed.
+%   To see that this is indeed true, suppose that $p$ has support contained in
+%   an affine subspace $A = \va + U$, where $U$ is a subspace of dimension
+%   strictly less than $d$ and $\va$ is a vector (any affine subspace can be
+%   represented in this way).
+%   Then the smoothed density satisfies
+%   \begin{equation*}
+%     p_t(\vx) = \int_{A} \varphi_t(\vx - \vx') p(\vx') \mathrm{d} \vx',
+%   \end{equation*}
+%
+%
+% \end{remark}
+
 
 
 \begin{lemma}\label{lem:entropy-reduction-regularity}
-  Suppose $p$ is a density on $\R^d$ which is strictly positive and bounded in
-  the sense that $\sup_{\vx} | p(\vx) | < +\infty$.
-  Assume moreover that
+  Suppose $p$ is a density on $\R^d$ which is strictly positive.  Assume
+  moreover that
   \begin{equation*}
     \sup_{\vx} \| \nabla p(\vx) \|_2 < +\infty, \quad
     \sup_{\vx} | \Delta p(\vx) | < +\infty.\footnote{A density $p$ satisfying
@@ -347,32 +396,38 @@ the regularity of the score functions $\nabla \log p_t$.
   the claim.
   The smoothed density satisfies
   \begin{equation*}
-    p_t(\vx) = \int_{\R^d} \varphi_{t}(\vx - \vx') p(\vx') \mathrm{d} \vx',
+    p_t(\vx) = \int_{\R^d} \varphi_{t}(\vx') p(\vx - \vx') \mathrm{d} \vx',
   \end{equation*}
-  and {differentiating under the integral} gives
+  and {differentiating under the integral} and linearity give
+  % \begin{align*}
+  %   \nabla p_t(\vx) &= -\frac{1}{t} \int_{\R^d} (\vx - \vx') \varphi_{t}(\vx - \vx') p(\vx') \mathrm{d} \vx',
+  %   \\
+  %   \nabla^2 p_t(\vx)
+  %   &= \int_{\R^d} \left[
+  %     \frac{1}{t^2} (\vx-\vx')(\vx-\vx')\adj
+  %     - \frac{1}{t} \vI
+  %     \right]
+  %   \varphi_{t}(\vx - \vx') p(\vx') \mathrm{d} \vx',
+  % \end{align*}
+  % so
+  % \begin{equation*}
+  %   \Delta p_t(\vx)
+  %   =
+  %   \int_{\R^d} \left[
+  %     \frac{1}{t^2} \norm{\vx-\vx'}_2^2
+  %     - \frac{d}{t}
+  %     \right]
+  %   \varphi_{t}(\vx - \vx') p(\vx') \mathrm{d} \vx'.
+  % \end{equation*}
   \begin{align*}
-    \nabla p_t(\vx) &= -\frac{1}{t} \int_{\R^d} (\vx - \vx') \varphi_{t}(\vx - \vx') p(\vx') \mathrm{d} \vx',
+    \nabla p_t(\vx) &= \int_{\R^d} \varphi_{t}(\vx') \nabla p(\vx-\vx') \mathrm{d} \vx',
     \\
-    \nabla^2 p_t(\vx)
-    &= \int_{\R^d} \left[
-      \frac{1}{t^2} (\vx-\vx')(\vx-\vx')\adj
-      - \frac{1}{t} \vI
-      \right]
-    \varphi_{t}(\vx - \vx') p(\vx') \mathrm{d} \vx',
-  \end{align*}
-  so
-  \begin{equation*}
     \Delta p_t(\vx)
-    =
-    \int_{\R^d} \left[
-      \frac{1}{t^2} \norm{\vx-\vx'}_2^2
-      - \frac{d}{t}
-      \right]
-    \varphi_{t}(\vx - \vx') p(\vx') \mathrm{d} \vx'.
-  \end{equation*}
-  Using H\"{o}lder's inequality and the fact that the Gaussian distribution has
-  finite moments of all orders, it follows from these expressions and the
-  assumption that $p$ is bounded that $\nabla p_t$ and $\Delta p_t$ are bounded
+    &= \int_{\R^d} \varphi_{t}(\vx') \Delta p(\vx - \vx') \mathrm{d} \vx'.
+  \end{align*}
+  Using H\"{o}lder's inequality and our hypotheses on boundedness of $\nabla
+  p$ and $\Delta p$, it follows from these expressions that $\norm{\nabla
+  p_t}_2$ and $\Delta p_t$ are bounded
   for all $t>0$.\footnote{Notice that, by Fubini's theorem, this same
   integrability argument justifies the differentiation under the integral for
   all $t$ in any compact subinterval of $[0, +\infty)$.}
