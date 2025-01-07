@@ -13,12 +13,14 @@ To help the readers understand the material in this book better and learn how to
 
 \yima{How the chapter progress... How to make learning data distribution better with principled objectives, interpretable architectures, and complete systems... }
 
+\DP{The goal of this chapters is to start with the theoretical basis found in other chapters, and convert it to implementation-ready descriptions. We should convey this message in the introduction.}
+
 
 \section{Simplified Contrastive Learning}\label{sec:contrastive_learning}
 
 Learning high-quality and faithful representations of data is a fundamental problem in deep learning, known as \textit{self-supervised learning}. There have been many approaches proposed for this task, many of which do not evidently use the techniques and principles outlined in this manuscript. One such approach is called \textit{contrastive learning}, so named because the learning objective is (roughly speaking) about ensuring that features of ``similar'' data are similar, and features of ``dis-similar'' data are far apart. Contrastive learning solutions are often highly-engineered, empirically designed approaches. In this section, we will describe one such approach named DINO \citep{caron2021emerging}, and use the principles described in the previous chapters to drastically simplify their design decisions while improving the learned representations.
 
-\subsection{Data}\label{sec:contrastive_learning_data}
+\subsection{Data}\label{sub:contrastive_learning_data}
 
 The data that we will use to explore and simplify the DINOv2 methodology is all 2-dimensional image data. For \textit{training}, we will use the ImageNet-1K and ImageNet-21K datasets. Each sample in the dataset is an RGB image, of varying resolution, and a label indicating the object or scene that the image contains (i.e., the \textit{class} of the image). The ImageNet-1K dataset contains 1.28M training images and 50K validation images partitioned into 1K classes. The ImageNet-21K dataset contains 14.2M training images and 21.8K classes, but the classes are not disjoint (i.e., some classes are subsets of others). Since we are doing self-supervised learning, the labels will not be used during training, only during evaluation. For \textit{evaluation}, we will use a litany of datasets. Of these, the most common is CIFAR-10. CIFAR-10 is a dataset of 60K RGB 32 \(\times\) 32 natural images partitioned into 10 classes, with a pre-established training set of 50K samples and a validation set of 10K samples. The purpose of using CIFAR-10 will be to ensure that models which train on one distribution of images (ImageNet) can generalize to another distribution of images (CIFAR-10).
 
@@ -40,9 +42,10 @@ Our task is to learn a good representation of the data. Contrastive learning, by
  In the case of DINO, the authors propose to use a methodology which produces a single feature vector for the whole image, and desires the feature vector to contain ``global'' (i.e., image-level) information. Accordingly the loss will promote that images with similar global information have similar features and images with different global information have different features.
 
  This seems intuitive, but as previously mentioned, there are several empirical considerations, even while setting up the loss. First and foremost, how should we promote similarities and differences? The answer of DINO \citep{caron2021emerging} is\footnote{In the author's view, inexplicably...} to treat the output features as ``logits'' corresponding to some probability distribution and take their cross-entropy. More specifically, the ``cross entropy similarity'' is computed as
- \begin{equation}\label{eq:cross_entropy_similarity}
-    \similarity_{\CE}(\vx, \vy) = -\CE(\softmax(\vx), \softmax(\vy)), \qquad \forall \vx, \vy \in \R^{d},
- \end{equation}
+ \begin{align}\label{eq:cross_entropy_similarity}
+    \similarity_{\CE}(\vx, \vy) &= -\frac{1}{2}\Big(\CE(\softmax(\vx), \softmax(\vy)) \\
+    &\qquad \qquad + \CE(\softmax(\vy), \softmax(\vx))\Big), \quad \forall \vx, \vy \in \R^{d}, \nonumber
+ \end{align}
  where \(\softmax \colon \R^{d} \to \R^{d}\) is defined as
  \begin{equation}\label{eq:expts_def_softmax}
     \softmax(\vx) := \frac{1}{\sum_{i = 1}^{d}\e^{x_{i}}}\mat{\e^{x_{1}} \\ \vdots \\ \e^{x_{d}}}, \qquad  \forall \vx = (x_{1}, \dots, x_{d}) \in \R^{d},
@@ -51,7 +54,15 @@ Our task is to learn a good representation of the data. Contrastive learning, by
  \begin{equation}\label{eq:expts_def_ce}
     \CE(\vu, \vv) = -\sum_{i = 1}^{d}u_{i}\log v_{i}, \quad \forall \vu = (u_{1}, \dots, u_{d}), \vv = (v_{1}, \dots, v_{d}) \in \R^{d}.
  \end{equation}
-The next question is, how should we obtain samples with similar global information? The answer of DINO (as well as nearly all contrastive learning) is \textit{data augmentation} --- from each sample, make several correlated samples which share the desired properties. In the DINO case, we use several different crops or \textit{views} of the input image. Specifically, from each input image \(\vX\) we obtain several randomly selected \textit{global views} (i.e., large crops) \(V_{\glo} := \{\vX_{\glo}^{1}, \dots, \vX_{\glo}^{M_{\glo}}\} \subseteq \R^{D \times N_{\glo}}\) and several \textit{local views} (i.e., small crops) \(V_{\loc} := \{\vX_{\loc}^{1}, \dots, \vX_{\loc}^{M_{\loc}}\} \subseteq \R^{D \times N_{\loc}}\), as in \Cref{fig:local_global_views}.
+ The next question is, how should we obtain samples with similar global information? The answer of DINO (as well as nearly all contrastive learning) is \textit{data augmentation} --- from each sample, make several correlated samples which share the desired properties. In the DINO case, we use different crops or \textit{views} of the input image. A view \(\vX[v]\) of an image \(\vX\) is a subset of tokens (columns) of \(\vX\), in this case selected so that the underlying patches form a rectangular crop of the image. There are two types of views we want to use: \textit{global views} (i.e., large crops) \(\vX[v_{\glo}] \in \R^{D \times N_{\glo}}\), and \textit{local views} (i.e., small crops) \(\vX[v_{\loc}] \in \R^{D \times N_{\loc}}\), as in \Cref{fig:local_global_views}. In order to process local and global views, DINO uses a transformer neural network \(f_{\theta}\), which can process input sequences of any length, i.e., with shape \(\R^{D \times T}\) for every \(T \geq 1\). The exact implementation will be discussed shortly in \Cref{sub:contrastive_learning_architecture}, but for now it suffices that we can think of a transformer as a map \(f_{\theta} \colon \bigcup_{T = 1}^{\infty}\R^{D \times T} \to \R^{d}\). In this case, the network is used to compute \(f_{\theta}(\vX[v])\) for each (local or global) view \(\vX[v]\).
+
+ DINO desires that all features of local views, i.e., \(f_{\theta}(\vX[v_{\loc}])\) are similar to all features of global views, i.e., \(f_{\theta}(\vX[v_{\glo}])\), and the features of all global views are consistent with each other, for each fixed image \(\vX\). One way to do this is to \textit{maximize the similarity} between the aforementioned pairs of features. That is, we solve the problem \(\min_{\theta}L_{\mathrm{DINO}}(\theta)\) where 
+ \begin{align}\label{eq:dino_loss}
+    L_{\mathrm{DINO}}(\theta) := 
+    &-\alpha\Ex\rs{\similarity_{\CE}(f_{\theta}(\vX[v_{\loc}]), f_{\theta}(\vX[v_{\glo}]))} \\ 
+    &- \beta \Ex\rs{\similarity_{\CE}(f_{\theta}(\vX[v_{\glo}^{1}]), f_{\theta}(\vX[v_{\glo}^{2}]))}, \nonumber
+\end{align}
+where the first expectation is over the data \(\vX\), the local views \(v_{\loc}\), and the global views \(v_{\glo}\), while the second expectation is over the data \(\vX\) and pairs of global views \(v_{\glo}^{1}, v_{\glo}^{2}\). Here \(\alpha \geq 0\) and \(\beta \geq 0\) are hyperparameters, to be selected by the user prior to initiating the learning algorithm.
 
 \begin{figure}[t]
     \centering 
@@ -60,32 +71,54 @@ The next question is, how should we obtain samples with similar global informati
     \label{fig:local_global_views}
 \end{figure}
 
-Now the question is, how to process the local and global views? The answer of DINO is to use a transformer neural network \(f_{\theta}\), which can process input sequences of any length, i.e., with shape \(\R^{D \times T}\) for every \(T \geq 1\). The exact implementation will be discussed shortly, but for now it suffices that we can think of a transformer as a map \(f_{\theta} \colon \bigcup_{T = 1}^{\infty}\R^{D \times T} \to \R^{d}\). In this case, the network is used to compute \(f_{\theta}(\vX_{v})\) for each view \(\vX_{v} \in V_{\glo} \cup V_{\loc}\). 
+While it is easy to reason about \eqref{eq:dino_loss}, it is impossible in practice to implement optimization algorithms such as gradient descent with a loss given by \(L_{\mathrm{DINO}}\). This is because the expectations in the loss are impossible to evaluate, much less take the gradient of. In this extremely frequent case, we approximate the expectation via finite samples. That is, \textit{at each timestep} \(t\), we
+\begin{itemize}
+    \item Subsample \(B\) data points from our dataset \(\{\vX_{1}^{t}, \dots, \vX_{B}^{t}\} \subseteq \R^{D \times N}\).
+    \item For each data point \(\vX_{b}^{t}\), sample \(M_{\glo}\) global views \(\vX_{b}^{t}[v_{\glo}^{i}]\) and \(M_{\loc}\) local views \(\vX_{b}^{t}[v_{\glo}^{i}]\). 
+    \item Perform the optimization update using the \textit{surrogate, approximate loss} \(\hat{L}_{\mathrm{DINO}}^{t}\), defined as follows: 
+        \begin{align}\label{eq:dino_loss_empirical}
+            &\hat{L}_{\mathrm{DINO}}^{t}(\theta) := \\
+            &-\frac{\alpha}{B\cdot M_{\glo}\cdot M_{\loc}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\loc}}\sum_{j = 1}^{M_{\glo}}\similarity_{\CE}(f_{\theta}(\vX_{b}^{t}[v_{\loc}^{i}]), f_{\theta}(\vX_{b}^{t}[v_{\glo}^{j}])) \\ 
+            &-\frac{\beta}{B\cdot M_{\glo}^{2}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\sum_{j = 1}^{M_{\glo}}\similarity_{\CE}(f_{\theta}(\vX_{b}^{t}[v_{\glo}^{i}]), f_{\theta}(\vX_{b}^{t}[v_{\glo}^{j}])). \nonumber
+        \end{align}
+\end{itemize}
+In the general case this transforms our intractable optimization problem, as in optimizing the loss in \eqref{eq:dino_loss}, into a tractable stochastic optimization problem which is run to train essentially every deep learning model in the world. This conversion is extremely natural once you have seen some examples, and we will hopefully give these examples throughout the chapter. 
 
-Now, how to make all of the features of local views similar to all of the features of global views and all the global views' features consistent with each other? The answer is to maximize the similarity between \(f_{\theta}(\vX_{\glo}^{i})\) and \(f_{\theta}(\vX_{\loc}^{j})\), i.e., solve the problem \(\min_{\theta}\cL_{\mathrm{DINO}}(\theta)\) where
-\begin{align}\label{eq:dino_loss}
-    \cL_{\mathrm{DINO}}(\theta) :=
-    &-\Bigg(\sum_{i = 1}^{N_{\glo}}\sum_{j = 1}^{N_{\loc}}\similarity_{\CE}(f_{\theta}(\vX_{\loc}^{j}), f_{\theta}(\vX_{\glo}^{i})) \\
-    &+ \sum_{i = 1}^{N_{\glo}}\sum_{\substack{j = 1 \\ j \neq i}}^{N_{\glo}}\similarity_{\CE}(f_{\theta}(\vX_{\glo}^{j}), f_{\theta}(\vX_{\glo}^{i})).\Bigg) \nonumber
-\end{align}
-However, if you try to implement this and optimize it on a real network, it is very likely that you run into a problem: after running a few iterations of the learning algorithm, the feature mapping \(f_{\theta}\) will output only a single vector, \textit{no matter what the input is}! This certainly optimizes the above loss since it minimizes the distance between each pair of local and global features. But we obviously do not want to learn this solution. 
+In this specific case, however, if you try to implement \eqref{eq:dino_loss_empirical} and optimize it on a real network, it is very likely that you run into a problem: after running a few iterations of the learning algorithm, the feature mapping \(f_{\theta}\) will output only a single vector, \textit{no matter what the input is}! This certainly optimizes the above loss since it minimizes the distance between each pair of local and global features. But we obviously do not want to learn this solution. 
 
 Actually avoiding collapse is a very common consideration in contrastive learning. So how to do it in this case? The solution of DINO, again, is empirically designed, and uses a set of unmotivated tricks from optimization (including introducing a ``temperature'' parameter for the softmax and a centering operation computed via an exponential moving average) in order to ensure non-collapse, given a certain special set of hyperparameters that work well. However, outside of this special set, it is very difficult to train models to converge, and the training is highly unstable. We do not highlight the technical details here, but bring up the overall problem so as to showcase our very simple solution.
 
  Now let us discuss simplifications to the formulation. First, using our hypothesis from \Cref{ch:representation} that good representations should have Euclidean (subspace) geometry, a much more natural measure of similarity is the \textit{cosine similarity} \(\similarity_{\cos} \colon \R^{d} \times \R^{d} \to \R\), defined as 
 \begin{equation}\label{eq:cosine_similarity}
-    \similarity_{\cos}(\vx, \vy) = \frac{\vx^{\top}\vy}{\|\vx\|_{2} \|\vy\|_{2}}, \qquad  \forall \vx, \vy \in \R^{d}.
+    \similarity_{\cos}(\vx, \vy) := \frac{\vx^{\top}\vy}{\|\vx\|_{2} \|\vy\|_{2}}, \qquad  \forall \vx, \vy \in \R^{d}.
 \end{equation}
-This difference is even more efficient to compute than the softmax cross-entropy similarity measure. Thus, \(\similarity_{\cos}\) takes the place of \(\similarity_{\CE}\) in our simplification. 
+This similarity score is even more efficient to compute than the softmax cross-entropy similarity measure. Thus, \(\similarity_{\cos}\) takes the place of \(\similarity_{\CE}\) in our simplification. 
 
-Now, to avoid collapse, we abandon the tricky setup of DINO. Instead, we return to the fundamentals. The basic idea of avoiding collapse is that in order to make sure that all samples do not return the same exact same features, we need different samples to have different features. Thus our loss should be computed over a \textit{batch} \(\vX_{1}, \dots, \vX_{B}\) of samples, each with their independently computed local views \(V_{b, \loc}\) and global views \(V_{b, \glo}\), and should have a term which ensures that the features \(f_{\theta}(\vX_{b, \glo}^{i})\) are different. But from \Cref{ch:compression,ch:representation}, we already have a quantity which tells us the extent to which a batch of features are different, or \textit{expanded}. Thus we use the straightforward \textit{Gaussian coding rate} \(R\) to ensure that the features of global views of different images, which have different global information, are well-separated and not collapsed (hence expanded). The overall modified loss \(\cL_{\mathrm{SimDINO}}\) becomes:
+Now, to avoid collapse, we abandon the tricky setup of DINO. Instead, we return to the fundamentals. The basic idea of avoiding collapse is that in order to make sure that all samples do not return the same exact same features, we need different samples to have different features. In other words, we would like the \textit{covariance} of the features to be \textit{large} in some sense. But from \Cref{ch:compression,ch:representation}, we already have a quantity which measures the size of the covariance matrix. Namely, we use the straightforward (population-level) \textit{Gaussian coding rate} \(R\) to ensure that the features of global views of different images, which have different global information, are well-separated and not collapsed (hence expanded). The overall modified loss \(L_{\mathrm{SimDINO}}\) becomes:
 \begin{align}\label{eq:simdino_loss}
-    \cL_{\mathrm{SimDINO}}(\theta) :=
-    &-\Bigg(\sum_{b = 1}^{B}\sum_{i = 1}^{N_{\glo}}\sum_{j = 1}^{N_{\loc}}\similarity_{\cos}(f_{\theta}(\vX_{b, \loc}^{j}), f_{\theta}(\vX_{b, \glo}^{i})) \\
-    &\qquad + \sum_{b = 1}^{B}\sum_{i = 1}^{N_{\glo}}\sum_{\substack{j = 1 \\ j \neq i}}^{N_{\glo}}\similarity_{\cos}(f_{\theta}(\vX_{b, \glo}^{j}), f_{\theta}(\vX_{b, \glo}^{i})) \nonumber \\ 
-    &\qquad + \frac{\gamma}{2}\sum_{i = 1}^{N_{\glo}}R(\mat{f_{\theta}(\vX_{1, \glo}^{i}), \dots, f_{\theta}(\vX_{B, \glo}^{i})})\Bigg). \nonumber
+    L_{\mathrm{SimDINO}}(\theta) :=
+    &-\alpha \Ex[\similarity_{\cos}(f_{\theta}(\vX[v_{\loc}]), f_{\theta}(\vX[v_{\glo}]))] \\ 
+    &-\beta \Ex[\similarity_{\cos}(f_{\theta}(\vX[v_{\glo}^{1}]), f_{\theta}(\vX_{\glo}^{2}))] \nonumber \\ 
+    &-\frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(f_{\theta}(\vX[v_{\glo}]))}. \label{eq:simdino_loss_covariance}
 \end{align}
-This is the loss used for the simplified DINO. As we will see, it works equally well or better than the original DINO.
+where \(\eps > 0\) is fixed and the appropriate expectations are, as before, taken over data \(\vX\), global views \(v_{\glo}, v_{\glo}^{1}, v_{\glo}^{2}\), and local views \(v_{\loc}\). At time \(t\), we can optimize the following computationally tractable loss:
+\begin{align}\label{eq:simdino_loss_empirical}
+    &\hat{L}_{\mathrm{SimDINO}}^{t}(\theta) := \\
+    &-\frac{\alpha}{B\cdot M_{\glo}\cdot M_{\loc}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\sum_{j = 1}^{M_{\loc}}\similarity_{\cos}(f_{\theta}(\vX_{b}^{t}[v_{\loc}^{j}]), f_{\theta}(\vX_{b}^{t}[v_{\glo}^{i}])) \nonumber \\
+    &- \frac{\beta}{B\cdot M_{\glo}^{2}}\sum_{b = 1}^{B}\sum_{i = 1}^{N_{\glo}}\sum_{j = 1}^{N_{\glo}}\similarity_{\cos}(f_{\theta}(\vX_{b}[v_{\glo}^{j}]), f_{\theta}(\vX_{b}[v_{\glo}^{i}])) \nonumber \\ 
+    &- \frac{\gamma}{M_{\glo}}\sum_{i = 1}^{M_{\glo}}R(\mat{f_{\theta}(\vX_{1}[v_{\glo}^{i}]), \dots, f_{\theta}(\vX_{B}[v_{\glo}^{i}])}), \label{eq:simdino_loss_empirical_covariance}
+\end{align}
+where \(R\) used in \Cref{eq:simdino_loss_empirical_covariance} is the Gaussian coding rate on finite samples defined in  \Cref{ch:representation}. Notably, \eqref{eq:simdino_loss_empirical_covariance} is merely a way to approximate \eqref{eq:simdino_loss_covariance} while maintaining computational efficiency.
+
+The loss in \eqref{eq:simdino_loss_empirical} is the loss used for the simplified DINO. As we will see, it works equally well or better than the original DINO.
+
+\begin{exercise}
+    This exercise considers the implementation of stochastic optimization algorithms to minimize losses involving expectations.
+    \begin{enumerate}[(a)]
+        \item Propose an alternative to the term \eqref{eq:simdino_loss_empirical_covariance} for approximating \eqref{eq:simdino_loss_covariance}. Evaluate the time complexity required to compute your proposed term and its gradient.
+        \item  Evaluate the time complexity required to compute the existing term in \eqref{eq:simdino_loss_empirical_covariance} and its gradient.
+    \end{enumerate}
+\end{exercise}
 
 \subsection{Architecture: Vision Transformer}\label{sub:contrastive_learning_architecture}
 
@@ -93,12 +126,12 @@ For the architecture, we use a standard vision transformer. Here is how such an 
 \begin{enumerate}
     \item First, the data \(\vX\) is \textit{preprocessed}, by a map \(f^{\pre} \colon \R^{D \times N} \to \R^{d \times n}\) where \(n = N + 1\), as follows:
     \begin{equation}
-        f^{\pre}(\vX) = [\vz_{\cls}^{1}, \vW^{\pre}\vX] + \vE^{\pos}.
+        f^{\pre}(\vX) = [\vz_{Ls}^{1}, \vW^{\pre}\vX] + \vE^{\pos}.
     \end{equation}
-    Here we have three trainable parameters \(\vW^{\pre}\), \(\vz_{\cls}^{1}\), and \(\vE^{\pos}\) whose purpose is as follows:
+    Here we have three trainable parameters \(\vW^{\pre}\), \(\vz_{Ls}^{1}\), and \(\vE^{\pos}\) whose purpose is as follows:
     \begin{itemize}
         \item \(\vW^{\pre} \in \R^{d \times D}\) is a matrix which projects each patch vector to a token feature.
-        \item \(\vz_{\cls}^{1} \in \R^{d}\) is a so-called \textit{class token} or \textit{register token}. The class token heuristically holds global information of the whole data and is used for downstream tasks. In the framework of compressive deep networks from \Cref{ch:representation}, we expect that the class token is projected onto the same subspaces as the salient or semantically relevant tokens during the progression of the forward pass.
+        \item \(\vz_{Ls}^{1} \in \R^{d}\) is a so-called \textit{class token} or \textit{register token}. The class token heuristically holds global information of the whole data and is used for downstream tasks. In the framework of compressive deep networks from \Cref{ch:representation}, we expect that the class token is projected onto the same subspaces as the salient or semantically relevant tokens during the progression of the forward pass.
         \item \(\vE^{\pos} \in \R^{d \times n}\) is a so-called \textit{positional encoding} which distinguishes different tokens from each other. That is, token features should have positional information, so that the overall map \(f^{\pre}\) is not invariant to permutations of the patches, and \(\vE^{\pos}\) inserts this positional information. 
         \begin{itemize}
             \item We previously discussed the encoding of certain sub-matrices of \(\vX\), where all rows are kept but only a few columns are removed during data augmentation. In these cases we use the sub-matrix of \(\vE^{\pos}\) corresponding to the original positions of the columns, instead of the full \(\vE^{\pos}\) matrix (which after all is the wrong shape).
@@ -121,9 +154,12 @@ For the architecture, we use a standard vision transformer. Here is how such an 
             &:= \softmax\rp{\frac{([\vU_{\key}^{k}]^{\top}\vZ)^{\top}([\vU_{\query}^{k}]^{\top}\vZ)}{\sqrt{d}}}
         \end{align}
         where \(p\) is a positive integer, \(\vU_{\query}^{i}, \vU_{\key}^{i}, \vU_{\val}^{i} \in \R^{d \times p}\) and \(\vU_{\out} \in \R^{d \times Kp}\) are trainable parameters, and the \(\softmax\) is defined column-wise as 
-        \begin{equation}
-            \softmax(\vM) := \mat{\softmax(\vm_{1}) & \cdots & \softmax(\vm_{p})}, \quad \forall \vM = \mat{\vm_{1}, \dots, \vm_{p}} \in \R^{n \times p}.
-        \end{equation}
+        \begin{align}
+            \softmax(\vM) 
+            &:= \mat{\softmax(\vm_{1}) & \cdots & \softmax(\vm_{p})}, \\ 
+            \forall \vM 
+            &= \mat{\vm_{1}, \dots, \vm_{p}} \in \R^{n \times p}.
+        \end{align}
         In practice, the dimensions are usually picked is usually picked such that \(Kp = d\). The terms \(\vA^{k}(\vZ)\) and \((\vU_{\val}^{k}\vZ)\vA^{k}(\vZ)\) are also known as the \textit{\(k\th\) attention map} and \textit{\(k\th\) attention head output} respectively.
         \item The \(\MLP\) is a two-layer perceptron, a regular nonlinearity used in deep networks, and has the form 
         \begin{equation}
@@ -149,26 +185,25 @@ Thus the neural network is of the form
 The transformer is one of the most popular neural network architectures in history, powering applications in almost all fields of deep learning. We use this network architecture for DINO as well as our simplification of DINO.
 
 
-
 \subsection{Optimization Strategy}\label{sub:contrastive_learning_optimization}
 
-We have a loss function and an architecture, so we now discuss the optimization strategy. The optimization strategy for DINO uses \textit{two sets of weights for the same architecture}: \textit{teacher} weights \(\theta_{t}\) and \textit{student} weights \(\theta_{s}\). These correspond to two different neural networks, called the teacher network and student network, with the same architecture. The teacher network encodes all global views, while the student network encodes all local views and global views. Namely, we train on the loss \(\cL_{\mathrm{DINO}-ts}\):
+We have a loss function and an architecture, so we now discuss the optimization strategy. The optimization strategy for DINO uses \textit{two sets of weights for the same architecture}: \textit{teacher} weights \(\theta_{t}\) and \textit{student} weights \(\theta_{s}\). These correspond to two different neural networks, called the teacher network and student network, with the same architecture. The teacher network encodes all global views, while the student network encodes all local views and global views. Namely, we train on the loss \(L_{\mathrm{DINO}-ts}\): \DP{TODO: population level exercises}
 \begin{align}\label{eq:dino_loss_teacherstudent}
-    \cL_{\mathrm{DINO}-ts}(\theta_{s}, \theta_{t}) 
+    L_{\mathrm{DINO}-ts}(\theta_{s}, \theta_{t}) 
     &:= -\Bigg(\sum_{i = 1}^{N_{\glo}}\sum_{j = 1}^{N_{\loc}}\similarity_{\CE}(f_{\theta_{s}}(\vX_{\loc}^{j}), f_{\theta_{t}}(\vX_{\glo}^{i})) \\ 
     &\qquad + \sum_{i = 1}^{N_{\glo}}\sum_{\substack{j = 1 \\ j \neq i}}^{N_{\glo}}\similarity_{\CE}(f_{\theta_{s}}(\vX_{\glo}^{j}), f_{\theta_{t}}(\vX_{\glo}^{i}))\Bigg). \nonumber
 \end{align}
 The optimization strategy is also unconventional: only the student parameters \(\theta_{s}\) are optimized, while \(\theta_{t}\) is directly constructed via an exponential moving average. For SGD this looks like:
 \begin{align}
     \theta_{s}^{(k + 1)}
-    &= \theta_{s}^{(k)} - \eta^{(k)}\nabla_{\theta_{s}}\cL_{\mathrm{DINO}-ts}(\theta_{s}^{(k)}, \theta_{t}^{(k)}) \\
+    &= \theta_{s}^{(k)} - \eta^{(k)}\nabla_{\theta_{s}}L_{\mathrm{DINO}-ts}(\theta_{s}^{(k)}, \theta_{t}^{(k)}) \\
     \theta_{t}^{(k + 1)}
     &= \lambda^{(k)}\theta_{t}^{(k)} + (1 - \lambda^{(k)})\theta_{s}^{(k + 1)}.
 \end{align}
 Analogous update rules can be constructed for Adam and other iterative optimizers, all having the general form
 \begin{align}
     \theta_{s}^{(k + 1)}
-    &= \textsc{OptimizationUpdate}^{(k)}(\theta_{s}^{(k)}; \nabla_{\theta_{s}}\cL_{\mathrm{DINO}-ts}(\theta_{s}^{(k)}, \theta_{t}^{(k)})) \\
+    &= \textsc{OptimizationUpdate}^{(k)}(\theta_{s}^{(k)}; \nabla_{\theta_{s}}L_{\mathrm{DINO}-ts}(\theta_{s}^{(k)}, \theta_{t}^{(k)})) \\
     \theta_{t}^{(k + 1)}
     &= \lambda^{(k)}\theta_{t}^{(k)} + (1 - \lambda^{(k)})\theta_{s}^{(k + 1)}.
 \end{align}
@@ -176,7 +211,7 @@ Notice that in our optimization updates and gradients we treat \(\theta_{s}^{(k)
 
 The simplified DINO objective is very similar, i.e.,
 \begin{align}\label{eq:simdino_loss_teacherstudent}
-    \cL_{\mathrm{SimDINO}-ts}(\theta_{s}, \theta_{t}) :=
+    L_{\mathrm{SimDINO}-ts}(\theta_{s}, \theta_{t}) :=
     &-\Bigg(\sum_{b = 1}^{B}\sum_{i = 1}^{N_{\glo}}\sum_{j = 1}^{N_{\loc}}\similarity_{\cos}(f_{\theta_{s}}(\vX_{b, \loc}^{j}), f_{\theta_{t}}(\vX_{b, \glo}^{i})) \\
     &\qquad + \sum_{b = 1}^{B}\sum_{i = 1}^{N_{\glo}}\sum_{\substack{j = 1 \\ j \neq i}}^{N_{\glo}}\similarity_{\cos}(f_{\theta_{s}}(\vX_{b, \glo}^{j}), f_{\theta_{t}}(\vX_{b, \glo}^{i})) \nonumber \\ 
     &\qquad + \frac{\gamma}{2}\sum_{i = 1}^{N_{\glo}}R(\mat{f_{\theta_{s}}(\vX_{1, \glo}^{i}), \dots, f_{\theta_{s}}(\vX_{B, \glo}^{i})})\Bigg).\nonumber
@@ -241,9 +276,27 @@ Of course, we also wish to have quantitative evaluations of the power of the att
     DINO v2 \cite{oquab2023dinov2} uses everything from DINO v1 but also, during the data augmentation phase, randomly masks out patches within each view. This kind of augmentation should enforce that the features of images with similar local information are similar. Formulate an optimization problem which promotes this in the encoder, and implement it.
 \end{exercise}
 
+
 \section{Image Classification}\label{sec:image_classification}
 
-Let us first start with arguably the most classical task in machine learning: {\em image classification}, which is often used as a standard task to evaluate pattern recognition algorithms or deep network architectures. 
+In the previous section, we simplified an overly complex learning objective using our intuition of representation learning through the lens of compression. However, many of the most popular learning procedures are incredibly simple. In these cases, it is difficult to further simplify the objective. Thus, in this and future sections, we will focus on principled ways to modify the \textit{deep network architectures} for a variety of tasks.
+
+Let us first start with arguably the most classical task in machine learning: \textit{image classification}, which is often used as a standard task to evaluate pattern recognition algorithms or deep network architectures. 
+
+The dataset stays largely the same as \Cref{sub:contrastive_learning_data}, i.e., both the training and test data are labeled images.
+
+\subsection{Task and Objective} \label{sub:image_classification_objective}
+
+Unlike before, our task is not just to learn a good representation of the data, but also simultaneously build a classifier. Formally, we have labeled data pairs \((\vX, \vy)\); a classifier is a tuple \((f_{\theta}, \vW)\) where \(f_{\theta} \colon \R^{D \times N} \to \R^{d}\) is an encoder and \(\vW \in \R^{C \times d}\) is a classification head. The map \(\hat{\vy}_{\theta, \vW} \colon \R^{D \times N} \to \Delta_{C} = \{\vx \in \R^{C} \colon \vx_{i} \geq 0\ \forall i \in [C],\ \vx^{\top}\vone = 1\}\) given by
+\begin{equation}
+    \hat{\vy}_{\theta, \vW}(\vX) = \softmax[\vW f_{\theta}(\vX)]
+\end{equation}
+maps data \(\vX \in \R^{D \times N}\) to predicted (smoothed) labels \(\hat{\vy}_{\theta, \vW}(\vX) \in \Delta_{C}\). The learning problem attempts to minimize the distance between \(\hat{\vy}\) and \(\vy\) as much as possible. Namely, suppose that we have some fixed data points \(\)
+\begin{equation}\label{eq:classification_ce_loss}
+    \min_{\theta, \vW}L(\theta, \vW) := \Ex[\CE(\hat{\vy}_{\theta, \vW}(\vX), \vy)].
+\end{equation}
+For evaluation, we use all evaluation methods for the feature map \(f_{\theta}\) that were posited in \Cref{sub:contrastive_learning_evals}.
+
 
 \subsection{The CRATE Architecture}
 The architecture that we construct is particularly simple and described in Chapter \ref{ch:representation}. The overall setup is relatively common in the literature; it consists of:
