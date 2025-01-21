@@ -186,30 +186,26 @@ Namely, for some function class \(\cF\) containing some potential denoising func
     f^{\star} \in \argmin_{f \in \cF}\Ex\norm{\vz_{o} - f(\vz_{\sigma})}_{2}^{2}.
 \end{equation}
 % It turns out that solving the minimization problem in \eqref{eq:denoiser_conditional_expectation} is \textit{much} more computationally tractable than solving the maximum likelihood problem \eqref{eq:denoiser_maximum_likelihood}. 
-To solve this problem, we use the following outlined Algorithm: Learning a Denoiser.
-\begin{algorithm}\label{alg:denoiser}
-    \textbf{Algorithm: Learning a Denoiser.}\vspace{1mm}
-    
-    \textbf{Initialize:} An optimization algorithm, a parametric function class \(\cF = \{f_{\bm \theta} \colon \bm \theta \in \bm \Theta\}\), an initial parameter \(\bm \theta^{1}\), and data \(\vz_{o}^{1}, \dots, \vz_{o}^{N} \simiid \vz_{o}\).
-    \begin{itemize}
-        \item For each iteration \(j \in [M]\):
-        \begin{itemize}
-            \item Add independent Gaussian noise \(\vg^{i, j}\) to the sample \(\vz_{o}^{i}\) to obtain 
-            \begin{equation}
-                \vz_{\sigma}^{i, j} \doteq \vz_{o}^{i} + \sigma\vg^{i, j}.
-            \end{equation}
-            \item Compute the approximate loss 
-            \begin{equation}
-                \ell^{j}(\bm \theta^{j}) \doteq \frac{1}{N}\sum_{i = 1}^{N}\norm{\vz_{o}^{i} - f_{\bm \theta^{j}}(\vz_{\sigma, j}^{i})}_{2}^{2}.
-            \end{equation}
-            \item Construct \(\bm \theta^{j + 1}\) by applying the optimization algorithm:
-            \begin{equation}
-                \bm \theta^{j + 1} \doteq \texttt{OptUpdate}(\bm \theta^{j}; \ell^{j}).
-            \end{equation}
-            For instance, if the optimization update is simple gradient descent, we have \(\bm \theta^{j + 1} = \bm \theta^{j} - \alpha \nabla_{\bm \theta}\ell^{j}(\bm \theta^{j})\), for some learning rate \(\alpha\).
-        \end{itemize}
-    \end{itemize}
-    \textbf{Return:} \(f_{\theta^{M + 1}}\).
+To solve this problem, we use the following outlined \Cref{alg:denoiser}.
+\begin{algorithm}
+    \label{alg:denoiser}
+    \caption{Learning a Denoiser}
+    \begin{algorithmic}[1]
+        \Require{An optimization algorithm, a parametric function class \(\cF = \{f_{\vtheta} \colon \vtheta \in \vTheta\}\), an initial parameter \(\vtheta^{1}\), a noise level \(\sigma > 0\), and data \(\vz_{o}^{1}, \dots, \vz_{o}^{N} \simiid \vz_{o}\).}
+        \Ensure{A denoiser \(f_{\vtheta^{\star}}\).}
+
+        \Procedure{TrainDenoiser}{\texttt{OptUpdate}, $\cF$, $\vtheta^{1}$, $\sigma$, $\{\vz_{o}^{i}\}_{i = 1}^{N}$}
+        \For{each iteration \(j \in [M]\)}
+            \For{each sample \(i \in [N]\)}
+                \State{\(\vg^{i, j} \gets \) sample from \(\dNorm(\vzero, \vI)\)} \Comment{\(\vg^{i, j}\) is independent of everything}
+                \State{\(\vz_{\sigma}^{ij} \gets \displaystyle \vz_{o}^{i} + \sigma \vg^{i, j}\)}
+            \EndFor
+            \State{\(\ell^{j} \gets \displaystyle\frac{1}{N}\sum_{i = 1}^{N}\norm{\vz_{o}^{i} - f_{\vtheta^{j}}(\vz_{\sigma, j}^{i})}_{2}^{2}\)} \Comment{\(\ell^{j}\) is estimate of ``true'' denoising loss}
+            \State{\(\vtheta^{j + 1} \gets \displaystyle \texttt{OptUpdate}(\vtheta^{j}; \ell^{j})\)} \Comment{Update \(\vtheta^{j + 1}\) via optimization, i.e., \(\vtheta^{j + 1} \gets \vtheta^{j} - \alpha \nabla_{\vtheta}\ell^{j}\) for SGD.}
+            \EndFor
+        \State{\Return{\(f_{\vtheta^{M+1}}\)}}
+        \EndProcedure
+    \end{algorithmic}
 \end{algorithm}
 
 The only thing that needs to be specified in the algorithm is the form of the function class $\mathcal{F}$. For special classes of distributions, such as Gaussian, the function form can be explicitly derived. 
@@ -231,7 +227,7 @@ The only thing that needs to be specified in the algorithm is the form of the fu
     \begin{equation}
         \vmu_{\sigma}(\vxi) = \vu + \vV\diag\mat{\lambda_{1}/(\lambda_{1} + \sigma^{2}) & & \\ & \ddots & \\ & & \lambda_{d}/(\lambda_{d} + \sigma^{2})}\vV^{\top}(\vxi - \vu).
     \end{equation}
-    which shows that as \(\sigma\) grows, the denoiser collapses the residual \(\vxi - \vu\) to \(0\) fastest in the directions where the eigenvalues of \(\vSigma\) are smallest. Also, if we are trying to learn a Gaussian (for instance), we can parameterize the denoiser by the mean \(\vu\) and covariance \(\vSigma\), so that \(\bm \theta = (\vu, \vSigma)\), and consider denoisers of the functional form \eqref{eq:gaussian_denoiser}.
+    which shows that as \(\sigma\) grows, the denoiser collapses the residual \(\vxi - \vu\) to \(0\) fastest in the directions where the eigenvalues of \(\vSigma\) are smallest. Also, if we are trying to learn a Gaussian (for instance), we can parameterize the denoiser by the mean \(\vu\) and covariance \(\vSigma\), so that \(\vtheta = (\vu, \vSigma)\), and consider denoisers of the functional form \eqref{eq:gaussian_denoiser}.
 \end{example}
 
 Using the definition in \eqref{eq:denoiser_conditional_expectation}, one can show that \(\vmu_{\sigma}\) is the conditional expectation of \(\vz_{o}\) given \(\vz_{\sigma}\),\footnote{We leave this as an exercise for the reader to verify.} i.e.,
@@ -249,12 +245,11 @@ One may use this to show that denoising reduces the entropy $h(\vz)$, as desired
     conditions on $\vz_o$ (detailed in \Cref{app:diffusion-denoising}), it holds
     that \(h(\vmu_{\sigma}(\vz_{\sigma})) < h(\vz_{\sigma})\). 
 \end{theorem}
-The proof is slightly technical and deferred to Appendix
-\ref{app:diffusion-denoising}. Regarding the necessary regularity conditions on
+The proof is slightly technical and deferred to
+\Cref{app:diffusion-denoising}. Regarding the necessary regularity conditions on
 $\vz_o$, it suffices to assume that $\vz_o$ is any random variable with an arbitrarily small amount of independent Gaussian noise added to it. In the sequel, we will use \textit{iterative denoising} to lower the entropy of
 a high-entropy distribution until it reaches the data distribution, realizing
-the second approach to pursuing a distribution discussed at the end of Section
-\ref{sub:min_entropy}: this makes \Cref{thm:conditioning_reduces_entropy}
+the second approach to pursuing a distribution discussed at the end of \Cref{sub:min_entropy}: this makes \Cref{thm:conditioning_reduces_entropy}
 applicable to stages of the iterative denoising process corresponding to
 removing previously added noise from the data distribution.
 
@@ -366,24 +361,29 @@ This method denoises by the amount \(\delta^{(m)}\) in each of \(M\) steps, such
 \end{align}
 Thus, we have reformulated each denoising step as taking a gradient step with step size \(\delta^{(m)} \sigma^{(m)}\) on the log-density \(\log p_{\sigma^{(m)}}(\vz^{(m)})\). See Figure \ref{fig:diffusion-chapter3} for a visual description of such gradient steps, and the geometry of iterative denoising. For your convenience, an algorithm is concisely presented below.
 \begin{algorithm}\label{alg:iterative_denoising}
-    \textbf{Algorithm: Iterative Denoising.}
-    
-    \textbf{Parameters:} Noise schedule \((\sigma^{(m)})_{m = 0}^{M - 1}\) s.t.~\(\sigma^{(0)} > \sigma^{(1)} > \cdots > \sigma^{(M - 1)} > 0\), samples \(\{\vz_{o}^{i}\}_{i = 1}^{N} \simiid \vz_{o}\).
+    \caption{Iterative Denoising}
+    \begin{algorithmic}[1]
+        \Require{Noise schedule \((\sigma^{(m)})_{m = 0}^{M - 1}\) s.t.~\(\sigma^{(0)} > \sigma^{(1)} > \cdots > \sigma^{(M - 1)} > 0\), samples \(\{\vz_{o}^{i}\}_{i = 1}^{N} \simiid \vz_{o}\).}
+        \Ensure{A sample \(\vz^{(M)}\) drawn (approximately) from the distribution of \(\vz_{o}\).}
 
-    \begin{enumerate} 
-        \item Calculate the noise differences: \(\delta^{(M - 1)} = \sigma^{(M - 1)}\) and \(\delta^{(m)} = \sigma^{(m)} - \sigma^{(m + 1)}\) for all other \(m \in \{0, 1, \dots, M - 2\}\).
-        \item Learn the denoisers \(\Ex[\vz_{o} \mid \vz_{\sigma^{(m)}}]\) using Algorithm \ref{alg:denoiser} with samples \(\{\vz_{o}^{i}\}_{i = 1}^{N}\), obtaining the denoiser function \(\hat{\vmu}_{\sigma^{(m)}}\).
-        \item Convert the approximate denoisers to approximate scores \(\hat{\vs}_{\sigma^{(m)}}\) using Tweedie's formula (Theorem \ref{thm:tweedie}), i.e., 
-        \begin{equation}
-            \hat{\vmu}_{\sigma^{(m)}}(\vz) = \vz + (\sigma^{(m)})^{2}\hat{\vs}_{\sigma^{(m)}}(\vz).
-        \end{equation}
-        \item Initialize \(\vz^{(0)} \sim \dNorm(\vzero, \vI)\).
-        \item For each \(m \in \{0, 1, \dots, M - 1\}\), update by 
-        \begin{equation}
-            \vz^{(m + 1)} = \vz^{(m)} + \delta^{(m)} \sigma^{(m)}\hat{\vs}_{\sigma^{(m)}}(\vz^{(m)}).
-        \end{equation}
-    \end{enumerate}
-    \textbf{Return:} \(\vz^{(M)}\).
+        \Procedure{IterativeDenoising}{$(\sigma^{(m)})_{m = 0}^{M - 1}$, $\{\vz_{o}^{i}\}_{i = 1}^{N}$}
+        
+        \For{\(m \in \{0, 1, \dots, M-2\}\)} \Comment{Calculate the noise differences \(\delta^{(m)}\)}
+            \State{\(\delta^{(m)} \gets \sigma^{(m)} - \sigma^{(m + 1)}\)}
+        \EndFor
+        \State{\(\delta^{(M - 1)} \gets \sigma^{(M-1)}\)}
+        \Statex{}
+
+        \State{Initialize \(\vz^{(0)} \gets \dNorm(\vzero, \vI)\)} \Comment{Initialize denoising}
+        \For{\(m \in \{0, 1, \dots, M-1\}\)}
+            \State{\(\hat{\vmu}_{\sigma^{(m)}} \gets \displaystyle \textsc{TrainDenoiser}(\sigma^{(m)}, \{\vz_{o}^{i}\}_{i = 1}^{N})\)} \Comment{From \Cref{alg:denoiser}}
+            \State{\(\hat{\vs}_{\sigma^{(m)}} \gets \displaystyle \frac{\hat{\vmu}_{\sigma^{(m)}}(\vz^{(m)}) - \vz^{(m)}}{(\sigma^{(m)})^{2}}\)} \Comment{Convert to approx.~scores using Tweedie's formula (\Cref{thm:tweedie})}
+            \State{\(\vz^{(m + 1)} \gets \displaystyle \vz^{(m)} + \delta^{(m)}\sigma^{(m)}\hat{\vs}_{\sigma^{(m)}}(\vz^{(m)})\)} \Comment{Denoising iteration}
+        \EndFor
+
+        \State{\Return{\(\vz^{(M)}\)}}
+        \EndProcedure
+    \end{algorithmic}
 \end{algorithm}
 
 Some common choices of noise schedules are:
@@ -471,9 +471,9 @@ Algorithm \ref{alg:iterative_denoising} converges to within good precision, even
 
 \begin{exercise}
 Please show that Problem \eqref{eq:denoise} is equivalent to the probabilistic PCA problem. Here are some hints: \\
-(i) Matrix inversion lemma: $(\bm I + \bm Q\bm Q^\top)^{-1} = \bm I - \bm Q(\bm I + \bm Q^\top\bm Q)^{-1}\bm Q^\top$ for any $\bm Q \in \R^{d\times r}$. \\
-(ii) It holds that $\mathbb{E}_{\bm g \sim \mathcal{N}(\bm 0, \bm I)}[\|\bm U^\top \bm g\|^2] = \sum_{i=1}^r \mathbb{E}_{\bm g}[\|\bm u_i^\top\bm g\|^2] = r$ for any $\bm U \in \O(d, r)$, where $\bm u_i$ denotes the $i$-th column of $\bm U$. \\
-(iii) You can condition on $\bm z_o$. 
+(i) Matrix inversion lemma: $(\vI + \vQ\vQ^\top)^{-1} = \vI - \vQ(\vI + \vQ^\top\vQ)^{-1}\vQ^\top$ for any $\vQ \in \R^{d\times r}$. \\
+(ii) It holds that $\mathbb{E}_{\vg \sim \mathcal{N}(\vzero, \vI)}[\|\vU^\top \vg\|^2] = \sum_{i=1}^r \mathbb{E}_{\vg}[\|\vu_i^\top\vg\|^2] = r$ for any $\vU \in \O(d, r)$, where $\vu_i$ denotes the $i$-th column of $\vU$. \\
+(iii) You can condition on $\vz_o$. 
 \end{exercise}
 
 \subsection{Denoising a Mixture of Low-Dimensional Gaussians}
@@ -881,16 +881,24 @@ Then given any two separate clusters $\X_1$ and $\X_2$, we can decide whether to
 \end{equation}
 is positive or negative. If it is negative, it means the coding length would become smaller if we merge the two clusters into one. This simple fact leads to the following clustering algorithm proposed by \cite{ma2007segmentation}:
 \begin{algorithm}
-\textbf{Algorithm (Pairwise Steepest Descent of Coding Length)}\vspace{1mm}\\
-\textbf{Initialize} the set  $\mathcal{X}$ with $N$ clusters where each  contains one sample in $\X$.\\
-\textbf{While} $|\mathcal{X}| > 1$ \textbf{do}
-\begin{enumerate}
-    \item Choose the pair of clusters such that $L(\X_i\cup \X_j) - L^c(\X_i, \X_j)$ is minimal;
-    \item \textbf{if} $L(\X_i\cup \X_j) - L^c(\X_i, \X_j) \ge 0$, \textbf{then} break;
-    \item \textbf{else} replace the two clusters $\X_i, \X_j$ with the merged one $\X_i\cup \X_j$ in $\mathcal{X}$.
-\end{enumerate}
-\textbf{End}\\
-\textbf{Output} the set $\mathcal{X}$ with the resulting clusters . 
+    \caption{Pairwise Steepest Descent of Coding Length}\label{alg:steepest_descent_coding_length}
+    \begin{algorithmic}[1]
+        \Require{\(N\) data points \(\{\vx^{i}\}_{i = 1}^{N}\)}
+        \Ensure{A set \(\cC\) of clusters}
+
+        \Procedure{PairwiseSteepestDescentOfCodingLength}{$\{\vx^{i}\}_{i = 1}^{N}$}
+            \State{\(\cC \gets \{\{x^{i}\}\}_{i = 1}^{N}\)} \Comment{Initialize \(N\) clusters \(\vX_{i}\) with one element each}
+            \While{\(\abs{\cC} > 1\)}
+                \If{\(\displaystyle \min_{\vX_{i}, \vX_{j} \in \cC}[L(\vX_{i} \cup \vX_{j}) -L^{c}(\vX_{i}, \vX_{j})] \geq 0\)} \Comment{If no bits are saved by any merging}
+                    \State{\Return{\(\cC\)}} \Comment{Early return \(\cC\) and exit}
+                \Else
+                    \State{\(\displaystyle \vX_{i^{\star}}, \vX_{j^{\star}} \gets \argmin_{\vX_{i}, \vX_{j} \in \cC}[L(\vX_{i} \cup \vX_{j}) - L^{c}(\vX_{i}, \vX_{j})]\)} \Comment{Merge clusters which save the most bits}
+                    \State{\(\displaystyle \cC \gets [\cC \setminus \{\vX_{i^{\star}}, \vX_{j^{\star}}\}] \cup \{\vX_{i^{\star}} \cup \vX_{j^{\star}}\}\)} \Comment{Remove unmerged clusters and add back the merged one}
+                \EndIf
+            \EndWhile
+            \State{\Return{\(\cC\)}}  \Comment{If all merges yield savings, return one cluster}
+        \EndProcedure
+    \end{algorithmic}
 \end{algorithm}
 
 Note that this algorithm is tractable as the total number of (pairwise) comparisons and merges is about $O(N^2\log N)$. However, due to its greedy nature, there is no theoretical guarantee that the process will converge to the globally optimal clustering solution. Nevertheless, as reported in \cite{ma2007segmentation}, in practice, this seemingly simple algorithm works extremely well. The clustering results plotted in Figure \ref{fig:two-lines-and-plane} were actually computed by this algorithm. 
@@ -931,20 +939,20 @@ Please show the following properties of the  $\log\det(\cdot)$ function.
 \begin{enumerate}
     \item Show that 
     \begin{align*}
-    f(\bm X) = \log\det\left(\bm X\right)  
+    f(\vX) = \log\det\left(\vX\right)  
     \end{align*}
-    is a concave function. ({\bf Hint:} The function $f(\bm x)$ is convex if and only if the function $f(\bm x+t\bm h)$ for all $\bm x$ and $\bm h$.)
+    is a concave function. ({\bf Hint:} The function $f(\vx)$ is convex if and only if the function $f(\vx+t\vh)$ for all $\vx$ and $\vh$.)
 
     \item Show that: 
     \begin{align*}
-        \log\det(\bm I + \bm X^\top\bm X) = \log\det(\bm I + \bm X\bm X^\top)
+        \log\det(\vI + \vX^\top\vX) = \log\det(\vI + \vX\vX^\top)
     \end{align*}
 
-    \item Let $\bm A \in \R^{n\times n}$ be a positive definite matrix. Please show that:
+    \item Let $\vA \in \R^{n\times n}$ be a positive definite matrix. Please show that:
 \begin{align}
-\log\det\left(\bm A \right) = \sum_{i=1}^n \log(\lambda_i),
+\log\det\left(\vA \right) = \sum_{i=1}^n \log(\lambda_i),
 \end{align}
-where $\lambda_1,\lambda_2,\dots,\lambda_n$ are the eigenvalues of $\bm A$. 
+where $\lambda_1,\lambda_2,\dots,\lambda_n$ are the eigenvalues of $\vA$. 
 \end{enumerate}
     
 \end{exercise}
