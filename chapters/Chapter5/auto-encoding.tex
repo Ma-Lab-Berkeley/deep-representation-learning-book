@@ -174,36 +174,75 @@ succeed in learning consistent autoencoders}.
     \caption{A depiction of interpolation through manifold flattening on a manifold in \(\R^{3}\) of dimension \(d = 2\). To interpolate two points on the data manifold, map them through the flattening map \(\fl\) to the flattened space, take their convex interpolants, and then map them back to the data manifold through the reconstruction map \(\re\).}
     \label{fig:idealized_interpolation}
 \end{figure} 
+
 \subsection{Nonlinear PCA and Deep Networks}
 Of course, one should expect that things will no longer be so simple when we deal with more complex distributions whose underlying low-dimensional structure could be nonlinear. 
 
-So, to make PCA more general, we may assume that the data distribution lies on a (smooth) submanifold $\mathcal{M}$. The intrinsic dimension of the submanifold, say $d$, is typically much lower than the dimensional of the ambient space $\mathbb{R}^D$ In this case, we typically would like to seek a nonlinear mapping $f$ such that the resulting manifold $f(\mathcal{M})$ is flattened, as illustrated by the example shown in Figure \ref{fig:idealized_interpolation}. The resulting feature $z$-space is typically more compact (of lower-dimension) than the $x$-space and the manifold is flat. That would make sampling and  interpolation in the $z$-space easy. This problem is generally known as the {\em nonlinear principal component analysis} (NLPCA).
+So, to move beyond the linear structure of PCA, we may assume that the data
+distribution lies on a (smooth) submanifold $\mathcal{M}$. The intrinsic
+dimension of the submanifold, say $d$, is typically much lower than the
+dimensional of the ambient space $\mathbb{R}^D$. From this geometric
+perspective, we typically would like to seek a nonlinear mapping $f$ such that
+the resulting manifold
+$f(\mathcal{M})$ is flattened, as illustrated by the example shown in Figure
+\ref{fig:idealized_interpolation}. The resulting feature $\vz$-space is typically
+more compact (of lower-dimension) than the $\vx$-space and the manifold is flat.
+That would make sampling and  interpolation in the $\vz$-space easy. This problem
+is generally known as the {\em nonlinear principal component analysis} (NLPCA).
 
-
-As we have seen in the above, in the case of PCA, a one-layer neural network is sufficient. That is no longer the case for NLPCA. In 1991, Krammer \cite{Kramer1991NonlinearPC}  proposed to solve NLPCA by using a two-layer neural network to represent the encoder mapping $f$ (or its inverse $g$) based on the universal representation property of two-layer networks with sigmod activation:
-\begin{equation}
-    \z = \vW_2 \sigma(\vW_1\x +\vb),
-\end{equation}
-where $\sigma(\cdot)$ is the sigmod function:
-\begin{equation}
-    \sigma(x) = \frac{1}{1+ e^{-x}}.
-\end{equation}
-Cybenko \cite{Cybenko1989ApproximationBS} has shown that functions of the above form (given enough hidden nodes) can approximate any smooth nonlinear function, say the encoder $f(\cdot)$, to an arbitrary precision. The overall architecture of the original  networks proposed by Krammer is illustrated in Figure \ref{fig:NLPCA}.
-\begin{figure}[th]
+\begin{figure}[htb]
     \centering    \includegraphics[width=0.6\linewidth]{figures/kramer1991nonlinearPCA.png}
     \caption{Nonlinear PCA by  autoassociative neural networks of depth two for both the encoding and decoding mappings, suggested by Kramer \cite{Kramer1991NonlinearPC}.}
     \label{fig:NLPCA}
 \end{figure}
 
+As we have seen in the above, in the case of PCA, a one-layer linear neural
+network is sufficient. That is no longer the case for NLPCA. In 1991, Kramer
+\cite{Kramer1991NonlinearPC}  proposed to solve NLPCA by using a two-layer
+neural network to represent the encoder mapping $f$ (or its inverse $g$) based
+on the universal representation property of two-layer networks with sigmoid
+activation:
+\begin{equation}
+    \z = \vW_2 \sigma(\vW_1\x +\vb),
+\end{equation}
+where $\sigma(\cdot)$ is the sigmoid function:
+\begin{equation}
+    \sigma(x) = \frac{1}{1+ e^{-x}}.
+\end{equation}
+Cybenko \cite{Cybenko1989ApproximationBS} showed that functions of the above form (given enough hidden nodes) can approximate any smooth nonlinear function, say the encoder $f(\cdot)$, to an arbitrary precision. The overall architecture of the original  networks proposed by Kramer is illustrated in Figure \ref{fig:NLPCA}.
 
 However, unlike the above PCA case, there is in general no closed-form learning scheme for the parameters $\boldsymbol{\theta} = (\vW, \vb)$ of these networks. Hence it was proposed to train the network via back propagation with the supervision of reconstruction error:
-\begin{equation}
-\min_{\boldsymbol{\theta}} \mathbb{E}[ \|\x - \x'(\boldsymbol{\theta})\|^2]    
+\begin{equation}\label{eq:nonlinear-pca-ch5}
+\min_{\boldsymbol{\theta}} \mathbb{E}[ \|\x - \x'(\boldsymbol{\theta})\|^2].
 \end{equation}
-However, to approximate an autoencoder for the distribution of high-dimensional real-world data such as images, the required number of hidden nodes can be  huge. In addition, as a measure of the compactness of the learned representation, the (lower) dimension of $\z$ for the bottleneck layer is often chosen  heuristically.\footnote{In the later work \cite{Hinton-1993}, Hinton et. al. suggested to use the minimum description length (MDL) principle to promote the compactness of the learned coding scheme, in a spirit very similar to the rate distortion measure introduced in this book.} 
+Compared to the simple case of PCA, we utilize the same reconstruction objective
+for learning, but a far more complex nonlinear class of models for
+parameterizing and learning the encoder and decoder. Although universal
+approximation properties such as Cybenko's suggest that \textit{in principle}
+learning consistent autoencoders via this framework is possible---because for
+any random sample of data, given enough parameters, such autoencoding pairs
+exist---one often finds it highly nontrivial to find them with gradient descent.
+Moreover, to obtain an informative enough reconstruction objective and model for the
+distribution of high-dimensional real-world data such as images, the required
+number of samples and hidden nodes can be huge. 
+In addition, as a measure of the compactness of the learned representation, the
+(lower) dimension of $\z$ for the bottleneck layer is often chosen
+heuristically.\footnote{In the later work \cite{Hinton-1993}, Hinton et.
+al. suggested to use the minimum description length (MDL) principle to promote
+the compactness of the learned coding scheme, in a spirit very similar to the
+rate distortion measure introduced in this book.} 
 
-Based on the practice of deep networks,  such classical shallow and wide network architectures are known to be rather difficult to train effectively and efficiently via back propagation (BP), partly due to the diminishing gradient of the sigmoid function. Hence, the modern practice normally suggests to further decompose the nonlinear transform $f$ (or $g$) into a composition of many more layers of simpler transforms, resulting a deeper network architecture \cite{Hinton504},  as illustrated in Figure \ref{fig:ccnet_layers}. 
-\begin{figure}
+Based on the modern practice of deep networks,  such classical shallow and wide network
+architectures are known to be rather difficult to train effectively and
+efficiently via back propagation (BP), partly due to the diminishing gradient of
+the sigmoid function. Hence, the modern practice normally suggests to further
+decompose the nonlinear transform $f$ (or $g$) into a composition of many more
+layers of simpler transforms, resulting a deeper network architecture
+\cite{Hinton504},  as illustrated in Figure \ref{fig:ccnet_layers}. 
+In the modern context, further elaborations over the basic reconstruction cost
+\eqref{eq:nonlinear-pca-ch5} also prove necessary to achieve good performance on
+complex real-world data distributions such as images.
+\begin{figure}[htb]
     \centering
     \begin{tikzpicture}
         \draw (-0.1, -0.2) .. controls (1, 0.25) .. (2.1, -0.1);
@@ -253,13 +292,20 @@ Based on the practice of deep networks,  such classical shallow and wide network
     \label{fig:ccnet_layers}
 \end{figure}
 
+\subsection{Variational Autoencoding}
+
+\sdb{VAE here; introduce the probabilistic perspective (beyond just manifold
+hypothesis). We can discuss quantization as well.}
+
 \subsection{Manifold Flattening}
+
+\sdb{Deeper into the geometric perspective here: the approach is less scalable
+but more ``principled'' wrt the goal / the structure}
 
 Notice that in the proposed NLPCA autoencoder, the purpose and function of each layer is a ``black box'' ---- their function in the overall task of flattening the data manifold is not clear. The question is, then, whether it is possible to construct such a NLPCA autoencoder in a more interpretable or ``white box'' way, such that the purpose of each layer towards flattening the data manifold is clear.
 Indeed, the recent work of \cite{Psenka-JMLR24} has shown that under rather general conditions, a nonlinear manifold can indeed be flattened (i.e., \textit{encoded}) and reconstructed (i.e., \textit{decoded}) via a series of simple, interpretable, and local operations, which either flatten a neighborhood on the manifold or invert the flattening operation using learned information about the curvature of the manifold. 
 
 Both the forward encoding and backward decoding transforms can be constructed explicitly based on local geometric information (such as curvature) that can be efficiently computed (\href{https://arxiv.org/abs/2305.01777}{Manifold Flattening and Reconstruction}).
-\sdb{VAE here...? The focus about ``non-collapsed'' or nondegenerate autoencoding? (statistical vs.\ geometric; relatively less-principled vs.\ principled). Also VAE could be connected to the diffusion/denoising perspective...}
 
 \section{From Matrix Completion to Masked Autoencoding}
 \label{sec:MAE}
