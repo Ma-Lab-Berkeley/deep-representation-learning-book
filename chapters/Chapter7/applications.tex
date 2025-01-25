@@ -23,6 +23,34 @@ To help the readers understand the material in this book better and learn how to
 
 \DP{The goal of this chapters is to start with the theoretical basis found in other chapters, and convert it to implementation-ready descriptions. We should convey this message in the introduction.}
 
+\section{Technical Setup and Outline of the Chapter}\label{sec:experiment_setup}
+
+In previous chapters, we alluded to different setups in which we used representation learning techniques to process real data at scale. In this chapter, we will describe such setups in great detail. The objective of this section is to get you, the reader, to be able to reproduce any experiment discussed in this section (or indeed the book) using just the description we will give in the book, the principles introduced in previous chapters and expanded on in this chapter, and hyperparameters taken from a smattering of papers whose results are discussed in this chapter. To this end, we will \textit{precisely} describe all procedures in detailed language, pseudocode, or mathematical notation that can be directly implemented in code. Wherever possible, we will discuss how the concrete implementations connect to principles from the rest of the book.
+
+Let us define the set of possible data as \(\cD\) (eventually this will be the set of images \(\cI\), for example, or the set of text \(\cT\)), and the set of finite sequences of tokens in \(\R^{d}\) (i.e., the set of matrices with \(d\) rows) as \(\R^{d \times *} := \bigcup_{T = 1}^{\infty}\R^{d \times T}\). In order to discuss the wealth of applications we introduce in this chapter, we first recall that in the rest of the book we discuss two different types of model architectures. 
+\begin{itemize}
+    \item An \textit{encoder} architecture, parameterized by \(\theta\), which is composed of several parts:
+    \begin{itemize}
+        \item An \textit{embedding} \(f_{\theta}^{\emb} \colon \cD \to \R^{d \times *}\), which converts the input data \(\cD\) into a series of \textit{tokens} which are embedded in \(D\)-dimensional space.
+        \item An \textit{encoder backbone} \(f_{\theta}^{\backbone} \colon \R^{d \times *} \to \R^{d \times *}\), which processes the series of tokens using a sequence-to-sequence operation. This backbone is implemented by the network architectures discussed in the previous chapters, but we will give a more formal description as we go along.
+        \item A \textit{aggregate feature extractor} \(f_{\theta}^{\ext} \colon \R^{d \times *} \to \R^{d}\), which extracts an aggregate representation of the whole sequence. This is used to define a single feature for the entire data sample.
+        \item A \textit{task-specific head} \(h_{\theta} \colon \R^{d} \to \R^{m}\), which extracts an \(m\)-dimensional output for prediction.
+    \end{itemize}
+    We also define \(f_{\theta} := f_{\theta}^{\backbone} \circ f_{\theta}^{\emb} \colon \cD \to \R^{d \times *}\). Given an input \(\vX\), we write \(\vZ_{\theta}(\vX) := f_{\theta}(\vX)\) and \(\vz_{\theta}(\vX) := f_{\theta}^{\ext}(\vZ_{\theta}(\vX))\).
+    \item An \textit{autoencoder} architecture, which is composed of several parts:
+    \begin{itemize}
+        \item An \textit{embedding} \(f_{\theta}^{\emb} \colon \cD \to \R^{d \times *}\), which converts the input data \(\cD\) into a series of \textit{tokens} which are embedded in \(D\)-dimensional space.
+        \item An \textit{encoder backbone} \(f_{\theta}^{\backbone} \colon \R^{d \times *} \to \R^{d \times *}\), which processes the series of tokens using a sequence-to-sequence operation.
+        \item A \textit{decoder backbone} \(g_{\eta}^{\backbone} \colon \R^{d \times *} \to \R^{d \times *}\), which conceptually undoes the operation of the encoder backbone.
+        \item An \textit{unembedding} \(g_{\eta}^{\unemb} \colon \R^{d \times *} \to \cD\), which acts as an inverse of the embedding.
+    \end{itemize}
+    We also define \(f_{\theta} := f_{\theta}^{\backbone} \circ f_{\theta}^{\emb} \colon \cD \to \R^{d \times *}\) and \(g_{\eta} := g_{\eta}^{\unemb} \circ g_{\eta}^{\backbone} \colon \R^{d \times *} \to \cD\). Given an input \(\vX\), we write \(\vZ_{\theta}(\vX) := f_{\theta}(\vX)\) and \(\hat{\vX}_{\theta, \eta}(\vX) := g_{\eta}(\vZ_{\theta}(\vX))\).
+\end{itemize}
+
+We will repeatedly use this notation many times in this chapter, so please feel free to refer back to it if something doesn't make sense. This decomposition of our networks also closely mirrors most code implementations, and you can start your coding projects by defining these networks.
+
+In this chapter we will discuss applications of the book's principles to contrastive learning in \Cref{sec:contrastive_learning} --- this will serve as both an introduction to imagery data, data augmentation techniques, and the common architecture known as the transformer, \textit{as well as} a first demonstration of the drastic kinds of simplifications we can make using the demonstrated principles. We will continue with modifications to the \textit{network architecture} in \Cref{sec:image_classification,sec:ntp_text}, which demonstrate the capabilities of simplified architectures for \textit{encoding} within the image and text domains. We then demonstrate simplified architectures for \textit{autoencoding} in \Cref{sec:image_completion,sec:text_completion}. We will end our discussion of principled improvements by discussing a practical implementation of the \textit{closed-loop transcription} framework in \Cref{sec:ctrl}, as well as a myriad of empirically challenging tasks which the framework drastically simplifies. For the sake of completeness, we finish the chapter by discussing some tips and tricks for training models on real data, so as to be a helpful resource, and will try to explain them in a principled fashion.
+
 
 \section{Simplified Contrastive Learning}\label{sec:contrastive_learning}
 
@@ -30,18 +58,23 @@ Learning high-quality and faithful representations of data is a fundamental prob
 
 \subsection{Data}\label{sub:contrastive_learning_data}
 
-The data that we will use to explore and simplify the DINOv2 methodology is all 2-dimensional image data. For \textit{training}, we will use the ImageNet-1K and ImageNet-21K datasets. Each sample in the dataset is an RGB image, of varying resolution, and a label indicating the object or scene that the image contains (i.e., the \textit{class} of the image). The ImageNet-1K dataset contains 1.28M training images and 50K validation images partitioned into 1K classes. The ImageNet-21K dataset contains 14.2M training images and 21.8K classes, but the classes are not disjoint (i.e., some classes are subsets of others). Since we are doing self-supervised learning, the labels will not be used during training, only during evaluation. For \textit{evaluation}, we will use a litany of datasets. Of these, the most common is CIFAR-10. CIFAR-10 is a dataset of 60K RGB 32 \(\times\) 32 natural images partitioned into 10 classes, with a pre-established training set of 50K samples and a validation set of 10K samples. The purpose of using CIFAR-10 will be to ensure that models which train on one distribution of images (ImageNet) can generalize to another distribution of images (CIFAR-10). We also refer to other similar datasets, such as CIFAR-100 (disjoint from CIFAR-10), Oxford Flowers, and Oxford Pets.
+The data that we will use to explore and simplify the DINO methodology is all 2-dimensional image data. For \textit{training}, we will use the ImageNet-1K and ImageNet-21K datasets. Each sample in the dataset is an RGB image, of varying resolution, and a label indicating the object or scene that the image contains (i.e., the \textit{class} of the image). The ImageNet-1K dataset contains 1.28M training images and 50K validation images partitioned into 1K classes. The ImageNet-21K dataset contains 14.2M training images and 21.8K classes, but the classes are not disjoint (i.e., some classes are subsets of others). Since we are doing self-supervised learning, the labels will not be used during training, only during evaluation. For \textit{evaluation}, we will use a litany of datasets. Of these, the most common is CIFAR-10. CIFAR-10 is a dataset of 60K RGB 32 \(\times\) 32 natural images partitioned into 10 classes, with a pre-established training set of 50K samples and a validation set of 10K samples. The purpose of using CIFAR-10 will be to ensure that models which train on one distribution of images (ImageNet) can generalize to another distribution of images (CIFAR-10). We also refer to other similar datasets, such as CIFAR-100 (disjoint from CIFAR-10), Oxford Flowers, and Oxford Pets. Exemplars of ImageNet-1K and CIFAR-10 data are shown in \Cref{fig:in1k_cifar10_examples}. In order to increase robustness of our model, we often apply \textit{small data augmentations} to each image during processing, such as small rotations, small translations, flips, added small random noise, or random large crops; we do not include this in our notation, as each augmentation of a natural image is itself (very close to) a natural image in our dataset.
 
-During training, we scale all images to 224 \(\times\) 224 resolution, so as to ensure that all inputs are the same shape. As is necessary with transformer-like sequence-to-sequence architectures, we \textit{tokenize} the image by chopping it up into several \textit{patches}, which are spatially contiguous sub-segments of the data, as follows.
-\begin{figure}[t]
-    \centering 
-    \includegraphics[width=0.5\textwidth]{figs_chap7/patchify.png}
-    \caption{An example of tokenizing an image into patches. \DP{NOTE: this image is from somewhere on the internet, and we should make our own before publishing anything.}}
-    \label{fig:patchify}
+\begin{figure}
+    \centering
+    \DP{TODO: get some figures from both ImageNet-1K and CIFAR-10.}
+    \caption{\small\textbf{Images from ImageNet-1K \textit{(left)} and CIFAR-10 \textit{(right)}.}}
+    \label{fig:in1k_cifar10_examples}
 \end{figure}
-Each patch, say of size \(P_{H} \times P_{W}\) pixels, is a vector in \(\R^{C \times P_{H} \times P_{W}}\). This vector corresponds to a token. The token vectors are flattened and stacked horizontally into the input data matrix \(\vX \in \R^{D \times N}\). 
 
-For example, suppose that the above image in \Cref{fig:patchify} is a \(72 \times 72\) RGB image (so there are \(3\) channels). It is tokenized into \(9\) patches. Each would be of size \(24 \times 24\), and be represented by a vector of size \(3 \times 24 \times 24 = 1728\). So the input matrix \(\vX\) representing this data would live in the space \(\R^{1728 \times 9}\), wherein we have \(D = 1728\) and \(N = 9\). For all applications we take \(P_{H} = P_{W}\) and \(C = 3\), and for nearly all applications we take \(P_{H} = P_{W} = 16\) so \(D = 256\).
+On a slightly more formal level, our data \(\vX\) will be images; we let \(\cI\) be the set of all images. Since an image is a rectangular array of pixels, and each pixel has a color given by RGB, CMYK, or another color format, we say that an image is an element of \(\R^{c \times h \times w}\) --- here \(c\) is the number of channels (i.e., \(3\) for RGB and \(4\) for CMYK), \(h\) is the image height, and \(w\) is the image width. Consequently, the set of all images \(\cI := \bigcup_{c, h, w = 1}^{\infty}\R^{c \times h \times w}\) is the set of all possible such data. Again, we will use this notation repeatedly.
+
+% \begin{figure}[t]
+%     \centering 
+%     \includegraphics[width=0.5\textwidth]{figs_chap7/patchify.png}
+%     \caption{An example of tokenizing an image into patches. \DP{NOTE: this image is from somewhere on the internet, and we should make our own before publishing anything.}}
+%     \label{fig:patchify}
+% \end{figure}
 
 \subsection{Task and Objective Function} \label{sub:contrastive_learning_objective}
 
@@ -49,7 +82,7 @@ Our task is to learn a good representation of the data. Contrastive learning, by
 
 In the case of DINO, the authors propose to use a methodology which produces a single feature vector for the whole image, and desires the feature vector to contain ``global'' (i.e., image-level) information. Accordingly the loss will promote that images with similar global information have similar features and images with different global information have different features.
 
-This seems intuitive, but as previously mentioned, there are several empirical considerations, even while setting up the loss. First and foremost, how should we promote similarities and differences? The answer of DINO \citep{caron2021emerging} is\footnote{In the author's view, inexplicably...} to convert the output features into ``logits'' corresponding to some probability distribution and take their cross-entropy. More specifically, let \(\Delta_{m} := \{\vx \in \R^{m} \colon x_{i} \geq 0\ \forall i, \sum_{i}x_{i} = 1\}\) be the space of probability vectors in \(\R^{m}\) and define the function \(d_{\CE} \colon \R^{m} \times \R^{m} \to \R\) by
+This seems intuitive, but as previously mentioned, there are several empirical considerations, even while setting up the loss. First and foremost, how should we promote similarities and differences? The answer of DINO \citep{caron2021emerging} is\footnote{In the author's view, inexplicably...} to convert the output features into ``logits'' corresponding to some probability distribution and take their cross-entropy. More specifically, let \(\Delta_{m} := \{\vx \in \R^{m} \colon x_{i} \geq 0\ \forall i \in [m], \sum_{i = 1}^{m}x_{i} = 1\}\) be the space of probability vectors in \(\R^{m}\) and define the function \(d_{\CE} \colon \R^{m} \times \R^{m} \to \R\) by
  \begin{equation}\label{eq:cross_entropy_difference}
     d_{\CE}(\vp, \vq) := \frac{1}{2}[\CE(\vp, \vq) + \CE(\vq, \vp)], \quad \forall \vp, \vq \in \Delta_{m}
  \end{equation}
@@ -74,76 +107,87 @@ This seems intuitive, but as previously mentioned, there are several empirical c
  \end{align}
  where \(d_{\mathrm{JS}}\) is the \textit{Jensen-Shannon} divergence, minimized if and only if \(\vp = \vq\). So minimizing \(d_{\CE}\) does two things: it makes \(\vp = \vq\), and it makes \(\vp\) and \(\vq\) have minimal entropy (i.e., vectors with \(1\) in one component and \(0\) elsewhere --- these are called \textit{one-hot vectors}). Overall, the goal of this objective is not \textit{just} to match \(\vp\) and \(\vq\) but also to shape them in a certain way to make them low-entropy. Keep this in mind when we discuss the formulation.
 
-The next question is, how should we obtain samples with similar global information? The answer of DINO (as well as nearly all contrastive learning) is \textit{data augmentation} --- from each sample, make several correlated samples which share the desired properties. In the DINO case, we use different crops or \textit{views} of the input image. Recall that we model an image as a function \(\R^{D \times N}\). A view is a function \(v \colon \R^{D \times N} \to \R^{D \times N_{v}}\), where \(N_{v}\) is the number of tokens in the view. In this case, the view picks out a subset of tokens such that the underlying patches form a rectangular crop of the image. There are two types of views we want to use: \textit{global views} (i.e., large crops) and \textit{local views} (i.e., small crops), as in \Cref{fig:local_global_views}. In order to process local and global views in a unified way, DINO uses a transformer neural network \(f_{\theta}\), which can process input sequences of any length, i.e., with shape \(\R^{D \times T}\) for every \(T \geq 1\) (formally this space can be denoted as \(\R^{D \times *} := \bigcup_{T = 1}^{\infty}\R^{D \times T}\)). The exact implementation will be discussed shortly in \Cref{sub:contrastive_learning_architecture}, but for now it suffices that we can think of a transformer as a map \(f_{\theta} \colon \R^{D \times T} \to \Sphere^{d-1}\) where \(\Sphere^{d-1} := \{\vx \in \R^{d} \colon \norm{\vx}_{2} = 1\}\) is the \(\ell^{2}\)-sphere in \(\R^{d}\). In this case, the network is used to compute \(f_{\theta}(v(\vX))\) for each (local or global) view \(v\).
+The next question is, how should we obtain samples with similar global information? The answer of DINO (as well as nearly all contrastive learning) is \textit{data augmentation} --- from each sample, make several correlated samples which share the desired properties. In the DINO case, we use different crops or \textit{views} of the input image. Recall that we model an image as an element of the set \(\cI\). In this notation, a view is a function \(v \colon \cI \to \cI\). In the DINO case, the view takes a rectangular crop of the image (of fixed area, as a percentage of the total area of the image), and then resizes it to a fixed shape \((C, S_{v}, S_{v})\) where \(S_{v} \geq 1\) is the size of the view and \(C\) is the number of channels in the original image. 
 
-DINO desires that the features \(\vZ_{v}(\theta) := f_{\theta}(v(\vX))\) of all views \(v(\vX)\) of an input image \(\vX\) are consistent with each other. DINO does this by minimizing the difference between the features of each global view \(v_{g}\), say \(\vz_{g}(\theta) := f_{\theta}(v_{g}(\vX))\), and each other view \(v_{c}\), say \(\vz_{c}(\theta) := f_{\theta}(v_{c}(\vX))\). Here, \(v_{c}\) can either be a local view or a global view. 
+\begin{figure}
+    \centering 
+    \includegraphics[width=0.7\textwidth]{figs_chap7/global_local_views.png}
+    \caption{\textbf{Local and global views in DINO.} Local views and global views take a rectangular crop of the input image and resize it to a square shape, which is then input into the network for processing. \DP{I took this picture from the internet, it should be redone when time allows.}}
+    \label{fig:dino_local_global_views}
+\end{figure}
 
-As previously discussed, DINO wants to convert the features \(\vz_{v}(\theta)\) into probability vectors. To do this, they handle the features of the chosen global view separately from the features of the other view, supplying an affine transformation to each one and then applying a ``temperature-weighted softmax''. Define the matrix \(\vW \in \R^{m \times d}\), denoted the ``DINO head'', and the vector \(\vmu \in \R^{m}\), where \(m \gg d\). Also define the temperature parameter \(\tau > 0\). Then DINO computes the probability vectors
-\begin{align}
-    \vp_{g}(\theta, \vW, \vmu)
-    &= \softmax([\vW\vz_{g}(\theta) - \vmu]/\tau), \\
-    \vp_{c}(\theta, \vW)
-    &= \softmax(\vW\vz_{c}(\theta)/\tau),
-\end{align}
-where \(\softmax \colon \R^{m} \to \Delta_{m}\) is defined as 
+There are two types of views we want to use, depicted in \Cref{fig:dino_local_global_views}: 
+\begin{itemize}
+    \item \textit{global views}, which take an initial rectangular crop whose area is a fixed percentage \(p_{\glo} \in [0, 1]\) of the original image's area and resize this crop to a fixed shape \((C, S_{\glo}, S_{\glo})\);
+    \item and \textit{local views}, which do the same operation, with area percentage \(p_{\loc} < p_{\glo}\) and crop size \(S_{\loc} < S_{\glo}\).
+\end{itemize}
+
+DINO desires that the aggregate features \(\vz_{\theta}(\vX_{v}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{v})\) of all views \(\vX_{v} := v(\vX)\) of an input image \(\vX\) are consistent with each other. DINO does this by using a \textit{``DINO head''}\footnote{Note that \(h_{\vW, \vmu}\) is the task-specific head, which in \Cref{sec:experiment_setup} is parameterized only by \(\theta\) as opposed to any specific parameters, but since we use two invocations of \(h\) with different values of the second parameter, we keep the specified notation.} \(h_{\vW, \vmu}\), parameterized by a matrix \(\vW \in \R^{m \times d}\) and a vector \(\vmu \in \R^{m}\), to extract a probability vector \(\vp_{\theta, \vW, \vmu}(\vX_{v}) := h_{\vW, \vmu}(\vz_{\theta}(\vX_{v}))\) from the aggregate feature \(\vz_{\theta}(\vX_{v})\), using the following simple recipe:
 \begin{equation}
-    \softmax\rp{\mat{x_{1} \\ \vdots \\ x_{m}}} := \frac{1}{\sum_{i = 1}^{m}e^{x_{i}}}\mat{e^{x_{1}} \\ \vdots \\ e^{x_{m}}}.
+    h_{\vW, \vmu}(\vz) := \softmax([\vW\vz - \vmu]/\tau), \qquad \forall \vz \in \R^{d},
 \end{equation}
-Then DINO solves the problem \(\min_{\theta, \vW, \vmu}L_{\dino}(\theta, \vW, \vmu)\) where 
+where \(\tau > 0\) is a ``temperature'' parameter which controls the entropy of the softmax.
+
+In particular, DINO minimizes the difference between the probability vector \(\vp_{\theta, \vW, \vmu}(\vX_{g}) := h_{\vW, \vmu}(\vz_{\theta}(\vX_{g}))\) for each global view \(\vX_{g} := v_{g}(\vX)\) and the probability vector \(\vp_{\theta, \vW}(\vX_{c}) := h_{\vW, \vzero_{m}}(\vz_{\theta}(\vX_{c}))\) for each view \(\vX_{c} := v_{c}(\vX)\). Here, \(v_{c}\) can \textit{either} be a local view or a global view. We will discuss the implementation of all neural networks, including \(f_{\theta}\), \(f_{\theta}^{\ext}\), and \(h_{\vW, \vmu}\), shortly in \Cref{sub:contrastive_learning_architecture}. Overall, DINO solves the problem
  \begin{equation}\label{eq:dino_loss}
-     L_{\dino}(\theta, \vW, \vmu) := \Ex[d_{\CE}(\vp_{c}(\theta, \vW), \vp_{g}(\theta, \vW, \vmu))], \nonumber
+     \min_{\theta, \vW, \vmu}L_{\dino}(\theta, \vW, \vmu) \qquad \text{where} \qquad L_{\dino}(\theta, \vW, \vmu) := \Ex[d_{\CE}(\vp_{\theta, \vW}(\vX_{c}), \vp_{\theta, \vW, \vmu}(\vX_{g}))], \nonumber
 \end{equation}
 where the expectation is over data \(\vX\), global views \(v_{g}\), and other views \(v_{c}\).
 
-\begin{figure}[t]
-    \centering 
-    \includegraphics[width=0.7\textwidth]{figs_chap7/global_local_views.png}
-    \caption{\small\textbf{Global and local views} to be used in DINO and its simplification. \DP{I took this picture off a random place in the internet, please note we have to replace it before publishing anything.}}
-    \label{fig:local_global_views}
-\end{figure}
+% As previously discussed, DINO wants to convert the features \(\vz_{v}(\theta)\) into probability vectors. To do this, they handle the features of the chosen global view separately from the features of the other view, supplying an affine transformation to each one and then applying a ``temperature-weighted softmax''. Define the matrix \(\vW \in \R^{m \times d}\), denoted the ``DINO head'', and the vector \(\vmu \in \R^{m}\), where \(m \gg d\). Also define the temperature parameter \(\tau > 0\). Then DINO computes the probability vectors
+% \begin{align}
+%     \vp_{g}(\theta, \vW, \vmu)
+%     &= \softmax([\vW\vz_{g}(\theta) - \vmu]/\tau), \\
+%     \vp_{c}(\theta, \vW)
+%     &= \softmax(\vW\vz_{c}(\theta)/\tau),
+% \end{align}
+% where \(\softmax \colon \R^{m} \to \Delta_{m}\) is defined as 
+% \begin{equation}
+%     \softmax\rp{\mat{x_{1} \\ \vdots \\ x_{m}}} := \frac{1}{\sum_{i = 1}^{m}e^{x_{i}}}\mat{e^{x_{1}} \\ \vdots \\ e^{x_{m}}}.
+% \end{equation}
 
-While it is easy to reason about \eqref{eq:dino_loss}, it is impossible in practice to implement optimization algorithms such as gradient descent with a loss given by \(L_{\dino}\). This is because the expectations in the loss are impossible to evaluate, much less take the gradient of. In this extremely frequent case, we approximate the expectation via finite samples. That is, \textit{at each timestep} \(t\), we:
+While it is easy to reason about \eqref{eq:dino_loss}, it is impossible in practice to implement optimization algorithms such as gradient descent with a loss given by \(L_{\dino}\). This is because the expectations in the loss are impossible to evaluate, much less take the gradient of. In this extremely frequent case, we approximate the expectation via finite samples. That is, \textit{at each timestep} \(t\), supposing that our parameters are \((\theta, \vW, \vmu)\), we:
 \begin{itemize}
-    \item Subsample \(B\) data points from our dataset \(\{\vX_{1}^{t}, \dots, \vX_{B}^{t}\} \subseteq \R^{D \times N}\).
-    \item For each data point \(\vX_{b}^{t}\), sample \(M_{\glo}\) global views \(v_{b, g}^{t, i}\) and \(M_{\loc}\) local views \(v_{b, \ell}^{t, i}\). 
+    \item Subsample \(B\) data points from our dataset \(\{\vX_{1}^{t}, \dots, \vX_{B}^{t}\} \subset \cI\).
+    \item For each data point \(\vX_{b}^{t}\), sample \(M_{\glo}\) global views \(v_{b, g}^{t, i}\) and \(M_{\loc}\) local views \(v_{b, \ell}^{t, i}\). Apply the views to \(\vX_{b}^{t}\) to obtain \(\vX_{b, g}^{t, i} := v_{b, g}^{t, i}(\vX_{b}^{t})\) and \(\vX_{b, \ell}^{t, i} := v_{b, \ell}^{t, i}(\vX_{b}^{t})\).
     \item For each \textit{local} view \(v_{b, \ell}^{t, i}\) compute the following quantities:
     \begin{equation}
-        \vz_{b, \ell}^{t, i}(\theta) := f_{\theta}(v_{b, \ell}^{t, i}(\vX_{b}^{t})), \qquad \vp_{b, \ell}^{t, i}(\theta, \vW) := \softmax(\vW \vz_{b, \ell}^{t, i}(\theta)/\tau)
+        \vz_{\theta}(\vX_{b, \ell}^{t, i}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{b, \ell}^{t, i}), \qquad \vp_{\theta, \vW}(\vX_{b, \ell}^{t, i}) := h_{\vW, \vzero_{m}}(\vz_{\theta}(\vX_{b, \ell}^{t, i}(\theta)))
     \end{equation}
-    and for each \textit{global} view \(v_{b, g}^{t, i}\) compute the following quantities (by an abuse of notation):
+    and for each \textit{global} view \(\vX_{b, g}^{t, i}\) compute the following quantities (by an abuse of notation):
     \begin{align}
-        &\vz_{b, g}^{t, i}(\theta) := f_{\theta}(v_{b, g}^{t, i}(\vX_{b}^{t})), \qquad \vp_{b, g}^{t, i}(\theta, \vW) := \softmax(\vW \vz_{b, g}^{t, i}(\theta)/\tau), \\
-        &\vp_{b, g}^{t, i}(\theta, \vW, \vmu) := \softmax([\vW\vz_{b, g}^{t, i}(\theta) - \vmu]/\tau).
+        &\vz_{\theta}(\vX_{b, g}^{t, i}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{b, g}^{t, i}), \qquad \vp_{\theta, \vW}(\vX_{b, g}^{t, i}) := h_{\vW, \vzero_{m}}(\vz_{\theta}(\vX_{b, g}^{t, i})), \\
+        &\vp_{\theta, \vW, \vmu}(\vX_{b, g}^{t, i}) := h_{\vW, \vmu}(\vZ_{\theta}(\vX_{b, g}^{t, i})).
     \end{align}
-    \item Perform the optimization update using the \textit{surrogate, approximate loss} \(\hat{L}_{\mathrm{DINO}}^{t}\), defined as follows: 
+    \item Perform the optimization update using the \textit{surrogate, approximate loss} \(\hat{L}_{\dino}^{t}\), defined as follows: 
         \begin{align}\label{eq:dino_loss_empirical}
             \hat{L}_{\dino}^{t}(\theta, \vW, \vmu) :=
-            &\frac{1}{BM_{\glo}(M_{\glo} + M_{\loc} - 1)}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\Bigg[\sum_{j = 1}^{M_{\loc}}d_{\CE}(\vp_{b, g}^{t, i}(\theta, \vW, \vmu), \vp_{b, \ell}^{t, j}(\theta, \vW)) \\
-            &\qquad  \qquad \qquad \qquad \qquad \qquad \qquad + \sum_{\substack{j = 1 \\ j \neq i}}^{M_{\glo}}d_{\CE}(\vp_{b, g}^{t, i}(\theta, \vW, \vmu), \vp_{b, g}^{t, j}(\theta, \vW))\Bigg]\nonumber
+            &\frac{1}{BM_{\glo}(M_{\glo} + M_{\loc} - 1)}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\Bigg[\sum_{j = 1}^{M_{\loc}}d_{\CE}(\vp_{\theta, \vW}(\vX_{b, \ell}^{t, j}), \vp_{\theta, \vW, \vmu}(\vX_{b, g}^{t, i})) \\
+            &\qquad  \qquad \qquad \qquad \qquad \qquad \qquad + \sum_{\substack{j = 1 \\ j \neq i}}^{M_{\glo}}d_{\CE}(\vp_{\theta, \vW}(\vX_{b, g}^{t, j}), \vp_{\theta, \vW, \vmu}(\vX_{b, g}^{t, i}))\Bigg]\nonumber
         \end{align}
 \end{itemize}
 In the general case this transforms our intractable optimization problem, as in optimizing the loss in \eqref{eq:dino_loss}, into a tractable stochastic optimization problem which is run to train essentially every deep learning model in the world. This conversion is extremely natural once you have seen some examples, and we will hopefully give these examples throughout the chapter. 
 
-In this specific case, however, if you try to implement \eqref{eq:dino_loss_empirical} and optimize it on a real network, it is very likely that you run into a problem: after running a few iterations of the learning algorithm, the feature mapping \(f_{\theta}\) will output only a single vector, \textit{no matter what the input is}! This certainly optimizes the above loss since it minimizes the distance between features of different views of the same image. But we obviously do not want to learn this solution. 
+In this specific case, however, if you try to implement \eqref{eq:dino_loss_empirical} and optimize it on a real network, it is very likely that you run into a problem: after running a few iterations of the learning algorithm, the feature mapping \(f_{\theta}^{\ext} \circ f_{\theta}\) will \textit{become the constant function}! This certainly optimizes the above loss since it minimizes the distance between features of different views of the same image. But we obviously do not want to learn this solution. 
 
-Actually avoiding collapse is a very common consideration in contrastive learning. So how to do it in this case? The solution of DINO, again, is empirically designed, and carefully tunes the optimization of the centering parameter \(\vmu\) (which is updated using all samples in the batch) and the temperature parameter  \(\tau\) schedule (i.e., how it varies over the optimization trajectory) in order to ensure non-collapse, given a certain special set of hyperparameters that work well. However, outside of this special configuration, it is very difficult to train models to converge, and the training is highly unstable. We do not highlight the technical details here, but bring up the overall problem so as to showcase our very simple solution.
+Actually avoiding collapse is a very common consideration in contrastive learning. So how to do it in this case? The solution of DINO, again, is empirically designed, and carefully tunes the optimization of the parameter \(\vmu\) (which is updated using all samples in the batch) and a ``temperature'' hyperparameter \(\tau\) which is part of the implementation of \(h_{\vW, \vmu}\) and discussed in \Cref{sub:contrastive_learning_architecture}. Given a certain special set of hyperparameters that work well, this is indeed enough to ensure non-collapse of the representation. However, outside of this special configuration, training models to converge is difficult, and the training is highly unstable. 
 
-Now let us discuss simplifications to the formulation. First, instead of using the logits of some affine transformation of the representations, we directly compare the representations themselves. Using our hypothesis from \Cref{ch:representation} that good representations should have Euclidean (subspace) geometry, a much more natural measure of difference is the \textit{squared \(\ell^{2}\) distance} \(d_{\ell^{2}} \colon \R^{d} \times \R^{d} \to \R\), defined as 
+Towards amending this state of affairs, let us discuss simplifications to the formulation. First, instead of computing a probability vector using a learned transformation \(h_{\vW, \vmu}\) of the aggregate features \(\vz_{\theta}\), we can \textit{directly use the aggregate representation}, ignoring the task-specific head (or equivalently, setting it to the identity mapping). But now we need a way to compare the vectors directly. Using our hypothesis from \Cref{ch:representation} that good representations should have Euclidean (subspace) geometry, a much more natural measure of difference is the \textit{squared \(\ell^{2}\) distance} \(d_{\ell^{2}} \colon \R^{d} \times \R^{d} \to \R\), defined as 
 \begin{equation}\label{eq:cosine_similarity}
     d_{\ell^{2}}(\vx, \vy) := \frac{1}{2}\norm{\vx - \vy}_{2}^{2}, \qquad  \forall \vx, \vy \in \R^{d}.
 \end{equation}
 This distance-based score is even more efficient to compute than the cross-entropy score. Thus, \(d_{\ell^{2}}\) takes the place of \(d_{\CE}\) in our simplification. 
 
-Before, collapse was avoided by using tricks to update \(\vmu\) and \(\tau\). In our simplification, if we directly compare the representations instead of converting them to probabilities, we do not have either of these parameters and so must consider a different way to avoid collapse. To do this, we return to the fundamentals. The basic idea of avoiding collapse is that in order to make sure that all samples do not return the same exact same features, we need different samples to have different features. In other words, we would like the \textit{covariance} of the features to be \textit{large} in some sense. But from \Cref{ch:compression,ch:representation}, we already have a quantity which measures the size of the covariance matrix. Namely, we use the straightforward (population-level) \textit{Gaussian coding rate} \(R\) to ensure that the features of global views of different images, which have different global information, are well-separated and not collapsed (hence expanded). The overall modified loss \(L_{\simdino}\) becomes:
+Before, collapse was avoided by using tricks to update \(\vmu\) and \(\tau\). In our simplification, if we compare the features within the representation space instead of converting them to probabilities, we do not have either of these parameters and so must consider a different way to avoid collapse. To do this, we return to the fundamentals. The basic idea of avoiding collapse is that in order to make sure that all samples do not return the same exact same features, we need different samples to have different features. In other words, we would like the \textit{covariance} of the features to be \textit{large} in some sense. But from \Cref{ch:compression,ch:representation}, we already have a quantity which measures the size of the covariance matrix. Namely, we use the straightforward (population-level) \textit{Gaussian coding rate} \(R\) to ensure that the features of global views of different images, which have different global information, are well-separated and not collapsed (hence expanded). The overall modified loss \(L_{\simdino}\) becomes:
 \begin{equation}\label{eq:simdino_loss}
-    L_{\simdino}(\theta) := \Ex[d_{\ell^{2}}(\vz_{c}(\theta), \vz_{g}(\theta)] - \frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{g}(\theta))},
+    L_{\simdino}(\theta) := \Ex[d_{\ell^{2}}(\vz_{\theta}(\vX_{c}), \vz_{\theta}(\vX_{g})] - \frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{\theta}(\vX_{g}))},
 \end{equation}
 where \(\eps > 0\) is fixed and the appropriate expectations are, as before, taken over data \(\vX\), global view \(v_{g}\), and other (local or global) view \(v_{c}\). At time \(t\), we can optimize the following computationally tractable loss:
 \begin{align}\label{eq:simdino_loss_empirical}
     \hat{L}_{\simdino}^{t}(\theta) :=
-    & \frac{1}{BM_{\glo}(M_{\glo}+M_{\loc}-1)}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\Bigg[\sum_{j = 1}^{M_{\loc}}d_{\ell^{2}}(\vz_{b, g}^{t, i}(\theta), \vz_{b, \ell}^{t, j}(\theta)) \\
-    &\qquad \qquad \qquad \qquad \qquad \qquad \qquad + \sum_{j = 1}^{M_{\glo}}d_{\ell^{2}}(\vz_{b, g}^{t, i}(\theta), \vz_{b, g}^{t, j}(\theta))\Bigg] \\
-    & + \frac{\gamma}{M_{\glo}}\sum_{i = 1}^{M_{\glo}}R([\vz_{1, g}^{t, i}(\theta), \dots, \vz_{B, g}^{t, i}(\theta)]) \label{eq:simdino_loss_empirical_covariance}
+    & \frac{1}{BM_{\glo}(M_{\glo}+M_{\loc}-1)}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\Bigg[\sum_{j = 1}^{M_{\loc}}d_{\ell^{2}}(\vz_{\theta}(\vX_{b, g}^{t, i}), \vz_{\theta}(\vX_{b, \ell}^{t, j})) \\
+    &\qquad \qquad \qquad \qquad \qquad \qquad \qquad + \sum_{j = 1}^{M_{\glo}}d_{\ell^{2}}(\vz_{\theta}(\vX_{b, g}^{t, i}), \vz_{\theta}(\vX_{b, g}^{t, j}))\Bigg] \\
+    & + \frac{\gamma}{M_{\glo}}\sum_{i = 1}^{M_{\glo}}R([\vz_{\theta}(\vX_{1, g}^{t, i}), \dots, \vz_{\theta}(\vX_{B, g}^{t, i})]) \label{eq:simdino_loss_empirical_covariance}
 \end{align}
 where \(R\) used in \Cref{eq:simdino_loss_empirical_covariance} is the Gaussian coding rate on finite samples defined in \Cref{ch:representation}. Notably, \eqref{eq:simdino_loss_empirical_covariance} is merely a way to approximate the covariance regularization term in \eqref{eq:simdino_loss} while maintaining computational efficiency.
 
@@ -160,115 +204,133 @@ The loss in \eqref{eq:simdino_loss_empirical} is the loss used for the simplifie
 
 \subsection{Architecture: Vision Transformer}\label{sub:contrastive_learning_architecture}
 
-For the architecture, we use a standard vision transformer. Here is how such an architecture works, formally, in the context of image data. Let \(\vX \in \R^{D \times N}\) be the matrix of patches corresponding to such an image. 
+For the architecture, we use a standard vision transformer. Here is how such an architecture works, formally, in the context of image data. Recall from \Cref{sec:experiment_setup} that there are four components to an encoder architecture, namely an embedding, a backbone, a feature extractor, and a task-specific head. We discuss these three parts presently.
+
+\begin{figure}
+    \centering 
+    \includegraphics[width=0.7\textwidth]{figs_chap7/patchify.png}
+    \caption{\small\textbf{An example of an image turned into \(5 \times 5\) square patches.} Each patch is of the same size, and the grid of patches is of shape \((N_{H}, N_{W}) = (5, 5)\). \DP{I took this picture from the internet, it should be redone when time allows.}}
+\end{figure}
+
+\paragraph{Embedding.} Given imagery data \(\vX \in \cI\), we embed it as a sequence of tokens in \(\R^{d}\) using the map \(f_{\theta}^{\emb}\), as follows. 
 \begin{enumerate}
-    \item First, the data \(\vX\) is \textit{preprocessed}, by a map \(f^{\pre} \colon \R^{D \times N} \to \R^{d \times n}\) where \(n = N + 1\), as follows:
+    \item First, we turn the image data \(\vX\) into a sequence of patches of shape \((C, P_{H}, P_{W})\) where \(P_{H}\) and \(P_{W}\) are the patch dimensions. We assume that \(P_{H}\) and \(P_{W}\) evenly divide the height and width of \(\vX\), respectively (in the notation of \Cref{sub:contrastive_learning_objective} we assume that \(P_{H}\) and \(P_{W}\) evenly divide \(S_{\loc}\) and \(S_{\glo}\)). Let the resulting grid of patches have \(N_{H}\) rows and \(N_{W}\) columns.
+    \item We unroll each patch into a vector of length \(D := CP_{H}P_{W}\). There are \(N := N_{H}N_{W}\) patch vectors, which we place in ``raster order'' (top left \(\to\) top right \(\to\) bottom left \(\to\) bottom right) into a matrix \(\vX^{\tok} \in \R^{D \times N}\), where \(\vX^{\tok} := f^{\tok}(\vX)\). Notice that \(D\) only depends on the patch size and number of channels. Since the latter quantity is normally constant among samples in the same dataset, \(D\) is the same for all images in the dataset, while \(N\) is different for larger and smaller images.
+    \item We then perform the following operation on \(\vX^{\tok} \in \R^{D \times N}\) to project it to \(\R^{d \times n}\) where \(n := N + 1\):
     \begin{equation}
-        f^{\pre}(\vX) = [\vz_{\cls}^{1}, \vW^{\pre}\vX] + \vE^{\pos}.
+        \vX^{\tok} \mapsto [\vz_{\cls}^{1}, \vW^{\emb}\vX] + \vE^{\pos}.
     \end{equation}
-    Here we have three trainable parameters \(\vW^{\pre}\), \(\vz_{\cls}^{1}\), and \(\vE^{\pos}\) whose purpose is as follows:
+    Here we have three trainable parameters \(\vW^{\emb}\), \(\vz_{\cls}^{1}\), and \(\vE^{\pos}\) whose purpose is as follows:
     \begin{itemize}
-        \item \(\vW^{\pre} \in \R^{d \times D}\) is a matrix which projects each patch vector to a token feature.
+        \item \(\vW^{\emb} \in \R^{d \times D}\) is a matrix which projects each patch vector to a token feature.
         \item \(\vz_{\cls}^{1} \in \R^{d}\) is a so-called \textit{class token} or \textit{register token}. The class token heuristically holds global information of the whole data and is used for downstream tasks. In the framework of compressive deep networks from \Cref{ch:representation}, we expect that the class token is projected onto the same subspaces as the salient or semantically relevant tokens during the progression of the forward pass.
         \item \(\vE^{\pos} \in \R^{d \times n}\) is a so-called \textit{positional encoding} which distinguishes different tokens from each other. That is, token features should have positional information, so that the overall map \(f^{\pre}\) is not invariant to permutations of the patches, and \(\vE^{\pos}\) inserts this positional information. 
         \begin{itemize}
-            \item We previously discussed the encoding of certain sub-matrices of \(\vX\), where all rows are kept but only a few columns are removed during data augmentation. In these cases we use the sub-matrix of \(\vE^{\pos}\) corresponding to the original positions of the columns, instead of the full \(\vE^{\pos}\) matrix (which after all is the wrong shape).
+            \item In this DINO case, where the transformer receives differently-sized images, we learn a positional encoding for the largest size received during training, and interpolate to get the positional encodings for smaller-sized inputs.
         \end{itemize}
     \end{itemize}
-    \item Then, the data \(\vZ^{1} = f^{\pre}(\vX)\) is passed through \(L\) \textit{layers} \(f^{\ell}\). The iteration \(f^{\ell}\) has the following implementation:
-    \begin{align}
-        \vZ^{\ell + 1/2}
-        &= \vZ^{\ell} + \MHSA^{\ell}(\LN_{1}^{\ell}(\vZ^{\ell})) \\ 
-        \vZ^{\ell + 1}
-        &= \vZ^{\ell + 1/2} + \MLP^{\ell}(\LN_{2}^{\ell}(\vZ^{\ell + 1/2}))
-    \end{align}
-    and \(f^{\ell}(\vZ^{\ell}) := \vZ^{\ell + 1}\). Here we have used some operators, such as \(\MHSA, \MLP, \LN\) that are defined as follows:
-    \begin{itemize}
-        \item The \(\MHSA\) operator is multi-head-self-attention, the predecessor of the multi-head subspace self-attention (cf \Cref{ch:representation}). The formulation is as follows:
-        \begin{align}
-            \MHSA(\vZ) \label{eq:mhsa}
-            &:= \vU_{\out}\mat{([\vU_{\val}^{1}]^{\top}\vZ)\vA^{1}(\vZ) \\ \vdots \\ ([\vU_{\val}^{K}]^{\top}\vZ)\vA^{K}(\vZ)}, \\
-            \text{where} \qquad \vA^{k}(\vZ) \label{eq:attention_map}
-            &:= \softmax\rp{\frac{([\vU_{\key}^{k}]^{\top}\vZ)^{\top}([\vU_{\query}^{k}]^{\top}\vZ)}{\sqrt{d}}}
-        \end{align}
-        where \(p\) is a positive integer, \(\vU_{\query}^{i}, \vU_{\key}^{i}, \vU_{\val}^{i} \in \R^{d \times p}\) and \(\vU_{\out} \in \R^{d \times Kp}\) are trainable parameters, and the \(\softmax\) is defined column-wise as 
-        \begin{align}
-            \softmax(\vM) 
-            &:= \mat{\softmax(\vm_{1}) & \cdots & \softmax(\vm_{p})}, \\ 
-            \forall \vM 
-            &= \mat{\vm_{1}, \dots, \vm_{p}} \in \R^{n \times p}.
-        \end{align}
-        In practice, the dimensions are usually picked is usually picked such that \(Kp = d\). The terms \(\vA^{k}(\vZ)\) and \((\vU_{\val}^{k}\vZ)\vA^{k}(\vZ)\) are also known as the \textit{\(k\th\) attention map} and \textit{\(k\th\) attention head output} respectively.
-        \item The \(\MLP\) is a two-layer perceptron, a regular nonlinearity used in deep networks, and has the form 
-        \begin{equation}
-            \MLP(\vZ) := \vW_{\down}\ReLU(\vW_{\up}\vZ + \vb_{\up}\vone_{n}^{\top}) + \vb_{\down}\vone_{n}^{\top}
-        \end{equation}
-        where \(\vW_{\up} \in \R^{m \times d}, \vW_{\down} \in \R^{d \times m}, \vb_{\up} \in \R^{m}, \vb_{\down} \in \R^{d}\) are trainable parameters, and \(\ReLU\) is the element-wise ReLU nonlinearity, i.e., \(\ReLU(\vM)_{ij} = \max\{M_{ij}, 0\}\). 
-        \item The layer-norm \(\LN\) is a standard normalization, which applies column-wise to each token independently:
-        \begin{equation}
-            \LN(\vZ) = \LN(\mat{\vz_{1}, \dots, \vz_{n}}) = \mat{\LN(\vz_{1}), \dots, \LN(\vz_{n})}
-        \end{equation}
-        and has the form 
-        \begin{equation}
-            \LN(\vz) = \frac{\vz - \vmu(\vz)\vone_{d}}{\norm{\vz - \vmu(\vz)\vone_{d}}_{2}} \odot \valpha + \vbeta \qquad \text{where} \qquad \vmu(\vz) = \frac{1}{d}\vone_{d}^{\top}\vz
-        \end{equation}
-        where \(\odot\) denotes element-wise multiplication, and \(\valpha, \vbeta \in \R^{d}\). The layer-norm operator serves as a sort of normalization on each token, where the scale of each token afterwards is learnable and shared amongst all tokens.
-    \end{itemize}
-    \item After the data has made it through preprocessing and \(L\) layers, we obtain the features \(\vZ = \mat{\vz_{1}, \dots, \vz_{n}}\). In the DINO context, we want to use the class token representation (which, again, has global information), so we extract \(\vz_{1}\) from this matrix (mathematically it's equivalent to return the result of \(\vZ \ve_{1}\)).  We call this post-processing step \(f^{\post}\).
 \end{enumerate}
-Thus the neural network is of the form 
+Thus, in the end we have 
 \begin{equation}
-    f = f^{\post} \circ f^{L} \circ \cdots \circ f^{1} \circ f^{\pre} \colon \R^{D \times N} \to \R^{d}.
+    f_{\theta}^{\emb}(\vX) := \mat{\vz_{\cls}^{1}, \vW^{\emb}f^{\tok}(\vX)} + \vE^{\pos}.
 \end{equation}
+All parameters \(\vz_{\cls}^{1}, \vW^{\emb}, \vE^{\pos}\) are contained in the parameter set \(\theta\).
+
+\paragraph{Backbone.} Given a token sequence \(\vZ_{\theta}^{1}(\vX) := f_{\theta}^{\emb}(\vX) \in \R^{d \times *}\), we process it using the backbone map \(f_{\theta}^{\backbone}\) as follows. The function \(f_{\theta}^{\backbone}\) is composed of \(L\) \textit{layers} \(f_{\theta}^{\ell}\), i.e.,
+\begin{equation}
+    f_{\theta}^{\backbone} = f_{\theta}^{L} \circ \cdots \circ f_{\theta}^{1}.
+\end{equation}
+ The layer \(f_{\theta}^{\ell}\) has the following implementation:
+\begin{align}
+    \vZ_{\theta}^{\ell + 1/2}(\vX)
+    &= \vZ_{\theta}^{\ell}(\vX) + \MHSA_{\theta}^{\ell}(\LN_{\theta}^{1, \ell}(\vZ_{\theta}^{\ell}(\vX))) \\ 
+    \vZ_{\theta}^{\ell + 1}(\vX)
+    &= \vZ_{\theta}^{\ell + 1/2}(\vX) + \MLP_{\theta}^{\ell}(\LN_{\theta}^{2, \ell}(\vZ_{\theta}^{\ell + 1/2}(\vX)))
+\end{align}
+and \(f_{\theta}^{\ell}\) is defined such that \(f_{\theta}^{\ell}(\vZ_{\theta}^{\ell}(\vX)) := \vZ_{\theta}^{\ell + 1}(\vX)\). Here we have used some operators, such as \(\MHSA_{\theta}^{\ell}, \MLP_{\theta}^{\ell}\) and \(\LN_{\theta}^{i, \ell}\) that are defined as follows:
+\begin{itemize}
+    \item The \(\MHSA_{\theta}^{\ell}\) operator is multi-head-self-attention, the predecessor of the multi-head subspace self-attention (cf \Cref{ch:representation}). The formulation is as follows:
+    \begin{align}
+        \MHSA_{\theta}^{\ell}(\vZ) \label{eq:mhsa}
+        &:= \vU_{\out}^{\ell}\mat{([\vU_{\val}^{1, \ell}]^{\top}\vZ)\vA^{1, \ell}(\vZ) \\ \vdots \\ ([\vU_{\val}^{K, \ell}]^{\top}\vZ)\vA^{K, \ell}(\vZ)}, \\
+        \text{where} \qquad \vA^{k, \ell}(\vZ) \label{eq:attention_map}
+        &:= \softmax\rp{\frac{([\vU_{\key}^{k, \ell}]^{\top}\vZ)^{\top}([\vU_{\query}^{k, \ell}]^{\top}\vZ)}{\sqrt{d}}}
+    \end{align}
+    where \(p\) is a positive integer, \(\vU_{\query}^{k, \ell}, \vU_{\key}^{k, \ell}, \vU_{\val}^{k, \ell} \in \R^{d \times p}\) and \(\vU_{\out}^{\ell} \in \R^{d \times Kp}\) are trainable parameters contained in the parameter set \(\theta\), and the \(\softmax\) is defined column-wise as 
+    \begin{align}
+        \softmax(\vM) 
+        &:= \mat{\softmax(\vm_{1}) & \cdots & \softmax(\vm_{p})}, \\ 
+        \forall \vM 
+        &= \mat{\vm_{1}, \dots, \vm_{p}} \in \R^{n \times p}.
+    \end{align}
+    In practice, the dimensions are usually picked is usually picked such that \(Kp = d\). The terms \(\vA^{k, \ell}(\vZ)\) and \((\vU_{\val}^{k, \ell}\vZ)\vA^{k, \ell}(\vZ)\) are also known as the \textit{\(k\th\) attention map} and \textit{\(k\th\) attention head output} at layer \(\ell\), respectively.
+    \item The \(\MLP_{\theta}^{\ell}\) is a two-layer perceptron, a regular nonlinearity used in deep networks, and has the form 
+    \begin{equation}
+        \MLP_{\theta}^{\ell}(\vZ) := \vW_{\down}^{\ell}\ReLU(\vW_{\up}^{\ell}\vZ + \vb_{\up}^{\ell}\vone_{n}^{\top}) + \vb_{\down}^{\ell}\vone_{n}^{\top}
+    \end{equation}
+    where \(\vW_{\up}^{\ell} \in \R^{q \times d}, \vW_{\down}^{\ell} \in \R^{d \times q}, \vb_{\up}^{\ell} \in \R^{q}, \vb_{\down}^{\ell} \in \R^{d}\) are trainable parameters also contained in the parameter set \(\theta\), and \(\ReLU\) is the element-wise ReLU nonlinearity, i.e., \(\ReLU(\vM)_{ij} = \max\{M_{ij}, 0\}\). 
+    \item Each layer-norm \(\LN_{\theta}^{i, \ell}\) for \(i \in \{1, 2\}\) is a standard normalization, which applies column-wise to each token independently:
+    \begin{equation}
+        \LN_{\theta}^{i, \ell}(\vZ) = \LN_{\theta}^{i, \ell}(\mat{\vz_{1}, \dots, \vz_{n}}) = \mat{\LN_{\theta}^{i, \ell}(\vz_{1}), \dots, \LN_{\theta}^{i, \ell}(\vz_{n})}
+    \end{equation}
+    and has the form 
+    \begin{equation}
+        \LN_{\theta}^{i, \ell}(\vz) = \frac{\vz - \vmu(\vz)\vone_{d}}{\norm{\vz - \vmu(\vz)\vone_{d}}_{2}} \odot \valpha^{i, \ell} + \vbeta^{i, \ell} \qquad \text{where} \qquad \vmu(\vz) = \frac{1}{d}\vone_{d}^{\top}\vz
+    \end{equation}
+    where \(\odot\) denotes element-wise multiplication, and \(\valpha^{i, \ell}, \vbeta^{i, \ell} \in \R^{d}\) are trainable parameters contained in the parameter set \(\theta\). The layer-norm operator serves as a sort of normalization on each token, where the scale of each token afterwards is learnable and shared amongst all tokens. 
+\end{itemize}
+
 The transformer is one of the most popular neural network architectures in history, powering applications in almost all fields of deep learning. 
 
-For the DINO application in particular, they choose to make one small architectural addition which we carry forward into SimDINO, producing a network \(\tilde{f}\): they use a small two-layer MLP to post-process the output of \(f\), followed by a parameter-free normalization, i.e., return the function
+\paragraph{Feature extractor.} We use a post-processing step \(f_{\theta}^{\ext}\) which extracts the \textit{class token feature}, which (recall) is the feature meant to contain aggregate information about the input image, and applies an MLP and normalization to it. Namely, we have 
 \begin{equation}
-    \tilde{f} \colon \vX \mapsto \frac{\MLP^{\post}(f(\vX))}{\norm{\MLP^{\post}(f(\vX))}_{2}}
-\end{equation}
-instead of \(\tilde{f}\) itself. In particular, this means that the output of the encoder network in DINO (and SimDINO) is normalized to be on the \(\ell^{2}\)-sphere \(\Sphere^{d-1}\).
+    \vz_{\theta}(\vX) := f_{\theta}^{\ext}(\vZ_{\theta}(\vX)) = f_{\theta}^{\ext}([\vz_{\theta}^{1}(\vX), \dots, \vz_{\theta}^{n}(\vX)]) := \frac{\MLP_{\theta}^{\ext}(\vz_{\theta}^{1}(\vX))}{\norm{\MLP_{\theta}^{\ext}(\vz_{\theta}^{1}(\vX))}_{2}}.
+\end{equation} 
+
+\paragraph{Task-specific (``DINO'') head.} For DINO, we use the task-specific DINO head \(h_{\vW, \vmu}\). For SimDINO, we use \textit{no} task-specific head \textit{at all}, as previously described.
 
 \subsection{Optimization Strategy}\label{sub:contrastive_learning_optimization}
 
 We have a loss function and an architecture, so we now discuss the optimization strategy. The optimization strategy for DINO uses \textit{two sets of weights for the same architecture}: \textit{student} weights \(\theta_{\student}\) and \textit{teacher} weights \(\theta_{\teacher}\). These correspond to two different neural networks, called the teacher network and student network, with the same architecture. The teacher network encodes all global views, while the student network encodes all ``other'' views. The goal of the loss is to distill teacher outputs into the student model. Namely, we train on the loss \(L_{\dino{}-\student\teacher}\):
 \begin{equation}\label{eq:dino_loss_teacherstudent}
-    L_{\dino{}-\student\teacher}(\theta_{\student}, \theta_{\teacher}, \vW, \vmu) := \Ex[d_{\CE}(\vp_{c}(\theta_{\student}, \vW), \vp_{g}(\theta_{\teacher}, \vW, \vmu))],
+    L_{\dino{}-\student\teacher}(\theta_{\student}, \theta_{\teacher}, \vW, \vmu) := \Ex[d_{\CE}(\vp_{\theta_{\student}, \vW}(\vX_{c}), \vp_{\theta_{\teacher}, \vW, \vmu}(\vX_{g}))],
 \end{equation}
-with an analogous stochastic sample-wise loss (cf \eqref{eq:dino_loss} to \eqref{eq:dino_loss_empirical}), say denoted \(\hat{L}_{\dino-\student\teacher}^{(k)}\) on iteration \(k\). The optimization strategy is also unconventional: only the student parameters \(\theta_{s}\) as well as \(\vW\) are optimized, while \(\theta_{t}\) as well as \(\vmu\) is directly constructed via an exponential moving average. For SGD this looks like:
+with an analogous stochastic sample-wise loss (cf \eqref{eq:dino_loss} to \eqref{eq:dino_loss_empirical}), say denoted \(\hat{L}_{\dino-\student\teacher}^{t}\) on iteration \(t\). The optimization strategy is also unconventional: only the student parameters \(\theta_{\student}\) as well as \(\vW\) are optimized, while \(\theta_{\teacher}\) as well as \(\vmu\) is directly constructed via an exponential moving average. For SGD this looks like:
 \begin{align}
-    \theta_{\student}^{(k + 1)}
-    &= \theta_{\student}^{(k)} - \eta^{(k)}\nabla_{\theta_{\student}}\hat{L}_{\dino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)}, \vW^{(k)}, \vmu^{(k)}) \\
-    \theta_{\teacher}^{(k + 1)}
-    &= \lambda^{(k)}\theta_{\teacher}^{(k)} + (1 - \lambda^{(k)})\theta_{\student}^{(k + 1)} \\
-    \vW^{(k + 1)}
-    &= \vW^{(k)} - \eta^{(k)}\nabla_{\vW}\hat{L}_{\dino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)}, \vW^{(k)}, \vmu^{(k)}) \\
-    \vmu^{(k + 1)}
-    &= \lambda^{(k)}\vmu^{(k)} + (1 - \lambda^{(k)})\cdot\frac{1}{BM_{\glo}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\vW^{(k)}\vz_{b, g}^{t, i}(\theta_{\teacher}),
+    \theta_{\student}^{t + 1}
+    &= \theta_{\student}^{t} - \eta^{t}\nabla_{\theta_{\student}}\hat{L}_{\dino-\student\teacher}^{t}(\theta_{\student}^{t}, \theta_{\teacher}^{t}, \vW^{t}, \vmu^{t}) \\
+    \theta_{\teacher}^{t + 1}
+    &= \lambda^{t}\theta_{\teacher}^{t} + (1 - \lambda^{t})\theta_{\student}^{t + 1} \\
+    \vW^{t + 1}
+    &= \vW^{t} - \eta^{t}\nabla_{\vW}\hat{L}_{\dino-\student\teacher}^{t}(\theta_{\student}^{t}, \theta_{\teacher}^{t}, \vW^{t}, \vmu^{t}) \\
+    \vmu^{t + 1}
+    &= \lambda^{t}\vmu^{t} + (1 - \lambda^{t})\cdot\frac{1}{BM_{\glo}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\vW^{t}\vz_{\theta_{\teacher}}(\vX_{b, g}^{t, i}),
 \end{align}
-i.e., \(\vmu^{(k + 1)}\) is an exponential moving average of the average projected feature. Analogous update rules can be constructed for Adam and other iterative optimizers, all having the general form
+i.e., \(\vmu^{t + 1}\) is an exponential moving average of the average projected feature. (Note that the super-script \(t\) is used for the iteration index.) Analogous update rules can be constructed for Adam and other iterative optimizers, all having the general form
 \begin{align}
-    \theta_{\student}^{(k + 1)}
-    &= \textsc{OptimizationUpdate}^{(k)}(\theta_{\student}^{(k)}; \nabla_{\theta_{\student}}\hat{L}_{\dino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)}, \vW^{(k)}, \vmu^{(k)})) \\
-    \theta_{\teacher}^{(k + 1)}
-    &= \lambda^{(k)}\theta_{\teacher}^{(k)} + (1 - \lambda^{(k)})\theta_{\student}^{(k + 1)} \\
-    \vW^{(k + 1)}
-    &= \textsc{OptimizationUpdate}^{(k)}(\vW^{(k)}; \nabla_{\vW}\hat{L}_{\dino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)}, \vW^{(k)}, \vmu^{(k)})) \\
-    \vmu^{(k + 1)}
-    &= \lambda^{(k)}\vmu^{(k)} + (1 - \lambda^{(k)})\cdot\frac{1}{BM_{\glo}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\vW^{(k)}\vz_{b, g}^{t, i}(\theta_{\teacher}),
+    \theta_{\student}^{t + 1}
+    &= \textsc{OptimizationUpdate}^{t}(\theta_{\student}^{t}; \nabla_{\theta_{\student}}\hat{L}_{\dino-\student\teacher}^{t}(\theta_{\student}^{t}, \theta_{\teacher}^{t}, \vW^{t}, \vmu^{t})) \\
+    \theta_{\teacher}^{t + 1}
+    &= \lambda^{t}\theta_{\teacher}^{t} + (1 - \lambda^{t})\theta_{\student}^{t + 1} \\
+    \vW^{t + 1}
+    &= \textsc{OptimizationUpdate}^{t}(\vW^{t}; \nabla_{\vW}\hat{L}_{\dino-\student\teacher}^{t}(\theta_{\student}^{t}, \theta_{\teacher}^{t}, \vW^{t}, \vmu^{t})) \\
+    \vmu^{t + 1}
+    &= \lambda^{t}\vmu^{t} + (1 - \lambda^{t})\cdot\frac{1}{BM_{\glo}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\vW^{t}\vz_{\theta_{\teacher}}(\vX_{b, g}^{t, i}),
 \end{align}
 \textit{Importantly,} the gradients here only propagate through the \textit{first} argument of \(d_{\CE}\) in all invocations in \(L\) or \(\hat{L}\) (i.e., the outputs of the \textit{student} model). No gradients propagate through the second argument, as if the second argument is a fixed constant during differentiation. In other words, the teacher can be considered ``frozen'' or ``detached from the computational graph'' during the optimization step. After training, we discard the student weights and use the teacher weights for our trained network \(f\).
 
 The simplified DINO objective is very similar in spirit but much simpler in execution, i.e.,
 \begin{equation}\label{eq:simdino_loss_teacherstudent}
-    L_{\simdino-\student\teacher}(\theta_{\student}, \theta_{\teacher}) :=  \Ex\rs{d_{\ell^{2}}(\vz_{c}(\theta_{\student}), \vz_{g}(\theta_{\teacher}))} + \frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{g}(\theta_{\student}))},
+    L_{\simdino-\student\teacher}(\theta_{\student}, \theta_{\teacher}) :=  \Ex\rs{d_{\ell^{2}}(\vz_{\theta_{\student}}(\vX_{c}), \vz_{\theta_{\teacher}}(\vX_{g}))} + \frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{\theta_{\student}}(\vX_{g})))},
 \end{equation}
-with, again, an analogous stochastic loss \(\hat{L}_{\simdino-\student\teacher}^{(k)}\) on iteration \(k\). We use the same optimization methodology to train the simplified DINO, i.e.,
+with, again, an analogous stochastic loss \(\hat{L}_{\simdino-\student\teacher}^{t}\) on iteration \(t\). We use the same optimization methodology to train the simplified DINO, i.e.,
 \begin{align}
-    \theta_{\student}^{(k + 1)}
-    &= \textsc{OptimizationUpdate}^{(k)}(\theta_{\student}^{(k)}; \nabla_{\theta_{\student}}\hat{L}_{\simdino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)})) \\
-    \theta_{\teacher}^{(k + 1)}
-    &= \lambda^{(k)}\theta_{\teacher}^{(k)} + (1 - \lambda^{(k)})\theta_{\student}^{(k + 1)}.
+    \theta_{\student}^{t + 1}
+    &= \textsc{OptimizationUpdate}^{t}(\theta_{\student}^{t}; \nabla_{\theta_{\student}}\hat{L}_{\simdino-\student\teacher}^{t}(\theta_{\student}^{t}, \theta_{\teacher}^{t})) \\
+    \theta_{\teacher}^{t + 1}
+    &= \lambda^{t}\theta_{\teacher}^{t} + (1 - \lambda^{t})\theta_{\student}^{t + 1}.
 \end{align}
+Again, we re-iterate that the gradient is only taken w.r.t.~\(\theta_{\student}\), treating \(\theta_{\teacher}\) as a constant.
 
 
 \subsection{Evaluation Methodology}\label{sub:contrastive_learning_evals}
@@ -294,11 +356,7 @@ Another way to check the performance of the representations is to examine the fi
 \begin{align}
     \vX \mapsto \cdots \mapsto \vZ^{L - 1} = [\underbrace{\vz_{1}^{L - 1}}_{\text{class token}}, \underbrace{\vz_{2}^{L - 1} \dots, \vz_{n}^{L - 1}}_{\text{patch tokens}}] \mapsto \vA^{k, L} = \mat{\vA_{1, 1}^{k, L} & \vA_{1, 2:}^{k, L} \\ \vA_{2:, 1}^{k, L} & \vA_{2:, 2:}^{k, L}}.
 \end{align}
-In particular, we examine what the attention maps for a given input reveal about the salient objects in the input image, i.e., which parts of the image provide the most globally-relevant information to the class token. One particular way to do this is to examine the component of the attention map where the class token is extracted as the query and removed from the value matrix, i.e., \(\vA_{2:, 1}^{k, L} \in \R^{1 \times (n - 1)} = \R^{1 \times N}\) or its transpose \(\va^{k, L} \in \R^{N}\). Namely,
-\begin{equation}
-    \va^{k}(\vZ) := \softmax\rp{\frac{([\vU_{\key}^{k}]^{\top}\mat{\vz_{2}, \dots, \vz_{n}})^{\top}([\vU_{\query}^{k}]^{\top}\vz_{1})}{\sqrt{d}}}
-\end{equation} 
-Notice that this vector \(\va^{k, L}\), which we label as the ``\textit{saliency vector} at the \(k\th\) attention head at layer \(L\),'' has a value for every patch, \(1, \dots, N\), and we use this value to describe how relevant each patch is towards the global information. In particular for visualization's sake we create a new image where each patch is replaced by its corresponding value in the saliency vector, showcasing the contribution of each patch; we call this image the ``\textit{saliency map} at the \(k\th\) attention head at layer \(L\)''. \Cref{fig:attention_maps_saliency_dino} show visualizations of saliency maps in DINO and our simplified DINO; note that selected saliency maps highlight the relevant parts of the input image.
+In particular, we examine what the attention maps for a given input reveal about the salient objects in the input image, i.e., which parts of the image provide the most globally-relevant information to the class token. One particular way to do this is to examine the component of the attention map where the class token is extracted as the query and removed from the value matrix, i.e., \(\vA_{2:, 1}^{k, L} \in \R^{1 \times (n - 1)} = \R^{1 \times N}\) or its transpose \(\va^{k, L} = (\vA_{2:, 1}^{k, L})^{\top} \in \R^{N}\). Notice that this vector \(\va^{k, L}\), which we label as the ``\textit{saliency vector} at the \(k\th\) attention head at layer \(L\),'' has a value for every patch, \(1, \dots, N\), and we use this value to describe how relevant each patch is towards the global information. In particular for visualization's sake we create a new image where each patch is replaced by its corresponding value in the saliency vector, showcasing the contribution of each patch; we call this image the ``\textit{saliency map} at the \(k\th\) attention head at layer \(L\)''. \Cref{fig:attention_maps_saliency_dino} show visualizations of saliency maps in DINO and our simplified DINO; note that selected saliency maps highlight the relevant parts of the input image.
 \begin{figure}
     \begin{subfigure}[t]{0.45\textwidth}
         \centering 
@@ -455,7 +513,7 @@ Another bottleneck to remove from deep learning models, specifically transformer
 \end{equation}
 It turns out that this architecture is \textit{also} viable, though the depth of the network needs to be much deeper in order to achieve equivalent performance as the usual CRATE or transformer architecture (cf Table \DP{TODO}).
 
-\section{Masked  Autoencoding for Text and Image}\label{sec:image_completion}
+\section{Masked Autoencoding for Imagery Data}\label{sec:image_completion}
 
 The second application we discuss is \textit{nonlinear image completion}, which is a direct generalization of the low-rank matrix completion problem discussed in Chapter \ref{ch:classic}. Recall that the setup is as follows:
 \begin{itemize}
@@ -491,9 +549,12 @@ As before, the resulting CRATE-MAE model is both interpretable, performant, and 
 \end{equation}
 That is, we average the features \(\vZ = f(\vX)\) as \(\vZ(N^{-1}\vone) = \frac{1}{N}\sum_{i = 1}^{N}\vz_{i}\) to get a ``summary representation'', then use a linear classifier to classify the input data using this summary. We train the classifier via the cross-entropy loss. It is also possible to modify the training procedure to use a class token, as in the previous section. In Table \DP{TODO} we show that CRATE-MAE performs well by the linear probing metric compared to traditional architectures while being much more parameter-efficient (along with being white-box).
 
+\section{Masked Completion for Text Data}\label{sec:text_completion}
 
 \section{Closed-Loop Transcription for Images}\label{sec:ctrl}
 
+
+\section{Tips for Training Large-Scale Models}\label{sec:training_tips}
 
 
 %%% START JOURNAL DUMP
