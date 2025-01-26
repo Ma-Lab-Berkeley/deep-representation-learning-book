@@ -122,13 +122,13 @@ There are two types of views we want to use, depicted in \Cref{fig:dino_local_gl
     \item and \textit{local views}, which are random resized crops with area percentage parameter \(p_{\loc} \in [0, 1]\) and output shape \((C, S_{\loc}, S_{\loc})\). Here \(p_{\loc} < p_{\glo}\) and \(S_{\loc} < S_{\glo}\).
 \end{itemize}
 
-DINO desires that the aggregate features \(\vz_{\theta}(\vX_{v}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{v})\) of all views \(\vX_{v} := v(\vX)\) of an input image \(\vX\) are consistent with each other. DINO does this by using a \textit{``DINO head''}\footnote{Note that \(h_{\vW, \vmu}\) is the task-specific head, which in \Cref{sec:experiment_setup} is parameterized only by \(\theta\) as opposed to any specific parameters, but since we use two invocations of \(h\) with different values of the second parameter, we keep the specified notation.} \(h_{\vW, \vmu}\), parameterized by a matrix \(\vW \in \R^{m \times d}\) and a vector \(\vmu \in \R^{m}\), to extract a probability vector \(\vp_{\theta, \vW, \vmu}(\vX_{v}) := h_{\vW, \vmu}(\vz_{\theta}(\vX_{v}))\) from the aggregate feature \(\vz_{\theta}(\vX_{v})\), using the following simple recipe:
+DINO desires that the aggregate features \(\vz_{\theta}(\vX_{v}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{v})\) of all views \(\vX_{v} := v(\vX)\) of an input image \(\vX\) are consistent with each other. DINO does this by using a \textit{``DINO head''}\footnote{Note that \(h_{\vW, \vmu}\) is the task-specific head, which in \Cref{sec:experiment_setup} is parameterized only by \(\theta\) as opposed to any specific parameters, but since we use two invocations of \(h\) with different values of the second parameter, we keep the specified notation.} \(h_{\vW, \vmu}\), parameterized by a matrix \(\vW \in \R^{s \times d}\) and a vector \(\vmu \in \R^{s}\), to extract a probability vector \(\vp_{\theta, \vW, \vmu}(\vX_{v}) := h_{\vW, \vmu}(\vz_{\theta}(\vX_{v}))\) from the aggregate feature \(\vz_{\theta}(\vX_{v})\), using the following simple recipe:
 \begin{equation}
     h_{\vW, \vmu}(\vz) := \softmax([\vW\vz - \vmu]/\tau), \qquad \forall \vz \in \R^{d},
 \end{equation}
-where the \(\softmax \colon \R^{m} \to \Delta_{m}\) function is defined by 
+where the \(\softmax \colon \R^{s} \to \Delta_{s}\) function is defined by 
 \begin{equation}
-    \softmax\rp{\mat{x_{1} \\ \vdots \\ x_{m}}} := \frac{1}{\sum_{i = 1}^{m}e^{x_{i}}}\mat{e^{x_{1}} \\ \vdots \\ e^{x_{m}}}
+    \softmax\rp{\mat{x_{1} \\ \vdots \\ x_{s}}} := \frac{1}{\sum_{i = 1}^{s}e^{x_{i}}}\mat{e^{x_{1}} \\ \vdots \\ e^{x_{s}}}
 \end{equation}
 and \(\tau > 0\) is a ``temperature'' parameter which controls the entropy of the softmax's output.
 
@@ -176,15 +176,15 @@ For the architecture, we use a standard vision transformer. Here is how such an 
     \begin{itemize}
         \item \(\vW^{\emb} \in \R^{d \times D}\) is a matrix which projects each patch vector to a token feature.
         \item \(\vz_{\cls}^{1} \in \R^{d}\) is a so-called \textit{class token} or \textit{register token}. The class token heuristically holds global information of the whole data and is used for downstream tasks. In the framework of compressive deep networks from \Cref{ch:representation}, we expect that the class token is projected onto the same subspaces as the salient or semantically relevant tokens during the progression of the forward pass.
-        \item \(\vE^{\pos} \in \R^{d \times n}\) is a so-called \textit{positional encoding} which distinguishes different tokens from each other. That is, token features should have positional information, so that the overall map \(f^{\pre}\) is not invariant to permutations of the patches, and \(\vE^{\pos}\) inserts this positional information. 
+        \item \(\vE^{\pos} \in \R^{d \times N}\) is a so-called \textit{positional encoding} which distinguishes tokens of different patches from each other. That is, token features should have positional information, so that the overall map \(f^{\pre}\) is not invariant to permutations of the patches, and \(\vE^{\pos}\) inserts this positional information. 
         \begin{itemize}
             \item In this DINO case, where the transformer receives differently-sized images, we learn a positional encoding for the largest size received during training, and interpolate to get the positional encodings for smaller-sized inputs.
         \end{itemize}
     \end{itemize}
 \end{enumerate}
 Thus, in the end we have 
-\begin{equation}
-    f_{\theta}^{\emb}(\vX) := \mat{\vz_{\cls}^{1}, \vW^{\emb}f^{\tok}(\vX)} + \vE^{\pos}.
+\begin{equation}\label{eq:definition_of_embedding_module}
+    f_{\theta}^{\emb}(\vX) := \mat{\vz_{\cls}^{1}, \vW^{\emb}f^{\tok}(\vX) + \vE^{\pos}}.
 \end{equation}
 All parameters \(\vz_{\cls}^{1}, \vW^{\emb}, \vE^{\pos}\) are contained in the parameter set \(\theta\).
 
@@ -269,12 +269,10 @@ While it is easy to reason about \eqref{eq:dino_loss_teacherstudent}, it is impo
     as well as its gradients with respect to \(\theta_{\student}\) and \(\vW\), which should be computed under the assumption that \(\theta_{\teacher}\) and \(\vmu\) are constants --- namely that they are \textit{detached from the computational graph} and not dependent on \(\theta_{\student}\) and \(\vW\).
     \item Update the student parameters \(\theta_{\student}\) and \(\vW\) via an iterative gradient-based optimization algorithm, and update \(\theta_{\teacher}\) and \(\vmu\) via an exponential moving average with decay parameter \(\nu^{(k)}\), i.e., 
     \begin{align}
-        \theta_{\student}^{(k + 1)}
-        &= \textsc{OptimizationUpdate}^{(k)}(\theta_{\student}^{(k)}; \nabla_{\theta_{\student}}\hat{L}_{\dino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)}, \vW^{(k)}, \vmu^{(k)})) \\
+        (\theta_{\student}^{(k + 1)}, \vW^{(k + 1)})
+        &= \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}, \vW^{(k)}; \nabla_{(\theta_{\student}, \vW^{(k)})}\hat{L}_{\dino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)}, \vW^{(k)}, \vmu^{(k)})) \\
         \theta_{\teacher}^{(k + 1)}
         &= \nu^{(k)}\theta_{\teacher}^{(k)} + (1 - \nu^{(k)})\theta_{\student}^{(k + 1)} \\
-        \vW^{(k + 1)}
-        &= \textsc{OptimizationUpdate}^{(k)}(\vW^{(k)}; \nabla_{\vW}\hat{L}_{\dino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)}, \vW^{(k)}, \vmu^{(k)})) \\
         \vmu^{(k + 1)}
         &= \nu^{(k)}\vmu^{(k)} + (1 - \nu^{(k)})\cdot\frac{1}{BM_{\glo}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\vW^{(k)}\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}),
     \end{align}
@@ -305,7 +303,7 @@ Thus we can use a simpler version of the DINO training pipeline to optimize SimD
     \item Update the student parameters \(\theta_{\student}\) via an iterative gradient-based optimization algorithm, and update \(\theta_{\teacher}\) via an exponential moving average with decay parameter \(\nu^{(k)}\), i.e., 
     \begin{align}
         \theta_{\student}^{(k + 1)}
-        &= \textsc{OptimizationUpdate}^{(k)}(\theta_{\student}^{(k)}; \nabla_{\theta_{\student}}\hat{L}_{\simdino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)})) \\
+        &= \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}; \nabla_{\theta_{\student}}\hat{L}_{\simdino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)})) \\
         \theta_{\teacher}^{(k + 1)}
         &= \nu^{(k)}\theta_{\teacher}^{(k)} + (1 - \nu^{(k)})\theta_{\student}^{(k + 1)}.
     \end{align}
@@ -334,13 +332,13 @@ For an input \(\vX\) we write \(\vX_{\evaluation} := v_{\evaluation}(\vX)\). Her
 
 The first, and most architecture-agnostic, way to evaluate an encoder model \(\vX \mapsto \vz_{\theta}(\vX)\) is to employ \textit{linear probing}. Linear probing is, in a sentence, running logistic regression on the aggregate features computed by the encoder. This tells us how much semantic information exists in the representations, as well as how easily extractable this information is. (That is: to what extent do the features of images with different semantics live on different subspaces of the feature space?)
 
-More formally, let us suppose that we want to evaluate the quality and faithfulness of the features of the encoder on image-label data \((\vX, \vy)\), where there are \(m\) classes and \(\vy \in \{0, 1\}^{m}\) is a ``one-hot encoding'' (namely, zeros in all positions except a \(1\) in the \(i\th\) position if \(\vX\) is in the \(i\th\) class). One way to do this is to solve the logistic regression problem 
+More formally, let us suppose that we want to evaluate the quality and faithfulness of the features of the encoder on image-label data \((\vX, \vy)\), where there are \(Q\) classes and \(\vy \in \{0, 1\}^{N_{\cls}}\) is a ``one-hot encoding'' (namely, zeros in all positions except a \(1\) in the \(i\th\) position if \(\vX\) is in the \(i\th\) class). One way to do this is to solve the logistic regression problem 
 \begin{equation}\label{eq:linear_probing}
-    \min_{\vW \in \R^{m \times d}}\Ex[\CE(\vy, \vW \vz_{\theta}(\vX_{\evaluation}))].
+    \min_{\vW \in \R^{N_{\cls} \times d}}\Ex[\CE(\vy, \vW \vz_{\theta}(\vX_{\evaluation}))].
 \end{equation}
-Alternatively, if we have labeled data \(\{(\vX_{b}, \vy_{b})\}_{b = 1}^{B}\), we can solve the \textit{empirical} logistic regression problem (akin to \eqref{eq:dino_loss} vs.~\eqref{eq:dino_loss_empirical}) given by 
+More practically, if we have labeled data \(\{(\vX_{b}, \vy_{b})\}_{b = 1}^{B}\), we can solve the \textit{empirical} logistic regression problem (akin to \eqref{eq:dino_loss} vs.~\eqref{eq:dino_loss_empirical}) given by 
 \begin{equation}\label{eq:linear_probing_empirical}
-    \min_{\vW \in \R^{m \times d}}\frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}, \vW \vz_{\theta}(\vX_{b, \evaluation})).
+    \min_{\vW \in \R^{N_{\cls} \times d}}\frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}, \vW \vz_{\theta}(\vX_{b, \evaluation})).
 \end{equation}
 This problem is a convex optimization problem in \(\vW\), and thus can be solved efficiently via (stochastic) gradient descent or a litany of other algorithms. This linear probe, together with the encoder, may be used as a classifier, and we can evaluate the classification accuracy. The usual practice is to train the model first on a large dataset (such as ImageNet-1K), then train the linear probe on a dataset (such as the training dataset of CIFAR-10), and evaluate it on a third (``holdout'') dataset which is drawn from the same distribution as the second one (such as the evaluation dataset of CIFAR-10).
 
@@ -390,26 +388,26 @@ Of course, we also wish to have quantitative evaluations of the power of the att
 
 In the previous section, we simplified an overly complex learning objective using our intuition of representation learning through the lens of compression. However, many of the most popular learning procedures are incredibly simple. In these cases, it is difficult to further simplify the objective. Thus, in this and future sections, we will focus on principled ways to modify the \textit{deep network architectures} for a variety of tasks.
 
-Let us first start with arguably the most classical task in machine learning: \textit{image classification}, which is often used as a standard task to evaluate pattern recognition algorithms or deep network architectures. 
+Let us first start with arguably the most classical task in machine learning: \textit{image classification}, which is often used as a standard task to evaluate pattern recognition algorithms or deep network architectures. From our discussion of white-box architectures in \Cref{ch:representation}, we only need a semantically meaningful task to learn good representations with white-box architectures. We will validate this idea in this section.
 
-First, the dataset stays largely the same as \Cref{sub:contrastive_learning_data}. Both the training and test data consist of labeled images, i.e., image-label pairs \((\vX, \vy) \in \R^{C \times H \times W} \times \{0, 1\}^{m}\). We still apply various data augmentations (e.g., rotations, translations, flips, etc.) to each sample in each new batch. 
+First, the dataset stays largely the same as \Cref{sub:contrastive_learning_data}. Both the training and test data consist of labeled images, i.e., image-label pairs \((\vX, \vy) \in \R^{C \times H \times W} \times \{0, 1\}^{N_{\cls}}\). We still apply various data augmentations (e.g., rotations, translations, flips, etc.) to each sample in each new batch. 
 
 \DP{Remember to put this elsewhere}
-For training, we consider a single class of views \(v_{r}\) of the data, which performs a random resized crop of the input data such that the crop's area is \(p_{\rsz} \approx 1\) of the area of the input image, and resizes the crop to a size \((C, S_{\rsz}, S_{\rsz}) \). We define \(\vX_{r} := v_{r}(\vX) \in \R^{C \times S_{\rsz} \times S_{\rsz}}\). For evaluation, we consider an evaluation view \(v_{\evaluation}\) which operates via the method delineated in \Cref{sub:contrastive_learning_evals} (using the final crop size \((C, S_{\rsz}, S_{\rsz})\)). As before, we define \(\vX_{\evaluation} := v_{\evaluation}(\vX) \in \R^{C \times S_{\rsz} \times S_{\rsz}}\).
+For training, we consider a single class of views \(v_{r}\) of the data, which performs a random resized crop of the input data such that the crop's area is \(p_{\rsz} \approx 1\) of the area of the input image, and resizes the crop to a size \((C, S_{\rsz}, S_{\rsz}) \). We define \(\vX_{r} := v_{r}(\vX) \in \R^{C \times S_{\rsz} \times S_{\rsz}}\). 
 
 \subsection{Task and Objective} \label{sub:image_classification_objective}
 
-Unlike before, our task is not just to learn a good representation of the data, but also simultaneously build a classifier. Formally, we have labeled data pairs \((\vX, \vy)\), where \(\vy \in \{0, 1\}^{m}\) is a one-hot vector denoting the class membership of \(\vX\). We consider a view \(v_{r}\) of the input data \(\vX\), which is a \textit{random resized crop} (cf \Cref{sub:contrastive_learning_objective}) of the input data \(\vX\): it crops a randomly chosen rectangular region from \(\vX\) whose area is a fixed percentage \(p_{\rsz} \approx 1\) of the area of \(\vX\), then resizes this crop to size \((C, S_{\rsz}, S_{\rsz})\) (where \(C\) is the number of channels of \(\vX\), and \(S_{\rsz}\) is a fixed size). We want to jointly train a feature mapping \((f_{\theta}, f_{\theta}^{\ext})\) and a \textit{classification head} \(h_{\theta}\), defined as follows:
+Unlike before, our task is not just to learn a good representation of the data, but also simultaneously build a classifier. Formally, we have labeled data pairs \((\vX, \vy)\), where \(\vy \in \{0, 1\}^{N_{\cls}}\) is a one-hot vector denoting the class membership of \(\vX\). We consider a view \(v_{r}\) of the input data \(\vX\), which is a \textit{random resized crop} (cf \Cref{sub:contrastive_learning_objective}) of the input data \(\vX\): it crops a randomly chosen rectangular region from \(\vX\) whose area is a fixed percentage \(p_{\rsz} \approx 1\) of the area of \(\vX\), then resizes this crop to size \((C, S_{\rsz}, S_{\rsz})\) (where \(C\) is the number of channels of \(\vX\), and \(S_{\rsz}\) is a fixed size). We want to jointly train a feature mapping \((f_{\theta}, f_{\theta}^{\ext})\) and a \textit{classification head} \(h_{\theta}\), defined as follows:
 \begin{equation}
     h_{\theta}(\vz) := \softmax(\vW^{\head}\vz + \vb^{\head}), \qquad  \forall \vz \in \R^{d}
 \end{equation}
-where \((\vW^{\head}, \vb^{\head}) \in \R^{m \times d} \times \R^{m}\) are trainable parameters in the parameter set \(\theta\), such that the map \(\vX_{r} \mapsto \hat{\vy}_{\theta}(\vX_{r}) := h_{\theta}(\vz_{\theta}(\vX_{r}))\) predicts a smoothed label for the view \(\vX_{r} = v_{r}(\vX)\) of the input \(\vX\). The learning problem attempts to minimize the distance between \(\hat{\vy}_{\theta}\) and \(\vy\) measured through cross-entropy:
+where \((\vW^{\head}, \vb^{\head}) \in \R^{N_{\cls} \times d} \times \R^{N_{\cls}}\) are trainable parameters in the parameter set \(\theta\), such that the map \(\vX_{r} \mapsto \hat{\vy}_{\theta}(\vX_{r}) := h_{\theta}(\vz_{\theta}(\vX_{r}))\) predicts a smoothed label for the view \(\vX_{r} = v_{r}(\vX)\) of the input \(\vX\). The learning problem attempts to minimize the distance between \(\hat{\vy}_{\theta}\) and \(\vy\) measured through cross-entropy:
 \begin{equation}\label{eq:classification_ce_loss}
-    \min_{\theta}L_{\CE}(\theta) := \Ex[\CE(\vy, \hat{\vy}_{\theta}(\vX_{r}))].
+    \min_{\theta}\bc{L_{\CE}(\theta) := \Ex[\CE(\vy, \hat{\vy}_{\theta}(\vX_{r}))]}.
 \end{equation}
 
 
-\subsection{The CRATE Architecture}\label{sub:image_classification_crate}
+\subsection{The CRATE Architecture}\label{sub:image_classification_architecture}
 
 The architecture that we use is the CRATE architecture, described in some level of detail in \Cref{ch:representation}. The overall setup is similar to that of the regular transformer in \Cref{sub:contrastive_learning_architecture}, with a few changes. While the embedding step is the same as both DINO and SimDINO in \Cref{sub:contrastive_learning_architecture}, the feature extraction step is the same as SimDINO in \Cref{sub:contrastive_learning_architecture} as it just extracts the feature corresponding to the class token, and the classification head is described in \Cref{sub:image_classification_objective}, the backbone architecture is different. Each layer takes the form
 \begin{align}
@@ -439,25 +437,25 @@ We call this architecture CRATE. CRATE models, on top of being interpretable, ar
 
 \subsection{Optimization} \label{sub:image_classification_optimization}
 
-We train our classifier using a simple end-to-end stochastic optimization procedure. At each step \(t\):
+We train our classifier using a simple end-to-end stochastic optimization procedure, where we sub-sample data and views, compute the average loss and its gradient over these samples, and use an optimization algorithm to change the parameters. At each timestep \(k\), we:
 \begin{itemize}
-    \item Subsample \(B\) different labeled samples \(\{(\vX_{b}^{t}, \vy_{b}^{t})\}_{b = 1}^{B} \subseteq \cI \times \{0, 1\}^{m}\).
-    \item For each labeled sample \((\vX_{b}^{t}, \vy_{b}^{t})\), compute a different randomized resized crop \(v_{b, r}^{t}\) and apply it to \(\vX_{b}^{t}\) to get \(\vX_{b, r}^{t} := v_{b, r}^{t}(v\X_{b}^{t})\).
-    \item Compute the smoothed pseudo-labels \(\hat{\vy}_{\theta}(\vX_{b, r}^{t})\) using the classifier \(\hat{\vy}_{\theta}\).
+    \item Subsample \(B\) different labeled samples \(\{(\vX_{b}^{(k)}, \vy_{b}^{(k)})\}_{b = 1}^{B} \subseteq \cI \times \{0, 1\}^{N_{\cls}}\).
+    \item For each labeled sample \((\vX_{b}^{(k)}, \vy_{b}^{(k)})\), compute a different randomized resized crop \(v_{b, r}^{(k)}\) and apply it to \(\vX_{b}^{(k)}\) to get \(\vX_{b, r}^{(k)} := v_{b, r}^{(k)}(\X_{b}^{(k)})\).
+    \item Compute the smoothed pseudo-labels \(\hat{\vy}_{\theta}(\vX_{b, r}^{(k)}) := (h_{\theta} \circ f_{\theta}^{\ext} \circ f_{\theta})(\vX_{b, r}^{(k)})\).
     \item Form the surrogate stochastic loss 
     \begin{equation}
-        \hat{L}_{\CE}^{t}(\theta) := \frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}^{t}, \hat{\vy}_{\theta}(\vX_{b, r}^{t})).
+        \hat{L}_{\CE}^{(k)}(\theta) := \frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}^{(k)}, \hat{\vy}_{\theta}(\vX_{b, r}^{(k)})).
     \end{equation}
     \item Compute one step of an optimization algorithm on \(\theta\), giving the following iteration:
     \begin{equation}
-        \theta^{t + 1} := \textsc{OptimizationUpdate}^{t}(\theta^{t}, \nabla_{\theta}\hat{L}_{\CE}^{t}(\theta^{t})).
+        \theta^{(k + 1)} := \textsc{OptUpdate}^{(k)}(\theta^{(k)}; \nabla_{\theta}\hat{L}_{\CE}^{(k)}(\theta^{(k)})).
     \end{equation}
 \end{itemize}
 
 
 \subsection{Evaluation Setup} \label{sub:image_classification_evals}
 
-We use the same evaluation procedure as \Cref{sub:contrastive_learning_evals}. The main difference is that our evaluation view \(v_{\evaluation}\) has output with shape \((C, S_{\rsz}, S_{\rsz})\), since the input during training is of the same shape.
+We use the same evaluation procedure as \Cref{sub:contrastive_learning_evals}, with \(S_{\rsz}\) substituted for \(S_{\glo}\). To summarize, for all evaluations we use an evaluation view \(v_{\evaluation}\) which resizes the input proportionally so that the smaller edge is \(S_{\evaluation}\) pixels, then resizes again to a square image of side length \(S_{\rsz}\). We can then do linear probing and attention map visualization.
 
 \subsection{Experimental Setup and Results}\label{sub:image_classification_experiments}
 
@@ -493,15 +491,15 @@ Thus if we want to use a wide dictionary, we need ISTA to perform \textit{overco
 \end{equation}
 where the \(\ISTA_{\theta}^{\ell}\) function is defined as (by an abuse of notation from earlier sections)
 \begin{equation}
-    \ISTA_{\theta}^{\ell}(\vZ \mid \vY) := \ReLU(\vZ - \beta (\vD^{\ell})^{\top}(\vD^{\ell}\vZ - \vY) + \beta \lambda \vone_{m}\vone_{n}^{\top})
+    \ISTA_{\theta}^{\ell}(\vZ \mid \vY) := \ReLU(\vZ - \beta (\vD^{\ell})^{\top}(\vD^{\ell}\vZ - \vY) + \beta \lambda \vone_{s}\vone_{n}^{\top})
 \end{equation}
 but rather the following iteration:
 \begin{equation}
-    \vZ_{\theta}^{\ell + 1} = \vA_{\theta}^{\ell, T}; \qquad \vA_{\theta}^{\ell, t + 1} = \ISTA_{\theta}^{\ell}(\vA_{\theta}^{\ell, t} \mid \vZ_{\theta}^{\ell + 1/2}) \quad \forall 0 \leq t < T; \qquad \vA_{\theta}^{\ell, 0} = \vzero,
+    \vZ_{\theta}^{\ell + 1} = \vA_{\theta}^{\ell, T}; \qquad \vA_{\theta}^{\ell, t + 1} = \ISTA_{\theta}^{\ell}(\vA_{\theta}^{\ell, t} \mid \vZ_{\theta}^{\ell + 1/2}) \quad \forall 0 \leq t < T; \qquad \vA_{\theta}^{\ell, 0} = \vzero_{s \times n},
 \end{equation}
-i.e., running proximal gradient on the LASSO objective for \(T \geq 1\) steps in the forward pass at each layer, initialized at \(\vzero\). In this circumstance, the dictionary can be as wide as needed, i.e., \(\vD^{\ell} \in \R^{m \times n}\) where \(m \geq d\) (usually one takes \(m = 4d\) in practice). 
+i.e., running proximal gradient on the LASSO objective for \(T \geq 1\) steps in the forward pass at each layer, initialized at \(\vzero_{s \times n}\). In this circumstance, the dictionary can be as wide as needed, i.e., \(\vD^{\ell} \in \R^{s \times d}\) where \(s \geq d\) (usually one takes \(s = 4d\) in practice). 
 
-However, this presents an empirical problem. Using the above configuration, if \(\vZ^{\ell + 1/2} \in \R^{d \times n}\) then \(\vZ^{\ell + 1} \in \R^{m \times n}\), which can have arbitrarily large feature dimension. In practice, we want the feature dimension at each layer to be the same. So this sets up a practical trichotomy for designing the network, namely, we \textit{cannot} have \textit{all} of the following desiderata:
+However, this presents an empirical problem. Using the above configuration, if \(\vZ^{\ell + 1/2} \in \R^{d \times n}\) then \(\vZ^{\ell + 1} \in \R^{s \times n}\), which can have arbitrarily large feature dimension. In practice, we want the feature dimension at each layer to be the same. So this sets up a practical trichotomy for designing the network, namely, we \textit{cannot} have \textit{all} of the following desiderata:
 \begin{enumerate}
     \item The feature dimension at each layer is the same.
     \item The dictionary is wide, i.e., overcomplete.
@@ -538,39 +536,78 @@ It turns out that this architecture is \textit{also} viable, though the depth of
 
 \section{Masked Autoencoding for Imagery Data}\label{sec:image_completion}
 
-The second application we discuss is \textit{nonlinear image completion}, which is a direct generalization of the low-rank matrix completion problem discussed in Chapter \ref{ch:classic}. Recall that the setup is as follows:
+The second application we discuss is \textit{nonlinear image completion}, also known as \textit{masked autoencoding} (MAE), which is a direct generalization of the low-rank matrix completion problem discussed in \Cref{ch:classic}. Masked autoencoding, since its introduction in the deep learning context by \citet{he2022masked} has been a staple and simple self-supervised representation learning method, which aims to endow each patch feature within \(\vZ_{\theta}\) with aggregate information as well as information about its neighbors, such that both the patch feature and aggregate features are rich sources of information for the whole sample. 
+
+The dataset is kept to be the same imagery datasets as discussed in \Cref{sub:contrastive_learning_data}. As usual, we still apply data augmentations to each sample in each new batch. 
+
+\subsection{Task and Objective}\label{sub:image_completion_objective}
+
+As the name suggests, masked autoencoding involves a view \(v_{m}\) which, given an input, performs a random resized crop to turn the input image into a square image of size \((C, S_{\mask}, S_{\mask})\), then \textit{masks} (i.e., sets to zero) a fixed percentage \(p_{\mask} \in [0, 1]\) of pixels in the input. For efficiency reasons\footnote{The original implementation of MAE by \citet{he2022masked} embeds the whole image, \textit{removes} the tokens that would be masked, feeds the resulting token set through the encoder, adds back learned placeholder tokens in the masked spots and adds back the appropriate positional encoding, and feeds the resulting token set through the decoder to get the autoencoding prediction. This is more efficient since the encoder has fewer tokens to go through, but conceptually is the same as the method discussed in the text, and the resulting models' performance in the masked autoencoding task and downstream evaluations is very similar.}, the masking is done patch-wise, i.e.,  after embedding the whole image, \(p_{\mask}\) percentage of \textit{patches} are set to zero. The goal of MAE is to train an encoder \(f_{\theta} \colon \cI \to \R^{d \times *}\) and a decoder \(g_{\eta} \colon \R^{d \times *} \to \cI\) which can reconstruct an input from its masking, i.e., writing \(\hat{\vX}_{\theta, \eta} := g_{\eta} \circ f_{\theta}\), we have
+\begin{equation}
+    \min_{\theta, \eta}\bc{L_{\mathrm{MAE}}(\theta, \eta) := \Ex\norm{\hat{\vX}_{\theta, \eta}(\vX_{m}) - \vX}_{F}^{2}}
+\end{equation}
+Essentially this means that the features \(\vZ_{\theta}(\vX_{m})\) of the view \(\vX_{m} := v_{m}(\vX)\) must contain information about the \textit{masked patches} as well as the existing patches. From the perspective of the compression-based white-box models in \Cref{ch:representation}, if a white-box autoencoder  \((f_{\theta}, g_{\eta})\) succeeds at this task, it means that the learned subspaces and dictionaries perform a \textit{redundant} encoding of the data such that it can reconstruct missing parts of the data from encoded other parts of the data. This means that information about each patch is stored in other patches. Therefore, each patch feature should contain both information about the patch and information about the statistics of the whole image. Thus, again, we expect that the representations should contain both local and global semantically relevant information, and the therefore representations of different patches with similar local and global information should be related (i.e., on the same subspace or encoded together by a dictionary).
+
+\subsection{Architecture}\label{sub:image_completion_architecture}
+
+We use a CRATE encoder and decoder, though of course it is possible to use a regular transformer encoder and decoder. Details follow now.
+
+\paragraph{The encoder.} The encoder is the same as the CRATE encoder in \Cref{sub:image_classification_architecture}, with the caveat that there is no feature extract \(f_{\theta}^{\ext}\). However, both the embedding map \(f_{\theta}^{\emb}\) and the backbone map \(f_{\theta}^{\backbone}\) are the same.
+
+\paragraph{The decoder backbone.} The decoder backbone is the CRATE decoder described in \Cref{ch:autoencoding}. For completeness' sake, we describe it now. Given a feature sequence \(\vZ_{\theta}(\vX) := f_{\theta}(\vX) \in \R^{d \times *}\), we can process it using the decoder backbone \(g_{\eta}^{\backbone}\) as follows. The function \(g_{\eta}^{\backbone}\) is composed of \(L\) layers \(g_{\eta}^{\ell}\), i.e.,
+\begin{equation}
+    g_{\eta}^{\backbone} = g_{\eta}^{L} \circ \cdots \circ g_{\eta}^{1}.
+\end{equation}
+The layer \(g_{\eta}^{\ell}\) has the following implementation. First, define \(\tilde{\vZ}_{\theta, \eta}^{1}(\vX) := \vZ_{\theta}(\vX)\). Then, we obtain
+\begin{align}
+    \tilde{\vZ}_{\theta, \eta}^{\ell + 1/2}(\vX) 
+    &= [\tilde{\vD}^{\ell}]^{\top}\LN_{\eta}^{1, \ell}(\tilde{\vZ}_{\theta, \eta}^{\ell}(\vX)) \\ 
+    \tilde{\vZ}_{\theta, \eta}^{\ell + 1}(\vX)
+    &= \tilde{\vZ}_{\theta, \eta}^{\ell + 1/2}(\vX) - \MSSA_{\eta}^{\ell}(\LN_{\eta}^{2, \ell}(\tilde{\vZ}_{\theta, \eta}^{\ell + 1/2}))
+\end{align}
+and \(g_{\eta}^{\ell}\) is defined such that \(g_{\eta}^{\ell}(\tilde{\vZ}_{\theta, \eta}^{\ell}) := \tilde{\vZ}_{\theta, \eta}^{\ell + 1}(\vX)\). Here, the relevant concept is that \(g_{\eta}^{\ell}\) should learn an approximate inverse of \(f_{\theta}^{L + 1 - \ell}\), as discretizations of a forward- and reverse-time diffusion process, respectively. In particular, \(\tilde{\vD}^{\ell}\) should approximate \(\vD^{L + 1 - \ell}\), and similarly the \(\MSSA_{\eta}^{\ell}\) parameters should be similar to the parameters of \(\MSSA_{\theta}^{L + 1 - \ell}\). The output is \(\tilde{\vZ}_{\theta, \eta} := \tilde{\vZ}_{\theta, \eta}^{L + 1}\).
+
+\paragraph{The un-embedding module.} To transform \(\tilde{\vZ}_{\theta, \eta}(\vX)\) back into an estimate for \(\vX\), we need to undo the effect of the embedding module \(f_{\theta}^{\emb}\) using the unembedding module \(g_{\eta}^{\unemb}\). As such, harkening back to the functional form of the embedding module in \eqref{eq:definition_of_embedding_module}, i.e.,
+\begin{equation}
+    f_{\theta}^{\emb}(\vX) := \mat{\vz_{\cls}^{1}, \vW^{\emb}f^{\tok}(\vX) + \vE^{\pos}}
+\end{equation}
+it implies that our inverse operation \(g_{\eta}^{\unemb}\) looks like the following:
+\begin{equation}
+    g_{\eta}^{\unemb}(\tilde{\vZ}) := g_{\eta}^{\unemb}(\mat{\tilde{\vz}^{1}, \dots, \tilde{\vz}^{n}}) = g^{\untok}(\vW^{\unemb}([\tilde{\vz}^{2}, \dots, \tilde{\vz}^{n}] - \tilde{\vE}^{\pos})),
+\end{equation}
+where \(g^{\untok}\) does the inverse operation of the unrolling and flattening operation that \(f^{\tok}\) does.\footnote{Again, the ``inverse positional encoding'' \(\tilde{\vE}^{\pos}\) is learned for a large input, and for smaller inputs may be interpolated. It is even possible to directly set \(\tilde{\vE}^{\pos}\) equal to the positional encoding \(\vE^{\pos}\) and use the same interpolated positional encodings for each input in both the encoder and decoder.}
+
+This architecture is a white-box autoencoder \((f_{\theta}, g_{\eta})\) where (recall) \(f_{\theta} = f_{\theta}^{\backbone} \circ f_{\theta}^{\emb}\) and \(g_{\eta} = g_{\eta}^{\unemb} \circ g_{\eta}^{\backbone}\). In particular, we can use it to compute an estimate for a masked view \(\hat{\vX}_{\theta, \eta}(\vX_{m}) = (g_{\eta} \circ f_{\eta})(\vX_{m})\) which should approximately equal \(\vX\) itself.
+
+\subsection{Optimization}\label{sub:image_completion_optimization}
+
+As in \Cref{sub:image_classification_optimization}, we use a simple optimization setup: we sample images and masks, compute the loss on those samples and the gradients of this loss, and update the parameters using a generic optimization algorithm and the aforementioned gradients. For each timestep \(k\), we:
 \begin{itemize}
-    \item A pre-processing layer, which linearly projects the input data and adds a lelarnable \textit{positional embedding} to distinguish different token positions.
-    \item \(L\) different CRATE encoding layers, whose design is specified in Chapter \ref{ch:representation}. 
-    \item \(L\) different CRATE decoding layers, whose design is specified in Chapter \ref{ch:consistent}.
-    \item A post-processing layer, which projects the decoded features into image space.
+    \item Subsample \(B\) different samples \(\{\vX_{b}^{(k)}\}_{b = 1}^{B} \subseteq \cI\).
+    \item For each sample \(\vX_{b}^{(k)}\), compute a different randomized resized crop and mask \(v_{b, m}^{(k)}\) and apply it to \(\vX_{b}^{(k)}\) to get \(\vX_{b, m}^{(k)} := v_{b, m}^{t}(\X_{b}^{(k)})\).
+    \item Compute the estimated autoencoding \(\hat{\vX}_{\theta, \eta}(\vX_{b, r}^{(k)}) := (g_{\eta} \circ f_{\theta})(\vX_{b, r}^{(k)})\).
+    \item Form the surrogate stochastic loss 
+    \begin{equation}
+        \hat{L}_{\mathrm{MAE}}^{(k)}(\theta, \eta) := \frac{1}{B}\sum_{b = 1}^{B}\norm{\hat{\vX}_{\theta, \eta}(\vX_{b, r}^{(k)}) - \vX_{b}^{(k)}}_{F}^{2}.
+    \end{equation}
+    \item Compute one step of an optimization algorithm on \((\theta, \eta)\), giving the following iteration:
+    \begin{equation}
+        (\theta^{(k + 1)}, \eta^{(k + 1)}) := \textsc{OptUpdate}^{(k)}(\theta^{(k)}, \eta^{(k)}; \nabla_{(\theta, \eta)}\hat{L}_{\mathrm{MAE}}^{(k)}(\theta^{(k)}, \eta^{(k)})).
+    \end{equation}
 \end{itemize}
-For both encoder and decoder layers, as in the previous setting, we replace the MSSA block's output matrix with a trainable output matrix.
 
-Mathematically we have 
-\begin{equation}
-    \hat{\vX} = (g \circ f)(\vX) = (f^{\mathrm{post}} \circ \tilde{f}^{L - 1} \circ \cdots \circ \tilde{f}^{0} \circ f^{L} \circ \cdots \circ f^{1} \circ f^{\mathrm{enc}})(\vX) 
-\end{equation}
-where \(f^{\ell}\) are encoder layers and \(\tilde{f}^{\ell}\) are decoder layers, and 
-\begin{equation}
-    f^{\mathrm{pre}}(\vX) = \vW^{\mathrm{pre}}\vX + \vE^{\mathrm{pos}}, \qquad f^{\mathrm{post}}(\vZ) = \vW^{\mathrm{post}}\vX
-\end{equation}
-Here, the parameters may be learned by a variety of methods which encourage certain representations \(\vZ\) as well as certain notions of consistency between \(\vX\) and \(\wh{\vX}\). Again, we consider learning methods which promote learning the semantically relevant parts of the distribution. Inspired by the low-rank matrix completion task (for which the connection to learning high-dimensional distributions, such as images, is provided in Chapter \ref{ch:consistent}), we train using the \textit{masked autoencoding} pretext task. Namely, for a random index set \(\Omega \subseteq [N]\) of tokens to be kept and a projection onto this random index set \(P_{\Omega}\) defined as 
-\begin{equation}
-    P_{\Omega}(\vX) = \casework{\vX_{ij}, & j \in \Omega, \\ 0, & j \notin \Omega,}
-\end{equation}
-we train on the objective
-\begin{equation}
-    L_{\mathrm{MAE}}(f, g) \doteq \Ex_{\vX, \Omega}\norm{(g \circ f)(P_{\Omega}(\vX)) - \vX}_{2}^{2}.
-\end{equation}
+\subsection{Evaluation}\label{sub:image_completion_optimization}
 
-Unlike in the previous setting, this objective function encourages the network to learn representations of the input data that enable masked completion. Namely, each token representation should contain both local information about its patch, and global information about the statistics of the whole image. Thus, again, we expect that the representations should contain both local and global semantically relevant information, and the representations of different patches with similar local and global information should be related. As in the previous section, we can directly visualize these relationships. Figure \DP{TODO} demonstrates that the learned features in CRATE-MAE still correspond to semantically relevant components of the data in straightforward ways, \textit{even when no labels at all are provided during training}! Thus emergent segmentation arises even in unsupervised contexts. 
+This is the first autoencoder network we discuss in this section. We use the same evaluation view \(v_{\evaluation}\) as in \Cref{sub:contrastive_learning_evals,sub:image_classification_evals}, resizing the final image to a square with side length \(S_{\mask}\) pixels so as to match the shapes of the input images seen during training. 
 
-As before, the resulting CRATE-MAE model is both interpretable, performant, and parameter efficient. To evaluate the performance of deep networks trained using self-supervised learning methods such as masked autoencoding, a standard technique is to use ``linear probing'': for a given dataset \((\vX, \vy)\) and a pre-trained encoder \(f\), solve the logistic regression problem 
+On top of evaluating the masked autoencoding loss itself, it is also possible to evaluate the features \(\vZ_{\theta}(\vX_{\evaluation})\) of the view \(\vX_{\evaluation} := v_{\evaluation}(\vX)\) of the data \(\vX\) directly. For the sake of attention map fidelity evaluation, just obtaining \(\vZ_{\theta}(\vX_{\evaluation})\) is enough, but for linear probing we need to extract a summarized or aggregate feature from \(\vZ_{\theta}\). To do this, we can use a (parameter-free) feature extraction map which just returns the feature corresponding to the class token, i.e.,
 \begin{equation}
-    L_{\mathrm{LP}}(\vW) \doteq L_{\CE}(\softmax \circ \vW \circ [f(\vX)(N^{-1}\vone)]).
+    f_{\theta}^{\ext}(\vZ) := f_{\theta}^{\ext}([\vz^{1}, \dots, \vz^{n}]) = \vz^{1},
 \end{equation}
-That is, we average the features \(\vZ = f(\vX)\) as \(\vZ(N^{-1}\vone) = \frac{1}{N}\sum_{i = 1}^{N}\vz_{i}\) to get a ``summary representation'', then use a linear classifier to classify the input data using this summary. We train the classifier via the cross-entropy loss. It is also possible to modify the training procedure to use a class token, as in the previous section. In Table \DP{TODO} we show that CRATE-MAE performs well by the linear probing metric compared to traditional architectures while being much more parameter-efficient (along with being white-box).
+as in (for example) \Cref{sub:image_classification_objective,sub:image_classification_architecture}. With this, we have a way to obtain aggregate features \(\vz_{\theta}(\vX_{\evaluation}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{\evaluation})\), at which point we can perform linear probing.
+
+\subsection{Experiments}\label{sub:image_completion_experiments}
+\DP{TODO: @Druv}
 
 \section{Masked Completion for Text Data}\label{sec:text_completion}
 
@@ -691,7 +728,7 @@ That is, we average the features \(\vZ = f(\vX)\) as \(\vZ(N^{-1}\vone) = \frac{
 % \end{equation}
 % where \(\vX = \mat{\x_{1}, \dots, \x_{N}} \in \bR^{D \times N}\), \(\W^{\pre} \in \bR^{d \times D}\) is a trainable matrix, and \(\vE_{\mathrm{pos}} \in \bR^{d \times n}\) is a trainable positional encoding matrix, where \(n = N\). Similarly we use the post-processing map:
 % \begin{equation}
-%     g^{\mathrm{pos}t}(\wt{\vZ}) = \vW^{\mathrm{pos}t}(\wt{\vZ} - \vE_{\mathrm{pos}}),
+%     g^{\mathrm{pos}t}(\tilde{\vZ}) = \vW^{\mathrm{pos}t}(\tilde{\vZ} - \vE_{\mathrm{pos}}),
 % \end{equation}
 % where \(\vW^{\mathrm{pos}t} \in \bR^{D \times d}\) is another trainable matrix. 
 
