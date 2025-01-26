@@ -167,10 +167,10 @@ For the architecture, we use a standard vision transformer. Here is how such an 
 \paragraph{Embedding.} Given imagery data \(\vX \in \cI\), we embed it as a sequence of tokens in \(\R^{d}\) using the map \(f_{\theta}^{\emb}\), as follows. 
 \begin{enumerate}
     \item First, we turn the image data \(\vX\) into a sequence of patches of shape \((C, P_{H}, P_{W})\) where \(P_{H}\) and \(P_{W}\) are the patch dimensions. We assume that \(P_{H}\) and \(P_{W}\) evenly divide the height and width of \(\vX\), respectively (in the notation of \Cref{sub:contrastive_learning_objective} we assume that \(P_{H}\) and \(P_{W}\) evenly divide \(S_{\loc}\) and \(S_{\glo}\)). Let the resulting grid of patches have \(N_{H}\) rows and \(N_{W}\) columns.
-    \item We unroll each patch into a vector of length \(D := CP_{H}P_{W}\). There are \(N := N_{H}N_{W}\) patch vectors, which we place in ``raster order'' (top left \(\to\) top right \(\to\) bottom left \(\to\) bottom right) into a matrix \(\vX^{\tok} \in \R^{D \times N}\), where \(\vX^{\tok} := f^{\tok}(\vX)\). Notice that \(D\) only depends on the patch size and number of channels. Since the latter quantity is normally constant among samples in the same dataset, \(D\) is the same for all images in the dataset, while \(N\) is different for larger and smaller images.
-    \item We then perform the following operation on \(\vX^{\tok} \in \R^{D \times N}\) to project it to \(\R^{d \times n}\) where \(n := N + 1\):
+    \item We unroll each patch into a vector of length \(D := CP_{H}P_{W}\). There are \(N := N_{H}N_{W}\) patch vectors, which we place in ``raster order'' (top left \(\to\) top right \(\to\) bottom left \(\to\) bottom right) into a matrix \(\vX^{\patch} \in \R^{D \times N}\), where \(\vX^{\patch} := f^{\patch}(\vX)\). Notice that \(D\) only depends on the patch size and number of channels. Since the latter quantity is normally constant among samples in the same dataset, \(D\) is the same for all images in the dataset, while \(N\) is different for larger and smaller images.
+    \item We then perform the following operation on \(\vX^{\patch} \in \R^{D \times N}\) to project it to \(\R^{d \times n}\) where \(n := N + 1\):
     \begin{equation}
-        \vX^{\tok} \mapsto [\vz_{\cls}^{1}, \vW^{\emb}\vX] + \vE^{\pos}.
+        \vX^{\patch} \mapsto [\vz_{\cls}^{1}, \vW^{\emb}\vX] + \vE^{\pos}.
     \end{equation}
     Here we have three trainable parameters \(\vW^{\emb}\), \(\vz_{\cls}^{1}\), and \(\vE^{\pos}\) whose purpose is as follows:
     \begin{itemize}
@@ -184,7 +184,7 @@ For the architecture, we use a standard vision transformer. Here is how such an 
 \end{enumerate}
 Thus, in the end we have 
 \begin{equation}\label{eq:definition_of_embedding_module}
-    f_{\theta}^{\emb}(\vX) := \mat{\vz_{\cls}^{1}, \vW^{\emb}f^{\tok}(\vX) + \vE^{\pos}}.
+    f_{\theta}^{\emb}(\vX) := \mat{\vz_{\cls}^{1}, \vW^{\emb}f^{\patch}(\vX) + \vE^{\pos}}.
 \end{equation}
 All parameters \(\vz_{\cls}^{1}, \vW^{\emb}, \vE^{\pos}\) are contained in the parameter set \(\theta\).
 
@@ -569,13 +569,13 @@ and \(g_{\eta}^{\ell}\) is defined such that \(g_{\eta}^{\ell}(\tilde{\vZ}_{\the
 
 \paragraph{The un-embedding module.} To transform \(\tilde{\vZ}_{\theta, \eta}(\vX)\) back into an estimate for \(\vX\), we need to undo the effect of the embedding module \(f_{\theta}^{\emb}\) using the unembedding module \(g_{\eta}^{\unemb}\). As such, harkening back to the functional form of the embedding module in \eqref{eq:definition_of_embedding_module}, i.e.,
 \begin{equation}
-    f_{\theta}^{\emb}(\vX) := \mat{\vz_{\cls}^{1}, \vW^{\emb}f^{\tok}(\vX) + \vE^{\pos}}
+    f_{\theta}^{\emb}(\vX) := \mat{\vz_{\cls}^{1}, \vW^{\emb}f^{\patch}(\vX) + \vE^{\pos}}
 \end{equation}
 it implies that our inverse operation \(g_{\eta}^{\unemb}\) looks like the following:
 \begin{equation}
-    g_{\eta}^{\unemb}(\tilde{\vZ}) := g_{\eta}^{\unemb}(\mat{\tilde{\vz}^{1}, \dots, \tilde{\vz}^{n}}) = g^{\untok}(\vW^{\unemb}([\tilde{\vz}^{2}, \dots, \tilde{\vz}^{n}] - \tilde{\vE}^{\pos})),
+    g_{\eta}^{\unemb}(\tilde{\vZ}) := g_{\eta}^{\unemb}(\mat{\tilde{\vz}^{1}, \dots, \tilde{\vz}^{n}}) = g^{\unpatch}(\vW^{\unemb}([\tilde{\vz}^{2}, \dots, \tilde{\vz}^{n}] - \tilde{\vE}^{\pos})),
 \end{equation}
-where \(g^{\untok}\) does the inverse operation of the unrolling and flattening operation that \(f^{\tok}\) does.\footnote{Again, the ``inverse positional encoding'' \(\tilde{\vE}^{\pos}\) is learned for a large input, and for smaller inputs may be interpolated. It is even possible to directly set \(\tilde{\vE}^{\pos}\) equal to the positional encoding \(\vE^{\pos}\) and use the same interpolated positional encodings for each input in both the encoder and decoder.}
+where \(g^{\unpatch}\) does the inverse operation of the unrolling and flattening operation that \(f^{\patch}\) does.\footnote{Again, the ``inverse positional encoding'' \(\tilde{\vE}^{\pos}\) is learned for a large input, and for smaller inputs may be interpolated. It is even possible to directly set \(\tilde{\vE}^{\pos}\) equal to the positional encoding \(\vE^{\pos}\) and use the same interpolated positional encodings for each input in both the encoder and decoder.}
 
 This architecture is a white-box autoencoder \((f_{\theta}, g_{\eta})\) where (recall) \(f_{\theta} = f_{\theta}^{\backbone} \circ f_{\theta}^{\emb}\) and \(g_{\eta} = g_{\eta}^{\unemb} \circ g_{\eta}^{\backbone}\). In particular, we can use it to compute an estimate for a masked view \(\hat{\vX}_{\theta, \eta}(\vX_{m}) = (g_{\eta} \circ f_{\eta})(\vX_{m})\) which should approximately equal \(\vX\) itself.
 
