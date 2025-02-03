@@ -3,7 +3,7 @@
 
 \begin{document}
 
-\chapter{Real-World Data and Tasks}
+\chapter{Application to Real-World Data and Tasks}
 \label{ch:applications}
 
 \begin{quote}
@@ -245,7 +245,7 @@ The transformer is one of the most popular neural network architectures in histo
 
 \paragraph{Optimizing DINO.} We have a loss function and an architecture, so we now discuss the optimization strategy. The optimization strategy for DINO uses \textit{two sets of weights for the same architecture}: \textit{student} weights \(\theta_{\student}\) and \textit{teacher} weights \(\theta_{\teacher}\). These correspond to two different neural networks, called the teacher network and student network, with the same architecture. The teacher network encodes all global views, while the student network encodes all ``other'' views. The goal of the loss is to distill teacher outputs into the student model. Namely, we train on the loss \(L_{\dino{}-\student\teacher}\):
 \begin{equation}\label{eq:dino_loss_teacherstudent}
-    L_{\dino{}-\student\teacher}(\theta_{\student}, \theta_{\teacher}, \vW, \vmu) := \Ex[d_{\CE}(\vp_{\theta_{\student}, \vW}(\vX_{c}), \vp_{\theta_{\teacher}, \vW, \vmu}(\vX_{g}))].
+    L_{\dino{}-\student\teacher}(\theta_{\student}, \theta_{\teacher}, \vW_{\student}, \vW_{\teacher}, \vmu) := \Ex[d_{\CE}(\vp_{\theta_{\student}, \vW_{\student}}(\vX_{c}), \vp_{\theta_{\teacher}, \vW_{\teacher}, \vmu}(\vX_{g}))].
 \end{equation}
 While it is easy to reason about \eqref{eq:dino_loss_teacherstudent}, it is impossible in practice to implement optimization algorithms such as gradient descent with a loss given by \(L_{\dino{}-\student\teacher}\). This is because the expectations in the loss are impossible to evaluate, much less take the gradient of. In this extremely frequent case, we approximate the expectation via finite samples. That is, at each timestep \(k\) we:
 \begin{itemize}
@@ -253,34 +253,36 @@ While it is easy to reason about \eqref{eq:dino_loss_teacherstudent}, it is impo
     \item For each data point \(\vX_{b}^{(k)}\), sample \(M_{\glo}\) global views \(v_{b, g}^{(k), i}\) and \(M_{\loc}\) local views \(v_{b, \ell}^{(k), i}\). Apply the views to \(\vX_{b}^{(k)}\) to obtain \(\vX_{b, g}^{(k), i} := v_{b, g}^{(k), i}(\vX_{b}^{(k)})\) and \(\vX_{b, \ell}^{(k), i} := v_{b, \ell}^{(k), i}(\vX_{b}^{(k)})\).
     \item For each \textit{local} view \(\vX_{b, \ell}^{(k), i}\) compute the following quantities:
     \begin{equation}
-        \vz_{\theta}(\vX_{b, \ell}^{(k), i}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{b, \ell}^{(k), i}), \qquad \vp_{\theta, \vW}(\vX_{b, \ell}^{(k), i}) := h_{\vW, \vzero_{m}}(\vz_{\theta}(\vX_{b, \ell}^{(k), i}(\theta)))
+        \vz_{\theta_{\student}}(\vX_{b, \ell}^{(k), i}) := (f_{\theta_{\student}}^{\ext} \circ f_{\theta_{\student}})(\vX_{b, \ell}^{(k), i}), \qquad \vp_{\theta_{\student}, \vW_{\student}}(\vX_{b, \ell}^{(k), i}) := h_{\vW_{\student}, \vzero_{m}}(\vz_{\theta_{\student}}(\vX_{b, \ell}^{(k), i}(\theta)))
     \end{equation}
     and for each \textit{global} view \(\vX_{b, g}^{(k), i}\) compute the following quantities (by an abuse of notation):
     \begin{align}
-        &\vz_{\theta}(\vX_{b, g}^{(k), i}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{b, g}^{(k), i}), \qquad \vp_{\theta, \vW}(\vX_{b, g}^{(k), i}) := h_{\vW, \vzero_{m}}(\vz_{\theta}(\vX_{b, g}^{(k), i})), \\
-        &\vp_{\theta, \vW, \vmu}(\vX_{b, g}^{(k), i}) := h_{\vW, \vmu}(\vZ_{\theta}(\vX_{b, g}^{(k), i})).
+        &\vz_{\theta_{\student}}(\vX_{b, g}^{(k), i}) := (f_{\theta_{\student}}^{\ext} \circ f_{\theta_{\student}})(\vX_{b, g}^{(k), i}), \qquad \vp_{\theta_{\student}, \vW_{\student}}(\vX_{b, g}^{(k), i}) := h_{\vW_{\student}, \vzero_{m}}(\vz_{\theta_{\student}}(\vX_{b, g}^{(k), i})), \\
+        &\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}) := (f_{\theta_{\teacher}}^{\ext} \circ f_{\theta_{\teacher}})(\vX_{b, g}^{(k), i}), \qquad \vp_{\theta_{\teacher}, \vW_{\teacher}, \vmu}(\vX_{b, g}^{(k), i}) := h_{\vW_{\teacher}, \vmu}(\vZ_{\theta_{\teacher}}(\vX_{b, g}^{(k), i})).
     \end{align}
     \item Compute the \textit{surrogate, approximate loss} \(\hat{L}_{\dino-\student\teacher}^{(k)}\), defined as follows: 
     \begin{align}\label{eq:dino_loss_teacherstudent_empirical}
-        &\hat{L}_{\dino{}-\student\teacher}^{(k)}(\theta_{\student}, \theta_{\teacher}, \vW, \vmu) :=
+        &\hat{L}_{\dino{}-\student\teacher}^{(k)}(\theta_{\student}, \theta_{\teacher}, \vW_{\student}, \vW_{\teacher}, \vmu) :=
         \frac{1}{BM_{\glo}(M_{\glo} + M_{\loc} - 1)}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\\
-        &\Bigg[\sum_{j = 1}^{M_{\loc}}d_{\CE}(\vp_{\theta_{\student}, \vW}(\vX_{b, \ell}^{(k), j}), \vp_{\theta_{\teacher}, \vW, \vmu}(\vX_{b, g}^{(k), i})) + \sum_{\substack{j = 1 \\ j \neq i}}^{M_{\glo}}d_{\CE}(\vp_{\theta_{\student}, \vW}(\vX_{b, g}^{(k), j}), \vp_{\theta_{\teacher}, \vW, \vmu}(\vX_{b, g}^{(k), i}))\Bigg]\nonumber
+        &\Bigg[\sum_{j = 1}^{M_{\loc}}d_{\CE}(\vp_{\theta_{\student}, \vW_{\student}}(\vX_{b, \ell}^{(k), j}), \vp_{\theta_{\teacher}, \vW_{\teacher}, \vmu}(\vX_{b, g}^{(k), i})) + \sum_{\substack{j = 1 \\ j \neq i}}^{M_{\glo}}d_{\CE}(\vp_{\theta_{\student}, \vW_{\student}}(\vX_{b, g}^{(k), j}), \vp_{\theta_{\teacher}, \vW_{\teacher}, \vmu}(\vX_{b, g}^{(k), i}))\Bigg]\nonumber
     \end{align}
-    as well as its gradients with respect to \(\theta_{\student}\) and \(\vW\), which should be computed under the assumption that \(\theta_{\teacher}\) and \(\vmu\) are constants --- namely that they are \textit{detached from the computational graph} and not dependent on \(\theta_{\student}\) and \(\vW\).
-    \item Update the student parameters \(\theta_{\student}\) and \(\vW\) via an iterative gradient-based optimization algorithm, and update \(\theta_{\teacher}\) and \(\vmu\) via an exponential moving average with decay parameter \(\nu^{(k)}\), i.e., 
+    as well as its gradients with respect to \(\theta_{\student}\) and \(\vW_{\student}\), which should be computed under the assumption that \(\theta_{\teacher}\), \(\vW_{\teacher}\), and \(\vmu\) are constants --- namely that they are \textit{detached from the computational graph} and not dependent on \(\theta_{\student}\) and \(\vW_{\student}\).
+    \item Update the student parameters \(\theta_{\student}\) and \(\vW_{\student}\) via an iterative gradient-based optimization algorithm, and update \(\theta_{\teacher}\), \(\vW_{\teacher}\), and \(\vmu\) via exponential moving averages with decay parameters \(\nu^{(k)}\), \(\nu^{(k)}\), and \(\rho^{(k)}\) respectively, i.e., 
     \begin{align}
-        (\theta_{\student}^{(k + 1)}, \vW^{(k + 1)})
-        &= \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}, \vW^{(k)}; \nabla_{(\theta_{\student}, \vW^{(k)})}\hat{L}_{\dino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)}, \vW^{(k)}, \vmu^{(k)})) \\
+        (\theta_{\student}^{(k + 1)}, \vW_{\student}^{(k + 1)})
+        &= \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}, \vW_{\student}^{(k)}; \nabla_{(\theta_{\student}, \vW_{\student})}\hat{L}_{\dino-\student\teacher}^{(k)}) \\
         \theta_{\teacher}^{(k + 1)}
         &= \nu^{(k)}\theta_{\teacher}^{(k)} + (1 - \nu^{(k)})\theta_{\student}^{(k + 1)} \\
+        \vW_{\teacher}^{(k + 1)}
+        &= \nu^{(k)}\vW_{\teacher}^{(k)} + (1 - \nu^{(k)})\vW_{\student}^{(k + 1)} \\
         \vmu^{(k + 1)}
-        &= \nu^{(k)}\vmu^{(k)} + (1 - \nu^{(k)})\cdot\frac{1}{BM_{\glo}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\vW^{(k)}\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}),
+        &= \rho^{(k)}\vmu^{(k)} + (1 - \rho^{(k)})\cdot\frac{1}{BM_{\glo}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\vW^{(k)}\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}),
     \end{align}
-    For example, if the chosen optimization algorithm were stochastic gradient descent, we would have the update \(\theta_{\student}^{(k + 1)} := \theta_{\student}^{(k)} - \delta^{(k)}\nabla_{\theta_{\student}}\hat{L}_{\dino{}-\student\teacher}\), and so on.
+    For example, if the chosen optimization algorithm were stochastic gradient descent, we would have the update \(\theta_{\student}^{(k + 1)} := \theta_{\student}^{(k)} - \delta^{(k)}\nabla_{\theta_{\student}}\hat{L}_{\dino{}-\student\teacher}^{(k)}\), and so on.
 \end{itemize}
 Notice that the optimization procedure is rather irregular: although all four parameters change at each iteration, only two of them are directly updated from a gradient-based method. The other two are updated from exponential moving averages, and indeed treated as constants when computing any gradients. After training, we discard the student weights and use the teacher weights for our trained network \(f\), as this exponentially moving average has been empirically shown to stabilize the resulting model (this idea is known as Polyak averaging or iterate averaging). 
 
-The way that \(\nu\) changes over the optimization trajectory (i.e., the function \(k \mapsto \nu^{(k)}\)) is a hyperparameter or design decision, with \(\nu^{(1)} < 1\) and \(\lim_{k \to \infty}\nu^{(k)} = 1\) usually. The temperature hyperparameter \(\tau\), used in the DINO head \(h_{\vW, \vmu}\), also changes over the optimization trajectory (though this dependence is not explicitly notated).
+The way that \(\nu\) and \(\rho\) change over the optimization trajectory (i.e., the functions \(k \mapsto \nu^{(k)}\) and \(k \mapsto \rho^{(k)}\)) are hyperparameters or design decisions, with \(\nu^{(1)} < 1\) and \(\lim_{k \to \infty}\nu^{(k)} = 1\) usually, and similar for \(\rho\). The temperature hyperparameter \(\tau\), used in the DINO head \(h_{\vW, \vmu}\), also changes over the optimization trajectory (though this dependence is not explicitly notated).
 
 Using the surrogate (``empirical'') loss transforms our intractable optimization problem, as in optimizing the loss in \eqref{eq:dino_loss}, into a tractable stochastic optimization problem which is run to train essentially every deep learning model in the world. This conversion is extremely natural once you have seen some examples, and we will hopefully give these examples throughout the chapter. 
 
@@ -292,7 +294,7 @@ Thus we can use a simpler version of the DINO training pipeline to optimize SimD
 \begin{itemize}
     \item Subsample \(B\) data points from our dataset \(\{\vX_{1}^{(k)}, \dots, \vX_{B}^{(k)}\} \subset \cI\).
     \item For each data point \(\vX_{b}^{(k)}\), sample \(M_{\glo}\) global views \(v_{b, g}^{(k), i}\) and \(M_{\loc}\) local views \(v_{b, \ell}^{(k), i}\). Apply the views to \(\vX_{b}^{(k)}\) to obtain \(\vX_{b, g}^{(k), i} := v_{b, g}^{(k), i}(\vX_{b}^{(k)})\) and \(\vX_{b, \ell}^{(k), i} := v_{b, \ell}^{(k), i}(\vX_{b}^{(k)})\).
-    \item For each \textit{local} view \(\vX_{b, \ell}^{(k), i}\) compute \(\vz_{\theta}(\vX_{b, \ell}^{(k), i}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{b, \ell}^{(k), i})\). For each \textit{global} view \(\vX_{b, g}^{(k), i}\) compute \(\vz_{\theta}(\vX_{b, g}^{(k), i}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{b, g}^{(k), i})\).
+    \item For each \textit{local} view \(\vX_{b, \ell}^{(k), i}\) compute \(\vz_{\theta_{\student}}(\vX_{b, \ell}^{(k), i}) := (f_{\theta_{\student}}^{\ext} \circ f_{\theta_{\student}})(\vX_{b, \ell}^{(k), i})\). For each \textit{global} view \(\vX_{b, g}^{(k), i}\) compute \(\vz_{\theta_{\student}}(\vX_{b, g}^{(k), i}) := (f_{\theta_{\student}}^{\ext} \circ f_{\theta_{\student}})(\vX_{b, g}^{(k), i})\) and \(\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}) := (f_{\theta_{\teacher}}^{\ext} \circ f_{\theta_{\teacher}})(\vX_{b, g}^{(k), i})\).
     \item Compute the \textit{surrogate, approximate loss} \(\hat{L}_{\simdino-\student\teacher}^{(k)}\), defined as follows: 
     \begin{align}\label{eq:simdino_loss_teacherstudent_empirical}
         &\hat{L}_{\simdino{}-\student\teacher}^{(k)}(\theta_{\student}, \theta_{\teacher}) :=
@@ -303,12 +305,12 @@ Thus we can use a simpler version of the DINO training pipeline to optimize SimD
     \item Update the student parameters \(\theta_{\student}\) via an iterative gradient-based optimization algorithm, and update \(\theta_{\teacher}\) via an exponential moving average with decay parameter \(\nu^{(k)}\), i.e., 
     \begin{align}
         \theta_{\student}^{(k + 1)}
-        &= \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}; \nabla_{\theta_{\student}}\hat{L}_{\simdino-\student\teacher}^{(k)}(\theta_{\student}^{(k)}, \theta_{\teacher}^{(k)})) \\
+        &= \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}; \nabla_{\theta_{\student}}\hat{L}_{\simdino-\student\teacher}^{(k)}) \\
         \theta_{\teacher}^{(k + 1)}
         &= \nu^{(k)}\theta_{\teacher}^{(k)} + (1 - \nu^{(k)})\theta_{\student}^{(k + 1)}.
     \end{align}
 \end{itemize}
-Again, we re-iterate that the gradient is only taken w.r.t.~\(\theta_{\student}\), treating \(\theta_{\teacher}\) as a constant. Here, note that while the choice of \(\lambda\) is still a design decision, the hyperparameter \(\tau\) is removed.
+Again, we re-iterate that the gradient is only taken w.r.t.~\(\theta_{\student}\), treating \(\theta_{\teacher}\) as a constant. Here, note that while the choice of \(\nu\) is still a design decision, the hyperparameters \(\rho\) and \(\tau\) is removed.
 
 \begin{exercise}
     This exercise considers the implementation of stochastic optimization algorithms to minimize losses involving expectations.
@@ -448,7 +450,7 @@ We train our classifier using a simple end-to-end stochastic optimization proced
     \end{equation}
     \item Compute one step of an optimization algorithm on \(\theta\), giving the following iteration:
     \begin{equation}
-        \theta^{(k + 1)} := \textsc{OptUpdate}^{(k)}(\theta^{(k)}; \nabla_{\theta}\hat{L}_{\CE}^{(k)}(\theta^{(k)})).
+        \theta^{(k + 1)} := \textsc{OptUpdate}^{(k)}(\theta^{(k)}; \nabla_{\theta}\hat{L}_{\CE}^{(k)}).
     \end{equation}
 \end{itemize}
 
@@ -592,7 +594,7 @@ As in \Cref{sub:image_classification_optimization}, we use a simple optimization
     \end{equation}
     \item Compute one step of an optimization algorithm on \((\theta, \eta)\), giving the following iteration:
     \begin{equation}
-        (\theta^{(k + 1)}, \eta^{(k + 1)}) := \textsc{OptUpdate}^{(k)}(\theta^{(k)}, \eta^{(k)}; \nabla_{(\theta, \eta)}\hat{L}_{\mathrm{MAE}}^{(k)}(\theta^{(k)}, \eta^{(k)})).
+        (\theta^{(k + 1)}, \eta^{(k + 1)}) := \textsc{OptUpdate}^{(k)}(\theta^{(k)}, \eta^{(k)}; \nabla_{(\theta, \eta)}\hat{L}_{\mathrm{MAE}}^{(k)}).
     \end{equation}
 \end{itemize}
 

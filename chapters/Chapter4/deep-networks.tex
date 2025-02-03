@@ -3,7 +3,7 @@
 
 \begin{document}
 
-\chapter{Informative Representations via Rate Reduction}
+\chapter{Deep Representations via Unrolled Optimization}
 \label{ch:representation}
 
 \begin{quote}
@@ -83,313 +83,6 @@ Then, the goal of representation learning is to maximize this information gain (
 % {\yaodong{previous version (above)}}
 
 
-\section{Objective of Learning Informative Representations}
-\label{sec:chap4-representation-learning-problem}
-
-% \yaodong{TODO: Connect representation properties defined in Chapter 2. (suggested by Druv)}
-
-% \yaodong{TODO: cut the citations to the ``Notes'' part in the later of the chapter.}
-
-In recent years, deep learning has seen tremendous empirical success in processing
-and modeling massive amounts of high-dimensional and multi-modal data. Much of this success is owed to deep networks' ability in effectively learning compressible low-dimensional structures in the data distribution and then transforming the distribution to a parsimonious, i.e. \textit{compact and structured}, representation. 
-Such a representation then facilitates many downstream tasks, e.g., classification, recognition and segmentation, and generation of visual data. 
-
-\paragraph{How to Measure the Goodness of Representations.} 
-To state the common problem behind all these practices more formally, one may view a given dataset as samples of a random vector $\x$ with a certain distribution in a high-dimensional space, say $\mathbb{R}^D$. Typically, the distribution of $\x$ has a much lower intrinsic dimension than the ambient space. Generally speaking, by {\em learning a representation}, we typically mean to learn a continuous mapping, say $f(\cdot)$, that transforms $\x$ to a so-called {\em feature vector} $\z$ in another (typically lower-dimensional) space, say $\mathbb{R}^d$. It is hopeful that through such a mapping:
-\begin{equation}
-     \x \in \mathbb{R}^D \xrightarrow{\hspace{2mm} f(\x)\hspace{2mm}} \z  \in \mathbb{R}^d, 
-     \label{eqn:chap4-1-encoding}
-\end{equation}
-the low-dimensional intrinsic structures of $\x$ are identified and represented by $\z$ in a more compact and structured way so as to facilitate subsequent tasks such as classification or generation. The feature $\z$ can be viewed as a (learned) compact code for the original data $\x$, so the mapping $f$ is also called an \textit{encoder}. 
-The fundamental question of representation learning is
-\begin{center}
-\noindent{\em What is a principled and effective measure for the goodness of representations?}   
-\end{center}
-
-Conceptually, the quality of a representation $\z$ depends on how well it identifies the most relevant and sufficient information of $\x$ for subsequent tasks, and how efficiently it represents this information.
-For long it was believed and argued that ``sufficiency'' or ``goodness'' of a learned feature should be defined in terms of a specific task. For example, $\z$ just needs to be sufficient for predicting a class label $\y$ in a classification problem. To understand the role of deep learning or deep networks in this type of representation learning, \cite{Tishby-ITW2015} proposed the \textit{information bottleneck} framework, which suggests that a measure of feature goodness is to maximize the mutual information between $\z$ and $\y$ while minimizing the mutual information between $\z$ and $\x$. 
-
-Nevertheless, in recent years the predominant practice has been to learn first a \textit{task-agnostic} representation by pre-training a large deep neural network, in some cases known as a \textit{foundation model} \cite{Bommasani2021-vm}. 
-The so-learned representation can subsequently be fine-tuned for multiple specific tasks. 
-This has been shown to be more effective and efficient for many practical tasks across diverse data modalities, including speech, language, and natural images. 
-Notice that representation learning in this context is different from that for a specific task, where $\z$ only needs to be good enough for predicting a specific $\y$. In a task-agnostic setting, the learned representation $\z$ needs to encode \textit{almost all essential information about the distribution of the data $\x$}. That is, the learned representation $\z$ not only is a more compact and structured representation for the intrinsic structures of $\x$, but can also recover $\x$ to a certain degree of faithfulness. 
-Hence, it is natural to ask, in the task-agnostic context, what a principled measure of goodness for a learned (feature) representation should be. 
-As we know, in recent practice of learning task-agnostic representations, one type of deep architectures, known as transformers \cite{vaswani2017attention}, have emerged as an almost universal choice for the backbone of deep networks, for either discriminative or generative tasks, from language to vision. 
-%We will provide more details on how to derive transformer-like architecture via a white-box approach in Section~\ref{sec:chap4-white-box-transformer}. 
-As we will see in this chapter, clarifying the principled measure for feature goodness is also the key to fully understand why a transformer-like architecture is suitable for task-agnostic pretraining, as well as to reveal the precise role and function of each layer in transformer-like deep networks.
-
-
-% \subsection{Principles and Objectives for Representation Learning}
-
-
-% TODO: compression and sparsity.
-
-% \subsection{Deep Network Architectures: Nonlinear to Linear}
-
-
-% \section{White-box Deep Networks via Unrolling}\label{sec:chap4-white-box-model-via-unrolling}
-
-% \subsection{LISTA - Sparsity}
-
-% \subsection{ReduNet - Compression}
-
-% \subsection{CRATE - Compression \& Sparsity}
-
-
-
-\subsection{Informative Representations}
-%{\color{red} Outline: Introducing and formulating the principle of {\em information gain} or {\em rate reduction}. Transform the data distribution to maximize information gain. More specifically rate reduction in the important case of mixture of low-rank Gaussians.}
-
-Given a random vector $\bm{x} \in \mathbb{R}^D$ which is drawn from a mixture of $k$ distributions $\mathcal{D} = \{\mathcal{D}^j\}_{j=1}^k$, one of the most fundamental problems is how to effectively and efficiently {\em learn the distribution} from a finite set of i.i.d samples, say $\X = [\x^1, \x^2, \ldots, \x^m] \in \Re^{D\times m}$. 
-To this end, we {\em seek a good representation}  through a continuous mapping, $f(\x, \bm{\theta}): \mathbb{R}^D \rightarrow \mathbb{R}^d$, that captures intrinsic structures of $\x$ and best facilitates subsequent tasks such as classification or clustering.
-% \footnote{Classification is where deep learning demonstrated the initial success that has catalyzed the explosive interest in deep networks. Although our study in this paper focuses on classification, we believe the ideas and principles can be naturally generalized to other settings such as regression.} 
-
-\paragraph{Encoding Class Information via Cross Entropy.}
-
-To ease the task of learning distribution $\mathcal{D}$, in the popular supervised classification setting, a true class label (or a code word for each class), usually represented by a one-hot vector $\y^i \in \mathbb{R}^k$, is given for each sample $\x^i$. Extensive studies have shown that for many practical datasets (images, audio, and natural language, etc.), the (encoding) mapping from the data $\bm{x}$ to its class label $\bm{y}$ can be effectively modeled by training a deep network, here denoted as $f(\x, \bm \theta):\x \mapsto \y$ with network parameters $\bm \theta \in \bm \Theta$. 
-This is typically done by minimizing the {\em cross-entropy loss} over a training set $\{(\x^i, \y^i)\}_{i=1}^m$, 
-through backpropagation over the network parameters $\bm \theta$: 
-\begin{equation}
-   \min_{\bm \theta \in \Theta} \; \mbox{CE}(\bm \theta, \x, \y) \doteq - \mathbb{E}[\langle \y, \log[f(\x, \bm \theta)] \rangle] \, \approx - \frac{1}{m}\sum_{i=1}^m \langle \y^i, \log[f(\x^i, \bm \theta)] \rangle.
-   \label{chap4-eqn:cross-entropy}
-\end{equation}
-Despite its effectiveness and enormous popularity, there are two serious limitations with this approach:  1) It aims only to predict the labels $\y$ even if they might be mislabeled. Empirical studies show that deep networks, used as a ``black box,'' can even fit random labels~\cite{zhang2017understanding}. 
-2) With such an end-to-end data fitting, 
-despite plenty of empirical efforts in trying to interpret the so-learned features~\cite{Zeiler-ECCV2014}, 
-it is not clear to what extent the intermediate features learned by the network capture the intrinsic structures of the data that make meaningful classification possible in the first place. 
-Recent work of \cite{papyan2020prevalence} shows that the representations learned via the  cross-entropy loss \eqref{chap4-eqn:cross-entropy} exhibit a \emph{neural collapsing} phenomenon,
-% \footnote{Essentially, once an over-parameterized network fits the training data, regularization (such as weight decay) would collapse weight components or features that are not the most relevant for fitting the class labels. Besides the most salient feature, informative and discriminative features that also help define a class can be suppressed.} 
-where within-class variability and structural information are getting suppressed and ignored, as illustrated in Figure~\ref{chap4-fig:neural-collapse}. 
-The precise geometric and statistical properties of the learned features are also often obscured, which leads to the lack of interpretability and subsequent performance guarantees (e.g., generalizability, transferability, and robustness, etc.) in deep learning. 
-Therefore, {\em one of the goals of this chapter is to address such limitations by reformulating the objective towards learning explicitly meaningful and useful representations for the data $\x$, in terms of feature linearity, discriminativeness, and richness.}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.95\linewidth]{figs_chap4/neural_collapse.pdf}
-    \caption{Evolution of penultimate layer outputs of a VGG13 neural network when trained on the CIFAR10 dataset with 3 randomly selected classes. Figure from \cite{papyan2020prevalence}.}
-    \label{chap4-fig:neural-collapse}
-\end{figure}
-
-\paragraph{Minimal Discriminative Features via Information Bottleneck.} 
-One popular approach to interpret the role of deep networks is to view outputs of intermediate layers of the network as selecting certain latent features $\z = f(\x, \bm \theta) \in \Re^d$ of the data that are discriminative among multiple classes. Learned representations $\z$ then  facilitate the subsequent classification task for predicting the class label $\y$ by optimizing a classifier $g(\z)$: 
-\begin{equation}
-    \x   \xrightarrow{\hspace{2mm} f(\x, \bm \theta)\hspace{2mm}} \z(\bm \theta)  \xrightarrow{\hspace{2mm} g(\z) \hspace{2mm}} \y.
-\end{equation}
-The {\em information bottleneck} (IB) formulation \cite{Tishby-ITW2015} further hypothesizes that the role of the network is to learn $\z$ as the minimal sufficient statistics for predicting $\y$. Formally, it seeks to maximize the mutual information $I(\z, \y)$~\cite{Cover-Thomas}
-between $\z$ and $\y$ while minimizing $I(\x, \z)$ between $\x$ and $\z$:
-\begin{equation}
-    \max_{\bm \theta\in \bm \Theta}\; \mbox{IB}(\x, \y, \z(\bm \theta)) \doteq I(\z(\bm \theta), \y) - \beta I(\x, \z(\bm \theta)), \quad \beta >0. 
-\label{chap4-eqn:information-bottleneck}
-\end{equation}
-Given one can overcome some caveats associated with this framework \cite{kolchinsky2018caveats-ICLR2018}, such as how to accurately evaluate mutual information with finite samples of degenerate distributions, this framework can be helpful in explaining certain behaviors of deep networks. 
-For example, recent work \cite{papyan2020prevalence} indeed shows that the representations learned via the cross-entropy loss expose a \emph{neural collapse} phenomenon. 
-That is, features of each class are mapped to a one-dimensional vector whereas all other information of the class is suppressed. 
-But by being task-dependent (depending on the label $\y$) and seeking a {\em minimal} set of most informative features for the task at hand (for predicting the label $\y$ only), the so learned network may sacrifice robustness in case the labels can be corrupted or transferability when we want to use the features for different tasks. 
-To address this, {\em the framework -- we will present in this chapter -- uses the label $\y$ as only side information to assist learning discriminative yet diverse (not minimal) representations; these representations optimize a different intrinsic objective based on the principle of rate reduction.}
-
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.95\linewidth]{figs_chap4/mcr_diagram.pdf}
-    \caption{(\textbf{Left}) The distribution $\mathcal D$ of high-dim data $\x\in \Re^D$ is supported on  a manifold $\mathcal{M}$ and its classes on low-dim submanifolds $\mathcal{M}^j$, we learn a map $f(\x, \bm  \theta)$ such that $\z^i = f(\x^i, \bm \theta)$ are on a union of maximally uncorrelated subspaces $\{\mathcal{S}^j\}$. (\textbf{Right}) Cosine similarity between learned features by our method for the CIFAR10 training dataset. Each class has 5,000 samples and their features span a subspace of over 10 dimensions.}
-    \label{chap4-fig:mcr-diagram}
-\end{figure}
-
-\paragraph{Learning Diverse and Discriminative Representations.}
-Whether the given data $\X$ of a mixed distribution $\mathcal{D}$ can be effectively classified depends on how separable (or discriminative) the component distributions $\mathcal{D}_j$ are (or can be made).
-One popular working assumption is that the distribution of each class has relatively {\em low-dimensional} intrinsic structures. 
-There are several reasons why this assumption is plausible: 1). High dimensional data are highly redundant; 2). Data that belong to the same class should be similar and correlated to each other; 3). 
-Typically we only care about equivalent structures of $\x$ that are invariant to certain classes of deformation and augmentations.
-
-Hence we may assume the distribution $\mathcal{D}_j$ of each class has a support on a low-dimensional submanifold, say $\mathcal{M}_j$ with dimension $d_j \ll D$, and the distribution $\mathcal D$ of $\x$ is supported on the mixture of those submanifolds, $\mathcal M = \cup_{j=1}^k \mathcal{M}_j$,  in the high-dimensional ambient space $\Re^D$. 
-With the manifold assumption in mind, we want to learn a mapping {$\z = f(\x, \bm \theta)$} that maps each of the submanifolds $\mathcal{M}^j \subset \Re^D$  to a {\em linear} subspace $\mathcal{S}^j \subset \Re^n$ (see Figure~\ref{chap4-fig:mcr-diagram} left). 
-To do so, we require our learned representation to have the following properties, called a {\em linear discriminative representation} (LDR): 
-\begin{enumerate}
-    \item {\em Between-Class Discriminative:} Features of samples from different classes should be highly {\em uncorrelated} and belong to different low-dimensional linear subspaces.
-    \item {\em Within-Class Compressible:} Features of samples from the same class should be relatively {\em correlated} in a sense that they belong to a low-dimensional linear subspace.
-    \item {\em Maximally Diverse Representation:} Dimension (or variance) of features for each class should be {\em as large as possible} as long as they stay uncorrelated from the other classes.
-\end{enumerate}
-The third item is desired because we want the learned features to reveal all possible causes why this class is different from all other classes. For instance, to tell ``Apple'' from ``Orange'', not only do we care about the color, but also the shape and the leaves. Interestingly, some images of computers are labeled as ``Apple'' too.
-
-Notice that the first two items align well with the spirit of the classic {\em  linear discriminant analysis} (LDA)~\cite{HastieTiFr09}. 
-Here, however, although the intrinsic structures of each class/cluster may be low-dimensional, they are by no means simply linear (or Gaussian) in their original representation $\x$ and they need to be made linear through a nonlinear transform $\z = f(\x)$. 
-Unlike LDA, 
-% (or similarly SVM\footnote{For instance, \cite{RSVM} has proposed to use SVMs in a recursive fashion to build (deep) nonlinear classifiers for complex data.}), 
-here we do not directly seek a discriminant (linear) classifier. 
-Instead, we use the nonlinear transform to seek a {\em linear discriminative representation} (LDR) for the data such that the subspaces that represent all the classes are maximally incoherent.  
-To some extent, the resulting multiple subspaces $\{\mathcal{S}^j\}$ can be viewed as discriminative {\em generalized principal components} \cite{GPCA} or, if orthogonal, {\em independent components} \cite{hyvarinen2000independent} of the resulting features $\z$ for the original data $\bm x$. 
-As we will see in Section~\ref{sec:chap4-white-box-model-via-unrolling}, deep networks precisely play the role of modeling this nonlinear transform from the data to an LDR.
-
-\subsection{The Principle of Maximal Coding Rate Reduction}
-To learn a discriminative linear representation for intrinsic low-dimensional structures from high-dimensional data, we propose an information-theoretic measure that maximizes the coding rate difference between the whole dataset and the sum of each individual class, known as {\em rate reduction}. This new objective provides a more unifying view of the above objectives such as cross-entropy, information bottleneck, contractive and contrastive learning. {\em We can rigorously show that when the intrinsic dimensions of the submanifolds are known and this objective is optimized, the resulting representation indeed has the desired properties listed above.} 
-
-
-
-\paragraph{Measure of Compactness for a Representation.}
-Although the three properties -- {\em between-class discriminative}, {\em within-class compressible}, and {\em maximally diverse eepresentation} -- for linear discriminative representations (LDRs) are all highly desirable for the latent representation $\z$, they are by no means easy to obtain: Are these properties compatible so that we can expect to achieve them all at once? 
-If so, is there a {\em simple but principled} objective that can measure the goodness of the resulting representations in terms of all these properties? 
-The key to these questions {is to find} a principled ``measure of compactness'' for the distribution of a random variable $\z$ or from its finite samples $\Z$. Such a measure should directly and accurately characterize intrinsic geometric or statistical properties of the distribution, in terms of its intrinsic dimension or {volume}. Unlike cross-entropy \eqref{chap4-eqn:cross-entropy} or information bottleneck \eqref{chap4-eqn:information-bottleneck}, such a measure should not depend exclusively on class labels so that it can work in more general settings such as supervised, self-supervised, semi-supervised, and unsupervised settings.  
-
-In information theory, the notion of entropy $H(\z)$ is designed to be such a measure.
-However, entropy is not well-defined for continuous random variables with degenerate distributions. The same difficulty resides with evaluating mutual information $I(\x, \z)$ for degenerate distributions.
-This is unfortunately the case here. 
-To alleviate this difficulty, another related concept in information theory, more specifically in lossy data compression defined in Chapter~\ref{ch:general-distribution}, that measures the ``compactness'' of a random distribution is the so-called {\em rate distortion}: 
-Given a random variable $\z$ and a prescribed precision $\epsilon >0$, the rate distortion $R(\z, \epsilon)$ is the minimal number of binary bits needed to encode $\z$ such that the expected decoding error is less than $\epsilon$, i.e., the decoded $\hat \z$ satisfies $\mathbb E[\|\z - \hat \z \|_2] \le \epsilon$.
-
-%\yaodong{TODO: change the notion for $i$-th sample from $\bm{z}_{i}$ to $\bm{z}^{i}$, since $\bm{z}_{\ell}^{i}$ denotes the $i$-th sample at the $\ell$-th layer.}
-\paragraph{Rate Distortion.} When evaluating the lossy coding rate $R$, one practical difficulty is that we normally do not know the distribution of $\z$. 
-Instead, we have a finite number of samples as learned representations where $\z^{i} = f(\x^i, \theta) \in \R^{d}, i = 1,\ldots, m$, for the given data samples $\X = [\x^1, \ldots, \x^m]$. 
-The compactness of learned features {\em as a whole} can be measured in terms of the average coding length per sample (as the sample size $m$ is large),  a.k.a. the {\em coding rate} subject to the distortion $\epsilon$:
-\begin{equation}
-R(\Z,\epsilon) \doteq \frac{1}{2}\log\det\left(\I + \frac{d}{m\epsilon^{2}}\Z\Z^{\top}\right).
-\label{chap4-eqn:coding-length-eval}
-\end{equation} 
-
-In general, the features $\Z$ of multi-class data may belong to multiple low-dimensional subspaces. To evaluate the rate distortion of such mixed data {\em more accurately}, we may partition the data $\Z$ into multiple subsets: $\Z = \Z^1 \cup \cdots \cup \Z^k$, {with} each in one low-dim subspace. So the above coding rate \eqref{chap4-eqn:coding-length-eval} is accurate for each subset. 
-For convenience, let $\bm{\Pi} = \{\bm{\Pi}^j \in \Re^{m \times m}\}_{j=1}^{k}$ be a set of diagonal matrices whose diagonal entries encode the membership of the $m$ samples in the $k$ classes. More specifically, the diagonal entry $\bm \Pi^j(i,i)$ of $\bm \Pi^j$ indicates the probability of sample $i$ belonging to subset $j$. Therefore $\bm{\Pi}$ lies in a simplex: ${\Omega} \doteq \{\bm{\Pi} \mid \bm{\Pi}^j \ge \mathbf{0}, \; \bm{\Pi}^1 + \cdots + \bm{\Pi}^k = \I\}$.
-Then, with respect to this partition, the average number of bits per sample (the coding rate) is
-\begin{equation}
-R^c(\Z,  \epsilon \mid \bm{\Pi}) \doteq \sum_{j=1}^{k}
-\frac{\tr(\bm{\Pi}^j)}{2m}\log\det\left(\I + \frac{d}{\tr(\bm{\Pi}^j)\epsilon^{2}}\Z\bm{\Pi}^j\Z^{\top}\right).
-\label{chap4-eqn:compress-loss-eval}
-\end{equation}
-When $\Z$ is given, $R^c(\Z, \epsilon \mid \bm{\Pi})$ is a concave function of $\bm{\Pi}$.
-The function $\log\det(\cdot)$ in the above expressions has been long known as an effective heuristic for rank minimization problems, with guaranteed convergence to local minimum \cite{fazel2003log-det}. {As it nicely characterizes the rate distortion of Gaussian or subspace-like distributions, $\log\det(\cdot)$ can be very effective in clustering or classification of mixed data \cite{ma2007segmentation}.} 
-
-
-On one hand, for learned features to be discriminative, features of different classes/clusters are preferred to be {\em maximally incoherent} to each other. Hence they together should span a space of the largest possible volume (or dimension) and the coding rate of the whole set $\Z$ should be as large as possible. On the other hand, learned features of the same class/cluster should be highly correlated and coherent. Hence, each class/cluster should only span a space (or subspace) of a very small volume and the coding rate should be as small as possible. Therefore, a good representation $\Z$ of $\X$ is one such that, given a partition $\bm{\Pi}$ of $\Z$, achieves a large difference between the coding rate for the whole and that for all the subsets:
-\begin{equation}
-\Delta R(\Z, \bm{\Pi}, \epsilon) \doteq R(\Z, \epsilon) - R^c(\Z, \epsilon \mid  \bm{\Pi}).
-\label{chap4-eqn:coding-length-reduction}
-\end{equation}
-If we choose our feature mapping $\z = f(\x,\theta)$ to be a deep neural network, the overall process of the feature representation and the resulting rate reduction w.r.t. certain partition $\bm{\Pi}$ can be illustrated by the following diagram:
-\begin{equation}
-    \X 
-    \xrightarrow{\hspace{2mm} f(\x, \theta)\hspace{2mm}} \Z(\theta) \xrightarrow{\hspace{2mm} \bm{\Pi},\epsilon \hspace{2mm}} \Delta R(\Z(\theta), \bm{\Pi}, \epsilon).
-    \label{chap4-eqn:flow}
-\end{equation}
-Note that $\Delta R$ is {\em monotonic} in the scale of the features $\Z$. So to make the amount of reduction comparable between different representations,
-we need to {\em normalize the scale} of the learned features, either by imposing the Frobenius norm of each class $\Z^j$ to scale with the number of features in $\Z^j \in \mathbb R^{d \times m_j}$: $\|\Z^j\|_F^2 = m_j$ or by normalizing each feature to be on the unit sphere: $\z^i \in \mathbb{S}^{d-1}$. This formulation offers a natural justification for the need of ``batch normalization'' in the practice of 
-training deep neural networks \cite{ioffe2015batch}. An alternative, arguably simpler, way to normalize the scale of learned representations is to ensure that the mapping of each layer of the network is approximately {\em isometric} \cite{ISOnet}.
-
-Once the representations are comparable, our goal becomes to learn a set of features $\Z(\theta) = f(\X, \theta)$ and their partition $\bm \Pi$ (if not given in advance) such that they maximize the reduction between the coding rate of all features and that of the sum of features w.r.t. their classes:
-\begin{equation}
-\begin{aligned}
- \max_{\theta, \bm{\Pi}} \;  \Delta R\big(\Z(\theta), \bm{\Pi}, \epsilon\big) &= R(\Z(\theta), \epsilon) - R^c(\Z(\theta),  \epsilon \mid \bm{\Pi}),\\
- \mbox{s.t.} \ \ \,  \|\Z^j(\theta)\|_F^2 &= m_j, \, \bm{\Pi} \in {\Omega}.    
-\end{aligned}
-\label{eqn:maximal-rate-reduction}
-\end{equation}
-We refer to this as the principle of {\em maximal coding rate reduction} (MCR$^2$), 
-{an embodiment of Aristotle's famous quote:  ``{\em the whole is greater than the sum of the  parts.}''}  Note that for the clustering purpose alone, one may only care about the sign of $\Delta R$ for deciding whether to partition the data or not, which leads to the greedy algorithm in \cite{ma2007segmentation}. More specifically, in the context of clustering {\em finite} samples, one needs to use the more precise measure of the coding length mentioned earlier, see \cite{ma2007segmentation} for more details.
-% \footnote{Strictly speaking, in the context of clustering {\em finite} samples, one needs to use the more precise measure of the coding length mentioned earlier, see \cite{ma2007segmentation} for more details.}
-%\cs{I believe this sentence is not strict. In greedy algorithm, we use a difference between the loss encoding before and after merge. But the difference is not \eqref{eqn:maximal-rate-reduction}. In fact, in the clustering context, the first term $R(\Z(\theta), \epsilon)$ in  \eqref{eqn:maximal-rate-reduction} is a constant.}
-Here to seek or learn the best representation, we further desire the whole is {\em maximally} greater than its parts. 
-
-\paragraph{Relationship to Information Gain.} 
-The maximal coding rate reduction can be viewed as a generalization to {\em Information Gain} (IG), which aims to maximize the reduction of entropy of a random variable, say $\bm z$, with respect to an observed attribute, say $\bm \pi$:
-$
-\max_{\bm \pi} \; \mbox{IG}(\bm z, \bm \pi) \doteq H(\bm z) - H(\bm z \mid \bm \pi),
-$
-i.e., the {\em mutual information} between $\z$ and $\bm \pi$ \cite{Cover-Thomas}. Maximal information gain has been widely used in areas such as decision trees \cite{decision-trees}. 
-However, MCR$^2$ is used differently in several ways: 1) One typical setting of MCR$^2$ is when the data class labels are given, i.e. $\bm \Pi$ is known, MCR$^2$ focuses on learning representations $\bm z(\theta)$ rather than fitting labels. 2) In traditional settings of IG, the number of attributes in $\bm z$ cannot be so large and their values are discrete (typically binary). 
-Here the ``attributes'' $\bm \Pi$  represent the probability of a multi-class partition for all samples and their values can even be continuous. 3) As mentioned before, entropy $H(\bm z)$ or mutual information $I(\bm z, \bm \pi)$ \cite{hjelm2018learning} is not well-defined for degenerate continuous distributions whereas the rate distortion $R(\bm z, \epsilon)$ is and can be accurately and efficiently computed for (mixed)  subspaces, at least. 
-
-
-% %\begin{wrapfigure}{r}{0.5\textwidth}
-% \begin{figure}
-% \begin{center}
-% % \vskip -0.3in
-% \includegraphics[width=0.65\textwidth]{figures_compress/pack_CompressPdf.pdf}
-% \end{center}
-% \vskip -0.05in
-% \caption{\small Comparison of two learned representations $\Z$ and $\Z'$ via reduced rates: $R$ is the number of $\epsilon$-balls packed in the joint distribution and $R^c$ is the sum of the numbers for all the subspaces (the green balls). $\Delta R$ is their difference (the number of blue balls). The MCR$^2$ principle prefers $\Z$ (the left one).}\label{fig:sphere-packing}
-% \vskip -0.15in
-% \end{figure}
-% %\end{wrapfigure}
-
-% \begin{wrapfigure}{r}{0.5\textwidth}
-% \vspace{-10mm}
-%   \begin{center}
-%     \includegraphics[width=0.47\textwidth]{figures_compress/pack_CompressPdf.pdf}%\vspace{-5mm}
-%   \end{center}
-%   %\addtocounter{figure}{1}
-% \caption{\small Comparison of two learned representations $\Z$ and $\Z'$ via reduced rates: $R$ is the number of $\epsilon$-balls packed in the joint distribution and $R^c$ is the sum of the numbers for all the subspaces (the green balls). $\Delta R$ is their difference (the number of blue balls). The MCR$^2$ principle prefers $\Z$ (the left one).}\label{fig:sphere-packing}
-% \end{wrapfigure}
-
-\vspace{-0.1in}
-
-
-\subsection{Optimization Landscape of Rate Reduction}
-% {\color{red}Geometric properties of the global optimization landscape of the rate reduction objective. MAE paper theorem that connects maximizing rate distortion to Gaussian score.}
-
-In theory, the MCR$^2$ principle \eqref{eqn:maximal-rate-reduction} benefits from great generalizability and can be applied to representations $\Z$ of {\em any} distributions with {\em any} attributes $\bm \Pi$ as long as the rates $R$ and $R^c$ for the distributions can be accurately and efficiently evaluated. The optimal representation $\Z^{\star}$ and partition $\bm \Pi^{\star}$ should have some interesting geometric and statistical properties. We here reveal nice properties of the optimal representation with the special case of subspaces, which have many important use cases in machine learning. When the desired representation for $\Z$ is multiple subspaces, the rates $R$ and $R^c$ in \eqref{eqn:maximal-rate-reduction} are given by \eqref{chap4-eqn:coding-length-eval}
-and \eqref{chap4-eqn:compress-loss-eval}, respectively. At the maximal rate reduction, MCR$^2$ achieves its optimal representations, denoted as $\Z^{\star} = \Z^{1,\star}\cup \cdots \cup \Z^{k,\star} \subset \Re^d$ with $\rank{(\Z^{j,\star})}\le d_j$. One can show that $\Z^{\star}$ has the following desired properties (see \cite{yu2020learning} for a formal statement and detailed proofs).
-
-\begin{theorem}[Informal Statement]
-Suppose $\Z^{\star} = \Z^{1,\star}\cup \cdots \cup \Z^{k,\star}$ is the optimal solution that maximizes the rate reduction~\eqref{eqn:maximal-rate-reduction}. We have:
-\begin{itemize}
-\item {\em Between-class Discriminative}: As long as the ambient space is adequately large ($d \ge \sum_{j=1}^{k} d_j$), the subspaces are all orthogonal to each other, {\em i.e.} $(\Z^{i,\star})^{\top} \Z^{j,\star} = \bm{0}$ for $i \not= j$.
-\item {\em Maximally Diverse Representation}: 
-As long as the coding precision is adequately high, i.e., $\epsilon ^4 < c\cdot \min_{j}\left\{ \frac{m_j}{m}\frac{d^2}{d_j^2}\right\}$, where $c>0$ is a constant. Each subspace achieves its maximal dimension, i.e. $\mathrm{rank}{(\Z^{j,\star})}= d_j$. In addition, the $d_j$ singular values of $\Z^{i,\star}$ are equal. 
-\label{thm:MCR2-properties}
-\end{itemize}
-% \vspace{-2mm}
-\end{theorem}
-
-\begin{figure}[t]
-% \vspace{-5mm}
-  \begin{center}
-    \includegraphics[width=0.7\textwidth]{figs_chap4/pack_Compress.pdf}
-  \end{center}
-% \vspace{-15mm}
-\caption{\small Comparison of two learned representations $\Z$ and $\Z'$ via reduced rates: $R$ is the number of $\epsilon$-balls packed in the joint distribution and $R^c$ is the sum of the numbers for all the subspaces (the green balls). $\Delta R$ is their difference (the number of blue balls). The MCR$^2$ principle prefers $\Z$ (the left one).}\label{fig:sphere-packing}
-\vspace{-3mm}
-\end{figure}
-
-In other words, in the case of subspaces, the MCR$^2$ principle promotes embedding of data into multiple independent subspaces, with features distributed {\em isotropically}  in each subspace (except for possibly one dimension). In addition, among all such discriminative representations, it prefers the one with the highest dimensions in the ambient space. This is substantially different from the objective of information bottleneck~\eqref{chap4-eqn:information-bottleneck}.
-% \pw{add some transition here to connect MCR$^2$ to the regularized MCR$^2$}\yaodong{TODO: motivation: an equivalent formulation allows more fine-grained optimization landscape analysis?}
-
-\paragraph{Regularized MCR$^2$.} 
-
-Due to the Frobenius norm constraints, it is a tremendously difficult task to analyze Problem \eqref{eqn:maximal-rate-reduction} from an optimization-theoretic perspective, as all the analysis would occur on a product of spheres instead of on Euclidean space. Therefore, we consider the Lagrangian formulation of \eqref{eqn:maximal-rate-reduction}. This can be viewed as a tight relaxation or even an equivalent problem of \eqref{eqn:maximal-rate-reduction} whose optimal solutions agree under specific settings of the regularization parameter; see \cite[Proposition 1]{wang2024global}.
-Specifically, the formulation we study, referred to henceforth as the \textit{regularized MCR$^2$ problem}, is as follows: 
-\begin{align}\label{eq:MCR-reg}
-\max_{\bm Z}\ F(\bm Z) := R(\Z) - R^c(\Z\mid \bm{\Pi}) - \frac{\lambda}{2}\|\bm Z\|_F^2,
-\end{align}
-where $\lambda > 0$ is the regularization parameter. Remark that our study on this problem applies meaningfully to at least two approaches to learning deep representations using the MCR$^2$ principle. Although Problem \eqref{eq:MCR-reg} is highly non-concave and involves matrix inverses in its gradient computation, we can still explicitly characterize its local and global optima as follows.  
-
-\begin{theorem}[\bf Local and global optimality]\label{thm:mcr-global-opt}
-Let $m_j$ denote the number of training samples in the $j$-th class for each $j \in \{1,\dots,k\}$, $m_{\max} := \max\{m_1,\dots,m_k\}$, and $\alpha^{j} = d/(m_j\epsilon^2)$ for each $j \in \{1,\dots,k\}$. Given a coding precision $\epsilon > 0$, if the regularization parameter satisfies
-\begin{align}\label{eq:lambda}
- \lambda \in \left(0, \frac{d(\sqrt{m/m_{\max}}-1)}{m(\sqrt{m/m_{\max}}+1)\epsilon^2} \right], 
-\end{align} 
-then the following statements hold: \\
-(i) ({\bf Characterization of local maximizers}) $\bm Z = \left[\bm Z_1,\dots,\bm Z_k \right]$ is a local maximizer of Problem \eqref{eq:MCR-reg} if and only if the $j$-th block admits the following decomposition
-\begin{align}\label{eq:Zk opti}
-\bm Z_j = \overline{\sigma}_{j} \bm U_j \bm V_j^\top,
-\end{align}
-where (a) $r_j = \mathrm{rank}(\bm Z_j)$ satisfies $r_j \in [0,\min\{m_j,d\})$ and $\sum_{j=1}^k r_j \le \min\{m,d\}$, (b) $\bm U_j \in \mathcal{O}^{d \times r_j}$ satisfies $\bm U_j^{\top}\bm U_l = \bm 0$ for all $l \neq j$, $\bm V_j \in \mathcal{O}^{m_j \times r_j}$, and (c) the singular value $\overline{\sigma}_{j}$ is given in \eqref{eq:sigma1} for each $j \in \{1,\dots,k\}$.
-\begin{equation}
-\begin{aligned}
-\overline{\sigma}_j  &= \left(\frac{ \eta_j + \sqrt{\eta_j^2 - 4\lambda^2m/m_j}}{2\lambda \alpha^{j}}\right)^{1/2},\\ 
-\underline{\sigma}_{j}  &= \left(\frac{ \eta_j - \sqrt{\eta_j^2 - 4\lambda^2m/m_j}}{2\lambda \alpha^{j}}\right)^{1/2}. 
-\end{aligned}
-\label{eq:sigma1}
-\end{equation}
-\\
-(ii) ({\bf Characterization of global maximizers}) $\bm Z = \left[\bm Z_1,\dots,\bm Z_k \right]$ is a global maximizer of Problem \eqref{eq:MCR-reg} if and only if (a) it satisfies the above all conditions and $\sum_{j=1}^k r_j = \min\{m,d\}$, and (b) for all $j \neq l \in [K]$ satisfying $m_j < m_l$ and $r_l > 0$, we have $r_j = \min\{m_j,d\}$. 
-\end{theorem}
-
-We defer the proof to \cite{wang2024global}. In this theorem, we explicitly characterize the local and global optima of Problem  \eqref{eq:MCR-reg}. Intuitively, this demonstrates that the features represented by each local maximizer of Problem \eqref{eq:MCR-reg} are low-dimensional and discriminative. While we have characterized the local and global optimal solutions in Theorem~\ref{thm:mcr-global-opt}, it remains unknown whether these solutions can be computed efficiently using GD to solve Problem \eqref{eq:MCR-reg}, as GD may get stuck at a saddle point. 
-Fortunately, \cite{sun2015nonconvex,lee2016gradient} showed that if a function is twice continuously differentiable and satisfies {\em strict saddle property}, i.e., each critical point is either a local minimizer or a strict saddle point\footnote{We say that a critical point is a strict saddle point of Problem \eqref{eq:MCR-reg} if it has a direction with strictly positive curvature~\cite{sun2015nonconvex}. This includes classical saddle points with strictly positive curvature as well as local minimizers.}, GD converges to its local minimizer almost surely with random initialization. We investigate the global optimization landscape of Problem \eqref{eq:MCR-reg} by characterizing all of its critical points as follows.  
-
-\begin{theorem}[\bf Benign optimization landscape]\label{thm:mcr-benign-opt-landscape}
-Given a coding precision $\epsilon > 0$, if the regularization parameter satisfies \eqref{eq:lambda},  
-it holds that any critical point $\bm Z$ of Problem \eqref{eq:MCR-reg} that is either a local maximizer or a strict saddle point. 
-\end{theorem}
-We defer the proof to \cite{wang2024global}.  Interestingly, we demonstrate that the features represented by each local maximizer --- not just global maximizers --- are also compact and structured. Furthermore, we demonstrate that the regularized MCR$^2$ objective \eqref{eqn:maximal-rate-reduction} is a strict saddle function. To the best of our knowledge, \Cref{thm:mcr-global-opt,thm:mcr-benign-opt-landscape} constitute the first analysis of local optima and optimization landscapes for MCR$^2$ objectives. According to \cite{sun2015nonconvex,lee2016gradient}, \Cref{thm:mcr-global-opt,thm:mcr-benign-opt-landscape} imply that low-dimensional and discriminative representations can be efficiently found by (stochastic) gradient descent on Problem \eqref{eqn:maximal-rate-reduction} from random initialization.
-
 
 \section{White-box Deep Networks via Unrolled Optimization}\label{sec:chap4-white-box-model-via-unrolling}
 % Key messages:
@@ -434,15 +127,15 @@ We here present how the MCR$^2$ objective may help learn better representations 
 \end{figure}
 
 \begin{figure}[t]
-    \begin{subfigure}[t]{0.47\textwidth}
-        \centering 
-        \includegraphics[width=\textwidth]{figs_chap4/heatmap_mcr2.pdf}
-    \end{subfigure}
-    \hfill 
-    \begin{subfigure}[t]{0.47\textwidth}
-        \centering 
-        \includegraphics[width=\textwidth]{figs_chap4/heatmap_ce.pdf}
-    \end{subfigure}
+    % \begin{subfigure}[t]{0.47\textwidth}
+    %     \centering 
+    %     \includegraphics[width=\textwidth]{figs_chap4/heatmap_mcr2.pdf}
+    % \end{subfigure}
+    % \hfill 
+    % \begin{subfigure}[t]{0.47\textwidth}
+    %     \centering 
+    %     \includegraphics[width=\textwidth]{figs_chap4/heatmap_ce.pdf}
+    % \end{subfigure}
     \caption{\small Cosine similarity between learned features by using the MCR$^2$ objective  (\textbf{left}) and CE loss (\textbf{right}).}
     \label{fig:heatmap-plot}
 \end{figure}
@@ -452,6 +145,7 @@ Figure~\ref{fig:train-test-loss-pca-3} shows the distribution of singular values
 %In addition, we find that we are able to select diverse images from the same class according to the ``principal'' components of the learned features (see Figure~\ref{fig:visual-class-2-8} and Figure~\ref{fig:visual-overall-data}).
 \end{example}
 
+\yima{I would suggest the above example is better moved to the Chapter 3. To justify the rate reduction objective function and its landscape.}
 
 However, there has been an apparent lack of direct justification of the resulting network architectures from the desired learning objectives, e.g. cross entropy or contrastive learning. As a result, it is challenging if not impossible to rigorously justify why the resulting network is the best suited for the objective, let alone to interpret the learned operators and parameters inside. In this chapter, {\em we will attempt to derive network architectures and components as entirely ``a white box'' from the desired objective (say, rate reduction)}.
 
@@ -528,7 +222,7 @@ Therefore, the matrix $\bm E_\ell$ operates on a vector $\bm z_\ell$ by stretchi
 \end{figure}
 
 
-Essentially, the linear operations $\bm E_\ell$ and $\bm C^j_\ell$ in gradient ascend for rate reduction are determined by training data conducting ``auto-regressions". The recent renewed understanding about ridge regression in an over-parameterized setting \cite{yang2020rethinking,Wu2020OnTO} indicates that using seemingly redundantly sampled data (from each subspace) as regressors do not lead to overfitting.
+Essentially, the linear operations $\bm E_\ell$ and $\bm C^j_\ell$ in gradient ascend for rate reduction are determined by training data conducting ``auto-regressions". The recent renewed understanding about ridge regression in an over-parameterized setting \cite{yang2020rethinking,Wu2020OnTO} indicates that using seemingly redundantly sampled data (from each subspace) as regressors does not lead to overfitting.
 \end{remark}
 
 \paragraph{Gradient-Guided Feature Map Increment.} Notice that in the above, the gradient ascent considers all the features $\Z_{\ell} = [\z_{\ell}^{1}, \dots, \z_{\ell}^{m}]$ as free variables. The increment $\Z_{\ell+1} - \Z_{\ell} = \eta \frac{\partial \Delta R}{\partial \bm Z}\big|_{\Z_\ell}$ does not yet give a transform on the entire feature domain $\z_\ell \in \Re^n$. According to equation \eqref{eqn:DR-gradient}, the gradient cannot be evaluated at a point whose membership is not known, as illustrated in Figure \ref{fig:gradient-flow}. Hence, in order to find the optimal $f(\x,\bm  \theta)$ explicitly, we may consider constructing a small increment transform $g(\cdot, \bm{\theta}_{\ell})$ on the $\ell$-th layer feature $\z_\ell$ to emulate the above (projected) gradient scheme:
