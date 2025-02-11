@@ -29,30 +29,32 @@ On the other hand, the linear model can be limited when dealing with real-world 
 How to deal with nonlinearity has a long history across different disciplines such as control theory, signal processing, and pattern recognition. As mentioned in \cite{Wiener-Cybernetics-1961}, for machines to learn and adapt, it is crucial for them to handle nonlinearity in a feedback system. There have been considerable efforts that try to extend methods and solutions for linear models to handle nonlinearity, including early effort to extend PCA to nonlinear PCA (as we will study in Chapter \ref{ch:autoencoding}).  In most cases, the methods are designed based on certain assumptions about the data distributions and tailored to specific problems. 
 
 More recently, deep neural networks have achieved remarkable success across a wide range of data and applications, and one notable breakthrough is the AlexNet~\cite{Krizhevsky2012imagenet}, a deep convolutional neural networks trained with more than a million natural images, outperforming all existing approaches that were based on hand-crafted features. 
-One of the key differences between AlexNet and previous approaches is \textit{learning the nonlinear transformation from massive data} trained with backpropagation (BP). 
-Meanwhile, deep neural networks can learn effective features/representations for downstream applications. 
-For example, a trained deep neural network $f$ can be applied to map images to representation vectors, that is, $\bm{z}_i = f(\bm{x}_i)$, while a linear classifier can be learned on top of such representations $\{\bm{z}_i\}$ and achieve strong classification performance.
+One of the key differences between AlexNet and previous approaches is \textit{learning the nonlinear transformation from massive data} trained with back propagation (BP) \cite{Back-Prop}, as detailed in Appendix \ref{app:optimization}. 
+Meanwhile, deep neural networks can learn effective features/representations for downstream applications.  For example, a trained deep neural network $f$ can be applied to map images to representation vectors, that is, $\bm{z}_i = f(\bm{x}_i)$, while a linear classifier can be learned on top of such representations $\{\bm{z}_i\}$ and achieve strong classification performance.
 
 %\subsection{Mysteries About Black-box Deep Networks}
 % Without breaking the flow, raise the mystery about representation learning via deep neural networks. How to understand the role of all the empirically designed deep neural networks, which are largely black boxes. 
 
-The current popular practice is to model the mapping with an empirically designed artificial deep neural network and learn the parameters $\bm \theta$ from random initialization via backpropagation (BP) \cite{Back-Prop}. Starting with the AlexNet \cite{Krizhevsky2012imagenet}, the architectures of modern deep networks continue to be empirically revised and improved. Network architectures such as VGG \cite{simonyan2014very}, ResNet \cite{he2016deep}, DenseNet \cite{dense-net},  Recurrent CNN or LSTM \cite{LSTM}, and a mixture of experts (MoE) \cite{MoE}, etc. have continued to push the performance envelope. As part of the effort to improve deep networks' performance, almost every component of the networks has been scrutinized empirically and various revisions and improvements have been proposed. They are not limited to the nonlinear activation functions \cite{maas2013rectifier,klambauer2017self,xu2015empirical,nwankpa2018activation}, skip connections \cite{ronneberger2015u,he2016deep}, normalizations \cite{ioffe2015batch,ba2016layer,ulyanov2016instance,wu2018group,miyato2018spectral}, up/down sampling or pooling \cite{scherer2010evaluation}, convolutions~\cite{lecun1998gradient,Krizhevsky2012imagenet}, etc.
+The current popular practice is to model the mapping with an empirically designed artificial deep neural network and learn the parameters $\bm \theta$ from random initialization via back propagation (BP). Starting with the AlexNet \cite{Krizhevsky2012imagenet}, the architectures of modern deep networks continue to be empirically revised and improved. Network architectures such as VGG \cite{simonyan2014very}, ResNet \cite{he2016deep}, DenseNet \cite{dense-net}, CNN, RNN or LSTM \cite{LSTM}, Transformer \cite{vaswani2017attention}, and a mixture of experts (MoE) \cite{MoE}, etc. have continued to push the performance envelope. As part of the effort to improve deep networks' performance, almost every component of the networks has been scrutinized empirically and various revisions and improvements have been proposed. They are not limited to the nonlinear activation functions \cite{maas2013rectifier,klambauer2017self,xu2015empirical,nwankpa2018activation}, skip connections \cite{ronneberger2015u,he2016deep}, normalizations \cite{ioffe2015batch,ba2016layer,ulyanov2016instance,wu2018group,miyato2018spectral}, up/down sampling or pooling \cite{scherer2010evaluation}, convolutions~\cite{lecun1998gradient,Krizhevsky2012imagenet}, etc.
 Nevertheless, almost all such modifications are developed through years of empirical {trial and error} or ablation study. Some recent practices even take to the extreme by searching for effective network structures and training strategies through extensive random search techniques, such as Neural Architecture Search \cite{NAS-1,Baker2017DesigningNN}, AutoML \cite{automl}, and Learning to Learn \cite{andrychowicz2016learning}. 
 
 Despite the wide application of deep neural networks, it is not clear what the underlying designing principles are for such a constructed network. In particular, it is not clear what mathematical function that each layer of the network is performing. In this chapter, based on results from previous chapters, we will develop a principled framework that will provide fully rigorous mathematical interpretation of the role of deep networks. 
 
-To understand deep networks and how they should be designed, we must start with the objective of representation learning. In previous chapters, we have argued that the objective is to identify the intrinsically low-dimensional data distribution and then transform it to a compact and structured (say piecewise linear) representation. As we have seen in the previous chapter, the general approach to identify a low-dimensional data distribution is through a compression process that progressively minimizes the entropy or coding rate of the distribution. One can measure the goodness of the resulting representation by the information of the representation gained from a  ``lazy'' representation which models all data as one big  Gaussian.\footnote{that we have seen in the previous chapter as one particular choice of interpreation of the sampled dataset.} In particular, if \textit{we use a mixture of Gaussians (subspaces)\footnote{which we have studied thoroughly in the previous chapter.} as the prototypical distributions to approximate the nonlinear distribution of interest}, then we can efficiently measure the coding rate of such a representation using the (sum of) rate distortion functions of the associated Gaussians. Then the amount of {\em information gained} (or entropy reduced) with such a modeling can be measured by the difference between the coding rate for the lazy representation and that for the more refined representation. 
+To understand deep networks and how they should be designed, we must start with the objective of representation learning. In previous chapters, we have argued that the objective is to identify the intrinsically low-dimensional data distribution and then transform it to a compact and structured (say piecewise linear) representation. As we have seen in the previous chapter, the general approach to identify a low-dimensional data distribution is through a compression process that progressively minimizes the coding rate of the distribution. 
 
-Then, the objective of representation learning is to maximize this information gain (Section~\ref{sec:chap4-representation-learning-problem}). As we will see, each layer of a deep neural network can be naturally derived as an iterative optimization step to incrementally maximize the information gain, including the popular architectures of ResNet,  Transformer, and other more advanced variants. In particular, this chapter aims to answer the following questions about deep networks:
+One can measure the goodness of the resulting representation by the information of the representation gained from a ``lazy'' representation which models all data as one big  Gaussian.\footnote{that we have seen in the previous chapter as one particular choice of interpretation of the sampled dataset.} In particular, if \textit{we use a mixture of Gaussians (subspaces)\footnote{which we have studied thoroughly in the previous chapter.} as the prototypical distributions to approximate the nonlinear distribution of interest}, then we can efficiently measure the coding rate of such a representation using the (sum of) rate distortion functions of the associated Gaussians. Then the amount of {\em information gained} (or entropy reduced) with such a modeling can be measured by the difference between the coding rate for the lazy representation and that for the more refined representation. Then, as we have argued in the previous chapter  Section~\ref{sec:chap4-representation-learning-problem}, the objective of representation learning is to maximize this information gain, also known as the rate reduction objective. 
+
+As we will see in this chapter, once the objective of representation learning is clear, the role of deep neural network is precisely to help optimize the objective iteratively. Each layer of a deep neural network can be naturally derived as an iterative optimization step to incrementally maximize the information gain, including the popular architectures of ResNet, CNN, and Transformer, and other more advanced variants. In particular, this chapter aims to answer the following questions about deep networks:
 \begin{itemize}
     %\item Section~\ref{sec:chap4-representation-learning-problem} --- the representation learning problem: when learning a nonlinear mapping to transform the data distribution to a structured and compact representation, what is a principled and effective measure for the goodness of representations?
-    \item Section~\ref{sec:chap4-white-box-model-via-unrolling} --- white-box deep neural network via unrolling: given a principled measure of goodness for a learned representation, how to construct the nonlinear mapping to identify and transform the data distribution and improve the goodness of learned representations?
+    \item Section~\ref{sec:chap4-white-box-model-via-unrolling} --- given a measure of goodness for a learned representation, how to construct the nonlinear mapping from the data to the optimal representation via unrolling an optimization algorithm for the objective?
     \item Section~\ref{sec:chap4-white-box-transformer} --- would the above unrolling approach provide a principled interpretation of the popular transformer architectures; if so, what are the associated objective and optimization mechanisms? 
     \item Section \ref{sec:chap4-derive-white-box-transformer-variants} --- would this framework guide us to design more efficient or more parsimonious deep architectures?
 \end{itemize}
 
 
-\pw{Notation Summary: $D$: dimension of input data, $d$: dimension of features, $m:$ number of data samples, } 
+%\pw{Notation Summary: $D$: dimension of input data, $d$: dimension of features, $m:$ number of data samples, } 
+
 % \yaodong{Highlight that previous section does not transform the data, mainly just deal the data as it is. Here we want to use non-linear mapping to transform the data. Here highlight the role of non-linear transformation.}
 
 
@@ -100,20 +102,21 @@ Then, the objective of representation learning is to maximize this information g
 
 % \yaodong{TODO: a paragraph on overview and motivation: (a). given the principled learning objective, how to construct a non-linear mapping to optimize the objective? (b). one can use unrolled optimization to derive the non-linear mapping/layer; (c). connect the derived architecture with existing deep learning architecture.}
 
-Now, if we agree that maximizing the rate reduction or information gain leads to the desired representation, the remaining question is how to learn the (nonlinear) mapping from the data $\X$ to the optimal representation $\Z^*$.
+Now, if we agree that maximizing the rate reduction or information gain leads to the desired representation, the remaining question is how to construct and learn the (nonlinear) mapping from the data $\X$ to the optimal representation $\Z^*$.
 
 
 \subsection{Deep Networks from Unrolled Gradient Descent}
 % More formally, by unrolling gradient descent for the rate reduction objective, we derive  \href{https://jmlr.org/papers/v23/21-0631.html}{the white-box deep network ReduNet} (and its connections to ResNet, ResNEXT, and CNNs).
 
-In the previous chapter, we have presented rate reduction \eqref{eqn:maximal-rate-reduction} as a principled objective for learning a linear discriminative representation (LDR) for the data. We have, however, not specified the architecture of the feature mapping $\z(\bm \theta) = f(\x, \bm \theta)$ for extracting such a representation from input data $\x$. 
-A straightforward choice is to use a conventional deep network, such as ResNet, for implementing $f(\x, \bm \theta)$. 
- 
-There remain several unanswered problems with using a ResNet. Although the learned feature representation is now more interpretable, the network itself is still {\em not}. It is unclear why any chosen ``black-box'' network is able to optimize the desired MCR$^2$ objective at all. The good empirical results (say with a ResNet) do not necessarily justify the particular choice in architectures and operators of the network:  Why is a deep layered model necessary;
+In the previous chapter, we have presented the rate reduction \eqref{eqn:maximal-rate-reduction} as a principled objective for learning a linear discriminative representation (LDR) for the data. We have, however, not specified the architecture of the feature mapping $\z(\bm \theta) = f(\x, \bm \theta)$ for extracting such a representation from input data $\x$. 
+A straightforward choice is to use a conventional deep network, such as ResNet, for implementing $f(\x, \bm \theta)$. As we have seen in Example \ref{eg:Rate-Reduction-CIFAR10}, empirically, such a choice often leads to decent performance. 
+There remain several unanswered problems with adopting an arbitrary deep network. Although the learned feature representation is now more interpretable, the network itself is still {\em not}. It is unclear why any chosen ``black-box'' network is able to optimize the desired MCR$^2$ objective at all. The good empirical results (say with a ResNet) do not necessarily justify the particular choice in architectures and operators of the network: Why is a deep layered model even necessary;
 % \footnote{Especially it is already long known that even a single layer neural network is already a universal functional approximator with tractable model complexity \cite{Barron1991ApproximationAE}.}
-what do additional layers try to improve or simplify; how wide and deep is adequate; or is there any rigorous justification for the convolutions (in the popular multi-channel form) and nonlinear operators (e.g. ReLU or softmax) used? In this section, we show that using gradient ascent to maximize the rate reduction $\Delta R(\Z )$ naturally leads to a ``white-box'' deep network that represents such a mapping. All network layered architecture, linear/nonlinear operators, and parameters are {\em explicitly constructed in a purely forward propagation fashion}. 
+what do additional layers try to improve or simplify; how wide and deep is adequate; or is there any rigorous justification for the convolutions (in the popular multi-channel form) and nonlinear operators (e.g. ReLU or softmax) used? 
 
-\paragraph{Gradient Ascent for Rate Reduction on the Training.} From the previous section, we see that mathematically, we are essentially seeking a continuous mapping $f(\cdot): \x \mapsto \z$ from the data $\X = [\x^1, \ldots, \x^m] \in \Re^{D \times m}$ (or initial features extracted from the data\footnote{As we will see the necessity of such a feature extraction in the next section.}) to an optimal representation $\Z = [\z^1, \ldots, \z^m] \subseteq \Re^{d \times m}$ that maximizes the following coding rate reduction objective:
+In this chapter, we show that using gradient ascent to maximize rate reduction $\Delta R(\Z )$ naturally leads to a ``white-box'' deep network that represents such a mapping. All network layered architecture, linear/nonlinear operators, and parameters are {\em explicitly constructed in a purely forward propagation fashion}. 
+
+\paragraph{Gradient Ascent for Rate Reduction.} From the previous chapter, we see that to seek a linear discriminative representation (LDR), mathematically, we are essentially seeking a continuous mapping $f(\cdot): \x \mapsto \z$ from the data $\X = [\x^1, \ldots, \x^m] \in \Re^{D \times m}$ (or initial features extracted from the data\footnote{As we will see the necessity of such a feature extraction in the next section.}) to an optimal representation $\Z = [\z^1, \ldots, \z^m] \subseteq \Re^{d \times m}$ that maximizes the following coding rate reduction objective:
 \begin{equation}\label{eq:mcr-formulation}
 \begin{split}
 \Delta R(\Z, \bm{\Pi}, \epsilon) &= R(\Z, \epsilon) - R_c(\Z, \epsilon \mid  \bm{\Pi})\\
@@ -231,7 +234,7 @@ the increment feature transform from $\z_{\ell}$ to $\z_{\ell+1}$ now becomes:
 &= \; \z_\ell +  \eta \cdot g(\z_\ell, \bm \theta_\ell) \quad \mbox{s.t.} \quad \z_{\ell +1} \in \mathbb{S}^{n-1},
 \end{aligned}
 \end{equation}
-with the nonlinear function $\bm \sigma(\cdot)$ defined above and $\bm \theta_\ell$ collecting all the layer-wise parameters. That is  $\bm \theta_\ell =\left\{\bm E_\ell, \bm{C}_{\ell}^{1}, \dots, \bm{C}_{\ell}^{k}, \gamma^{j}, \lambda\right\}$. Note features at each layer are always ``normalized'' by projecting onto the unit sphere $\mathbb S^{d-1}$, denoted as $\mathcal P_{\mathbb S^{d-1}}$. The form of increment in \eqref{eqn:layer-approximate} can be illustrated by a diagram in  Figure~\ref{fig:arch}(a).
+with the nonlinear function $\bm \sigma(\cdot)$ defined above and $\bm \theta_\ell$ collecting all the layer-wise parameters. That is  $\bm \theta_\ell =\left\{\bm E_\ell, \bm{C}_{\ell}^{1}, \dots, \bm{C}_{\ell}^{k}, \gamma^{j}, \lambda\right\}$. Note features at each layer are always ``normalized'' by projecting onto the unit sphere $\mathbb S^{d-1}$, denoted as $\mathcal P_{\mathbb S^{d-1}}$. The form of increment in \eqref{eqn:layer-approximate} can be illustrated by a diagram in  Figure~\ref{fig:arch-ReduNet} (a).
 
 \begin{figure}[t]
     \begin{subfigure}[t]{0.35\textwidth}
@@ -246,10 +249,10 @@ with the nonlinear function $\bm \sigma(\cdot)$ defined above and $\bm \theta_\e
         \caption{\textbf{ResNet} and \textbf{ResNeXt}.}
     \end{subfigure}
     \caption{\small Network Architectures of the ReduNet and comparison with others. \textbf{(a)}: Layer structure of the \textbf{ReduNet} derived from one iteration of gradient ascent for optimizing rate reduction. \textbf{(b)} (left): A layer of ResNet~\cite{he2016deep}; and \textbf{(b)} (right): A layer of ResNeXt~\cite{ResNEXT}. As we will see in Section~\ref{sec:shift-invariant}, the linear operators $\bm E_\ell$ and $\bm{C}^j_\ell$ of the ReduNet naturally become (multi-channel) convolutions when shift-invariance is imposed.}
-    \label{fig:arch ReduNet}
+    \label{fig:arch-ReduNet}
 \end{figure}
 
-\paragraph{Deep Network for Optimizing Rate Reduction.} Notice that the increment is constructed to emulate the gradient ascent for the rate reduction $\Delta R$. Hence by transforming the features iteratively via the above process, we expect the rate reduction to increase, as we will see in the experimental section. This iterative process, once converged say after $L$ iterations, gives the desired feature map $f(\x, \bm \theta)$ on the input $\z_1 = \x$, precisely in the form of a {\em deep network}, in which each layer has the structure shown in Figure~\ref{fig:arch} left:
+\paragraph{Deep Network for Optimizing Rate Reduction.} Notice that the increment is constructed to emulate the gradient ascent for the rate reduction $\Delta R$. Hence by transforming the features iteratively via the above process, we expect the rate reduction to increase, as we will see in the experimental section. This iterative process, once converged say after $L$ iterations, gives the desired feature map $f(\x, \bm \theta)$ on the input $\z_1 = \x$, precisely in the form of a {\em deep network}, in which each layer has the structure shown in Figure~\ref{fig:arch-ReduNet} left:
 \begin{equation}\label{eqn:ReduNet}
 \begin{aligned}
 f(\x, \bm \theta)\; =&  \;\;\phi_L \circ \phi_{L-1} \circ  \cdots \circ \phi_2 \circ \phi_1(\z_1),  \\ 
@@ -258,51 +261,12 @@ g(\z_{\ell}, \bm \theta_{\ell}) \; =&\;\; \bm E_{\ell} \z_{\ell} -  \bm \sigma\b
 \end{aligned}
 \end{equation}
 As this deep network is derived from maximizing the rate \textbf{redu}ced, we call it the \textbf{ReduNet}. 
-We summarize the training and evaluation of ReduNet in \Cref{alg:redunet_training} and \Cref{alg:redunet_evaluation}, respectively. 
-Notice that all parameters of the network are explicitly constructed layer by layer in a {\em forward propagation} fashion. The construction does not need any back propagation! The so-learned features can be directly used for classification, say via a nearest subspace classifier. 
+We summarize the training and evaluation of ReduNet in \Cref{alg:redunet_training} and \Cref{alg:redunet_evaluation}, respectively.  Notice that all parameters of the network are explicitly constructed layer by layer in a {\em forward propagation} fashion. The construction does not need any back propagation! The so-learned features can be directly used for classification, say via a nearest subspace classifier. 
 % \yima{Some simulation examples, as we did in the paper with the three clusters on a sphere? Examples are important for pedagogy!} \yaodong{Added Figure~\ref{fig:redu-3d-gaussian-diagram} and a paragraph below.}
 
-
-To provide more intuitions on how ReduNet transforms the features, we provide a simple 3D Gaussian example and visualize how the features are transformed in Figure~\ref{fig:redu-3d-gaussian-diagram}. 
-Consider a mixture of three Gaussian distributions in $\R^{3}$ that is projected onto $\mathbb{S}^2$. We first generate data points for 3 classes: for $k=1,2,3$, $\bm{X}^{k}=[\bm{x}^{1}_{k}, \ldots, \bm{x}^{m}_{k}] \in \R^{3\times m}$, $\bm{x}^{i}_{k} \sim \mathcal{N}(\bm{\mu}^{k}, \sigma_{k}^{2} \I)$, and $\bm{\pi}(\x^{i}_{k}) = k$.
-We set $m=500, \sigma_{1}=\sigma_{2}=\sigma_{3}=0.1$ and $\bm{\mu}^{1}, \bm{\mu}^{2}, \bm{\mu}^{3} \in \mathbb{S}^2$. 
-Then we project all the data points onto $\mathbb{S}^{2}$, i.e., $\bm{x}^i_{k}/\|\bm{x}^i_{k}\|_{2}$. 
-To construct the network (computing $\bm{E}_{\ell}, \bm{C}_{\ell}^{j}$ for $\ell$-the layer), we set the number of iterations/layers $L=2,000$, step size $\eta=0.5$, and precision $\epsilon=0.1$. 
-We do this only to demonstrate our framework leads to stable deep networks even with thousands of layers. 
-In practice thousands of layers may not be necessary and one can stop whenever adding new layers gives diminishing returns. 
-For this example, a couple of hundred layers is sufficient. Hence the clear optimization objective gives a natural criterion for the depth of the network needed.
-As shown in Figure~\ref{fig:redu-3d-gaussian-diagram}, we can observe that after the mapping $f(\cdot, \bm{\theta})$, samples from the same class are highly compressed and converge to a single cluster and the angle between two different clusters is approximately $\pi/4$, which is well aligned with the optimal solution $\Z_{\star}$ of the MCR$^2$ loss in $\mathbb{S}^2$. 
-MCR$^2$ loss of features on different layers can be found in Figure~\ref{fig:redu-3d-gaussian-diagram} (\textbf{c}). Empirically, we find that the constructed ReduNet is able to maximize MCR$^2$ loss and converges stably and samples from the same class converge to one cluster and different clusters are orthogonal to each other. 
-Moreover, when sampling new data points from the same distributions, we find that new samples form the same class consistently converge to the same cluster center as the training samples. 
-
-
-
-
-\begin{figure}[t]
-    \begin{subfigure}[t]{0.3\textwidth}
-        \centering 
-        \includegraphics[width=\textwidth]{figs_chap4/scatter3d-X_train.pdf}
-        \caption{$\bm{X}_{\text{train}}$}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[t]{0.3\textwidth}
-        \centering 
-        \includegraphics[width=\textwidth]{figs_chap4/scatter3d-Z_train.pdf}
-        \caption{$\bm{Z}_{\text{train}}$}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[t]{0.3\textwidth}
-        \centering 
-        \includegraphics[width=\textwidth]{figs_chap4/scatter3d-loss-traintest.pdf}
-        \caption{Loss (train/val)}
-    \end{subfigure}
-    \caption{\small Original samples  and learned representations for 3D Mixture of Gaussians. We visualize data points $\bm{X}$ (before mapping $f(\cdot, \bm{\theta})$) in (\textbf{a}) and learned features $\bm{Z}$ (after mapping $f(\cdot, \bm{\theta})$) in (\textbf{b}) by scatter plot. In each scatter plot, each color represents one class of samples. In (\textbf{c})We also show the plots for the progression of values of the objective functions.}
-    \label{fig:redu-3d-gaussian-diagram}
-\end{figure}
-
-
-\begin{algorithm}\label{alg:redunet_training}
+\begin{algorithm}
     \caption{Training algorithm for ReduNet}
+    \label{alg:redunet_training}
     \begin{algorithmic}[1]
         \Require{$\vX = [\vx^1, \ldots, \vx^m]\in \Re^{D \times m}$, $\bm{\Pi}$, $\epsilon > 0$, $\lambda$, and a learning rate $\eta$.}
         \Ensure{The learned parameters \(\{\vE_{\ell}\}_{\ell = 1}^{L}, \{\{\vC_{\ell}^{j}\}_{j = 1}^{k}\}_{\ell = 1}^{L}, \{\gamma^{j}\}_{j = 1}^{K}\)}
@@ -337,8 +301,9 @@ Moreover, when sampling new data points from the same distributions, we find tha
     \end{algorithmic}
 \end{algorithm}
 
-\begin{algorithm}\label{alg:redunet_evaluation}
+\begin{algorithm}
     \caption{Evaluation algorithm for ReduNet}
+    \label{alg:redunet_evaluation}
     \begin{algorithmic}[1]
         \Require{Input \(\vx \in \R^{D}\), network parameters \(\{\vE_{\ell}\}_{\ell = 1}^{L}, \{\{\vC_{\ell}^{j}\}_{j = 1}^{k}\}_{\ell = 1}^{L}, \{\gamma^{j}\}_{j = 1}^{k}\), learning rate \(\lambda\)}
         \Ensure{feature \(\vz_{L + 1}\)}
@@ -355,7 +320,42 @@ Moreover, when sampling new data points from the same distributions, we find tha
 \end{algorithm}
 
 
+\begin{example}
+To provide some intuition on how ReduNet transforms the features, we provide a simple example with mixed 3D Gaussians and visualize how the features are transformed in Figure~\ref{fig:redu-3d-gaussian-diagram}. 
+Consider a mixture of three Gaussian distributions in $\R^{3}$ that is projected onto $\mathbb{S}^2$. We first generate data points for 3 classes: for $k=1,2,3$, $\bm{X}^{k}=[\bm{x}^{1}_{k}, \ldots, \bm{x}^{m}_{k}] \in \R^{3\times m}$, $\bm{x}^{i}_{k} \sim \mathcal{N}(\bm{\mu}^{k}, \sigma_{k}^{2} \I)$, and $\bm{\pi}(\x^{i}_{k}) = k$.
+We set $m=500, \sigma_{1}=\sigma_{2}=\sigma_{3}=0.1$ and $\bm{\mu}^{1}, \bm{\mu}^{2}, \bm{\mu}^{3} \in \mathbb{S}^2$. 
+Then we project all the data points onto $\mathbb{S}^{2}$, i.e., $\bm{x}^i_{k}/\|\bm{x}^i_{k}\|_{2}$. 
+To construct the network (computing $\bm{E}_{\ell}, \bm{C}_{\ell}^{j}$ for $\ell$-the layer), we set the number of iterations/layers $L=2,000$, step size $\eta=0.5$, and precision $\epsilon=0.1$. 
+We do this only to demonstrate our framework leads to stable deep networks even with thousands of layers. 
+In practice thousands of layers may not be necessary and one can stop whenever adding new layers gives diminishing returns. 
+For this example, a couple of hundred layers is sufficient. Hence the clear optimization objective gives a natural criterion for the depth of the network needed.
 
+As shown in Figure~\ref{fig:redu-3d-gaussian-diagram}, we can observe that after the mapping $f(\cdot, \bm{\theta})$, samples from the same class are highly compressed and converge to a single cluster and the angle between two different clusters is approximately $\pi/4$, which is well aligned with the optimal solution $\Z_{\star}$ of the MCR$^2$ loss in $\mathbb{S}^2$. 
+MCR$^2$ loss of features on different layers can be found in Figure~\ref{fig:redu-3d-gaussian-diagram} (\textbf{c}). Empirically, we find that the constructed ReduNet is able to maximize MCR$^2$ loss and converges stably and samples from the same class converge to one cluster and different clusters are orthogonal to each other. 
+Moreover, when sampling new data points from the same distributions, we find that new samples form the same class consistently converge to the same cluster center as the training samples. 
+\begin{figure}[t]
+    \begin{subfigure}[t]{0.3\textwidth}
+        \centering 
+        \includegraphics[width=\textwidth]{figs_chap4/scatter3d-X_train.pdf}
+        \caption{$\bm{X}_{\text{train}}$}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.3\textwidth}
+        \centering 
+        \includegraphics[width=\textwidth]{figs_chap4/scatter3d-Z_train.pdf}
+        \caption{$\bm{Z}_{\text{train}}$}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.3\textwidth}
+        \centering 
+        \includegraphics[width=\textwidth]{figs_chap4/scatter3d-loss-traintest.pdf}
+        \caption{Loss (train/val)}
+    \end{subfigure}
+    \caption{\small Original samples  and learned representations for 3D Mixture of Gaussians. We visualize data points $\bm{X}$ (before mapping $f(\cdot, \bm{\theta})$) in (\textbf{a}) and learned features $\bm{Z}$ (after mapping $f(\cdot, \bm{\theta})$) in (\textbf{b}) by scatter plot. In each scatter plot, each color represents one class of samples. In (\textbf{c})We also show the plots for the progression of values of the objective functions.}
+    \label{fig:redu-3d-gaussian-diagram}
+\end{figure}
+
+\end{example}
 
 \subsection{Convolutional Networks from Invariant Rate Reduction}\label{sec:shift-invariant}
 %\yaodong{TODO: put a transition paragraph here, highlight that by we could derive the convolution layer by maximizing rate reduction with augmentations. I put an initial paragraph below (feel free to edit).}
@@ -436,8 +436,7 @@ $$\circm(\bm Z_2) = \big[ \circm( \bm z_1^1 + \eta g( \bm z_1^1, \bm \theta_1)),
 Continuing inductively, we see that all matrices $\bm E_\ell$ and $\bm C_\ell^j$ based on such $\circm(\bm Z_\ell)$ are circulant, and so are all features. 
 By virtue of the properties of the data, ReduNet has taken the form of a convolutional network, {\em with no need to explicitly choose this structure!} 
 
-\paragraph{A Fundamental Trade-off between Invariance and Sparsity} 
-
+\paragraph{A Fundamental Trade-off between Invariance and Sparsity.} 
 There is one problem though: In general, the set of all circular permutations of a vector $\z$ gives a full-rank matrix. That is, the $n$ ``augmented'' features associated with each sample (hence each class) typically already span the entire space $\Re^n$. For instance, all shifted versions of a delta function $\delta(n)$ can generate any other signal as their (dense) weighted superposition. The MCR$^2$ objective \eqref{eqn:maximal-rate-reduction} will not be able to distinguish classes as different subspaces.
 
 One natural remedy is to improve the separability of the data by ``lifting'' the original signal to a higher dimensional space, e.g., by taking their responses to multiple, filters $\bm k_1, \ldots, \bm k_C \in \Re^n$: 
@@ -534,7 +533,7 @@ Hence, these multi-channel convolutions in general are {\em not} depth-wise sepa
 \paragraph{Computational Complexity.}
 The calculation of $\bar{\bm E}$ in \eqref{eq:def-E-bar} requires inverting a matrix of size $nC \times nC$, which in general has complexity $O(n^3C^3)$.  Nevertheless, by using the fact that a circulant matrix can be diagonalized by the Discrete Fourier Transform (DFT) matrix, the complexity can be significantly reduced. As shown in \cite{chan2021redunet}, to compute $\bar{\bm E}$ and $\bar{\C}^j \in \Re^{nC \times nC}$, we only need to compute in the frequency domain the inverse of $C\times C$ blocks for $n$ times hence the overall complexity becomes $O(nC^3)$.
 
-\paragraph{Overall Network Architecture and Comparison} 
+\paragraph{Overall Network Architecture and Comparison.} 
 Following the above derivation, we see that in order to find a linear discriminative representation (LDR)  for multiple classes of signals/images that is invariant to translation, sparse coding, a multi-layer architecture with multi-channel convolutions, different nonlinear activation, and spectrum computing all become {\em necessary} components for achieving the objective effectively and efficiently. Figure \ref{fig:learn-to-classify-diagram} illustrates the overall process of learning such a representation via invariant rate reduction on the input sparse codes. 
 
 \begin{figure}[t]
@@ -546,8 +545,7 @@ Following the above derivation, we see that in order to find a linear discrimina
 
 %\yima{Some simple examples, as we did in the paper with the experiments with the digits? Examples are important for pedagogy!} \yaodong{Added the figure and paragraphs below.}
 
-\paragraph{An Example: Invariant Classification of Digits}
-
+\begin{example}[Invariant Classification of Digits]
 We next provide an empirical performance of the ReduNet on learning \textit{rotation} invariant features on the real 10-class MNIST dataset. 
 We impose a polar grid on the image $\bm{x}\in\mathbb{R}^{H\times W}$, with its geometric center being the center of the 2D polar grid (as illustrated in Figure \ref{fig:samples-invariant-1d-mnist-diagram}). 
 For each radius $r_i$, $i \in [C]$, we can sample $\Gamma$ pixels with respect to each angle $\gamma_l =l\cdot({2\pi}/\Gamma)$ with $l \in [\Gamma]$. 
@@ -608,7 +606,7 @@ In Figure~\ref{fig:redu-invariant-1d-mnist-diagram} (\textbf{c}), we visualize t
     \label{fig:redu-invariant-1d-mnist-diagram}
 \end{figure}
 
-
+\end{example}
 
 
 
@@ -910,7 +908,7 @@ Compared with the commonly used attention block in transformer~\cite{vaswani2017
      \centering
      \includegraphics[width=0.8\textwidth]{figs_chap4/crate_encoder_architecture.pdf}
     \caption{\small \textbf{One layer of the CRATE encoder architecture.} The full architecture is simply a concatenation of such layers, with some initial tokenizer, pre-processing head, and final task-specific head (i.e., a classification head).}
-    \label{fig:arch}
+    \label{fig:arch-crate}
 \end{figure}
 
 \textbf{{Sparse coding block (ISTA).}} 
@@ -933,8 +931,7 @@ By combining the above two steps:
     \item Local compression of tokens within a sample towards a mixture-of-subspace structure, leading to the multi-head subspace self-attention block -- \texttt{MSSA};
     \item Global sparsification of token sets across all samples through sparse coding, leading to the sparsification block -- \texttt{ISTA};
 \end{enumerate}
-we can get the following rate-reduction-based transformer layer, illustrated in \Cref{fig:arch}, 
-
+we can get the following rate-reduction-based transformer layer, illustrated in \Cref{fig:arch-crate}, 
 \begin{equation}
     \vZ^{\ell+1/2} \doteq \vZ^{\ell} + \texttt{MSSA}(\vZ^{\ell} \mid \vU_{[K]}^{\ell}), 
     \qquad 
