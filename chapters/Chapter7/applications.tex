@@ -412,7 +412,7 @@ where \((\vW^{\head}, \vb^{\head}) \in \R^{N_{\cls} \times d} \times \R^{N_{\cls
 \subsection{The CRATE Architecture}\label{sub:image_classification_architecture}
 
 The architecture that we use is the CRATE architecture, described in some level of detail in \Cref{ch:representation}. The overall setup is similar to that of the regular transformer in \Cref{sub:contrastive_learning_architecture}, with a few changes. While the embedding step is the same as both DINO and SimDINO in \Cref{sub:contrastive_learning_architecture}, the feature extraction step is the same as SimDINO in \Cref{sub:contrastive_learning_architecture} as it just extracts the feature corresponding to the class token, and the classification head is described in \Cref{sub:image_classification_objective}, the backbone architecture is different. Each layer takes the form
-\begin{align}
+\begin{align}\label{eq:CARTE updates}
     \vZ_{\theta}^{\ell + 1/2}(\vX)
     &= \vZ_{\theta}^{\ell}(\vX) + \MSSA_{\theta}^{\ell}(\LN_{\theta}^{1, \ell}(\vZ_{\theta}^{\ell}(\vX))), \\ 
     \vZ_{\theta}^{\ell + 1}(\vX)
@@ -470,9 +470,14 @@ Table \DP{TODO} demonstrates that CRATE's classification performance achieves pa
 
 We now study \textit{next-token prediction} for text, which is a special case of classification in which the set of classes (i.e., the ``vocabulary'') is very large. Next-token prediction is the pre-training objective for large language models (LLMs) and certain kinds of vision models (with a so-called ``visual tokenizer''). In this section, we mainly focus on generative pre-training (GPT) \cite{radford2019language} tasks for learning language representations. 
 
+\subsection{Data}
+\pw{Yifu} 
+The data that we will use to explore the CRATE architecture for language tasks is \pw{xx}. For pre-training, we use \pw{xx}. 
+
+
 \subsection{Task and Objective}
 
-For GPT pre-training, we apply the Byte Pair Encoding (BPE)\pw{xx} tokenizer as the default tokenizer, with a vocabulary size $V=50257$\pw{$V=$} following the setting of GPT2. After tokenization, the input is represented as a sequence of $N$ tokens $\bm X = [\bm x_1,\dots,\bm x_{N}] \in \R^{D \times N}$. The goal of CRATE is to learn a map $f$ that transforms these tokens into structured and compact token representations, denoted as $\bm Z$, that facilitate language tasks. To begin, we introduce the pre-processing layer as follows:
+For GPT pre-training, we apply the Byte Pair Encoding tokenizer as the default tokenizer, with a vocabulary size $V=50257$ following the setting of GPT2 \cite{radford2019language}. After tokenization, the input is represented as a sequence of $N$ tokens $\bm X = [\bm x_1,\dots,\bm x_{N}] \in \R^{D \times N}$. The goal of CRATE is to learn a map $f$ that transforms these tokens into structured and compact token representations, denoted as $\bm Z$, that facilitate language tasks. To begin, we introduce the pre-processing layer as follows:
 \begin{align*}
     f^{\rm pre}(\vX) = f^{\rm embed}(\vX) + \vE_{\rm pos}, 
 \end{align*}
@@ -482,16 +487,37 @@ where $f^{\rm embed}$ is an embedding function which maps input tokens $\vx_i$ t
 \end{align*}
 where $\vW^{\rm head} \in \R^{V\times d}$.  
 
+The training objective of GPT is next work prediction (causal language modeling), which is defined as 
+\begin{align*}
+    L_{\rm GPT}\left(f ,f^{\rm head}\right) = \mathbb{E}_{\vX}\left[ \frac{1}{N - 1}\sum_{i=1}^{N-1} H\left(\mathbf{1}(\bm x_{i+1}), \mathrm{softmax}\left\{ (f^{\rm head} \odot f)(\bm X)_i \right\}\right) \right],
+\end{align*}
+where $H(\bm p, \bm q) =\mathbb{E}_{x \sim \bm p}[-\log \bm q(x)]$ denotes the cross-entropy function, $ (f^{\rm head} \odot f)(\bm X)_i \in \R^V$ denotes the $i$-th index of the model output (that is, the log-probability of each potential token in the vocabulary to take up the $i$-th index in the sequence $\bm X$), and $\mathbf{1}(\bm x_{i+1}) \in \{0,1\}^V$ represents the one-hot embedding vector of the token $\bm x_i$ in the vocabulary.  This objective trains the model to maximize the likelihood of correctly predicting the next token at each position in the sequence while minimizing the prediction error using cross-entropy loss. The model operates autoregressively, meaning that predictions at later positions depend on correctly predicting earlier ones. This setup enforces the sequential generation constraint essential for applications such as text completion and dialogue generation. 
 
+\subsection{Optimization Method}
 
+\pw{Yifu, is this setup aligned with your implementation?}
+For GPT pertaining, we mainly follow the implementations in the nano GPT repository at \url{https://github.com/karpathy/nanoGPT}.   
+
+\subsection{Evaluation}
+\pw{Yifu}
+
+\subsection{Experimental Setup and Results} 
+\pw{Yifu} 
 
 \subsection{The CRATE Architecture}
 
-The CRATE architecture we use here is similar to that of \Cref{sub:image_classification_architecture}, with a few modifications. Following the setup in \cite{radford2019language}, we modify our CRATE architecture to align with the next word prediction task used in GPT. Specifically, we replace the attention in MSSA with a causally masked self-attention, i.e., 
+    The CRATE architecture we use here is similar to the one in \Cref{sub:image_classification_architecture}, with a few modifications to adapt it for language tasks. Following the setup in \cite{radford2019language}, we adapt the CRATE architecture by incorporating a casual mask to align with the next word prediction task in GPT. In standard transformers, a causal mask is used to prevent information leakage during autoregressive generation by ensuring that each token can only attend to previous and current tokens in the sequence. This constraint enforces a left-to-right generation process, which is essential for tasks such as language modeling. Mathematically, given a sequence of length $T$, the causal mask for a matrix $\bm A \in \R^{T\times T}$ in GPT-2 \cite{radford2019language} is defined as follows:
+\begin{align}\label{eq:mask}
+    \mathrm{CausalMask}(\bm A)_{ij} = \begin{cases}
+        A_{ij},\quad \text{if}\ i \ge j,\quad (\text{allow attention to past and current tokens}) \\
+        -\infty,\quad \text{if}\ i < j. \quad (\text{block attention to future tokens})
+    \end{cases}
+\end{align}
+Next, the MSSA operator in the CRATE architecture with a causal mask can be expressed as: 
 \begin{align*}
-\sum_{k=1}^K \bm U_k\bm U_k^T \bm Z^{\ell}\mathrm{softmax}\left( \mathrm{CausalMask} \left( \bm Z^{\ell^T}\bm U_k \bm U_k^T\bm Z^{\ell}\right) \right),    
+\mathrm{CausalMask}\MSSA_{\theta}^{\ell}(\vZ) = \sum_{k=1}^K \bm U_k\bm U_k^T \bm Z\mathrm{softmax}\left( \mathrm{CausalMask} \left( \bm Z^{T}\bm U_k \bm U_k^T\bm Z\right) \right),    
 \end{align*}
-where $\mathrm{CausalMask}(\bm A)_{ij} = A_{ij}$ if $i \le j$ and otherwise $-\infty$. 
+where $\bm Z$ is the output. Substituting this into \eqref{eq:CARTE updates} yields the CRATE architecture for language tasks. 
 
 
 \section{Scaling White-Box Transformers}\label{sec:scalable}
