@@ -1,4 +1,4 @@
-w\documentclass[../../book-main.tex]{subfiles}
+\documentclass[../../book-main.tex]{subfiles}
 \graphicspath{{\subfix{../..}}}
 
 \begin{document}
@@ -13,15 +13,20 @@ $~$ \hfill --- Donald Knuth
 \end{quote}
 \vspace{5mm}
 
-The previous chapters have presented a systematic introduction to the mathematical problems, computational frameworks, and practical algorithms associated with the task for machines to learn low-dimensional distributions from high-dimensional data. Although most theoretical justification of these methods have been established for idealistic models such as (mixture of ) subspaces and Gaussians, principles and ideas behind these computational methods, nevertheless, are powerful and general enough, and they are in fact meant to be applicable for real-world datasets and tasks. 
+The previous chapters have presented a systematic introduction to the mathematical problems, computational frameworks, and practical algorithms associated with learning low-dimensional distributions from high-dimensional data. Although most theoretical justifications of these methods have been established for idealistic models of data such as (mixtures of) subspaces and/or Gaussians, the principles and ideas behind these computational methods are nevertheless powerful and general, and they are in fact meant to be applicable for real-world datasets and tasks. 
 
-To help the readers understand the material in this book better and learn how to apply what you have learned so far to solve real-world problems, we, towards the end of the book, provide some demonstrations and vignettes of several representative applications with real-world tasks and datasets, including both visual data and text data. Results presented in this chapter are meant to serve two purposes: firstly, to provide additional experimental details and empirical evidence for validating the methods presented earlier in the book; secondly, to reveal through promising results greater potentials of these methods for real-world applications. However, in our honest opinion, solutions and results given here are merely for verification of the concept and are far from complete or final. They all have great room for further improvements in the future, as we will discuss some of the future directions in the last Chapter \ref{ch:future}.  
+To help readers understand the material in this book better and learn how to apply what you have learned so far to solve real-world problems, we, towards the end of the book, provide some demonstrations and vignettes of several representative applications. Each application proposes a solution to a real-world task, with a real-world dataset (such as visual data and text data), using the methods we have introduced in this book. Results presented in this chapter are meant to serve two purposes: 
+\begin{itemize}
+    \item firstly, to provide additional experimental details and empirical evidence which validate the methods presented earlier in the book, and demonstrate their significant potential in real-world contexts;
+    \item secondly, to introduce the reader to certain modern empirical methods and tasks in deep learning which are not well-documented outside of research or production codebases.
+\end{itemize}
+However, in our honest opinion, solutions and results given here are designed simply to verify that the methodology works. As such, there is great room for future improvement, in both engineering and theoretical understanding, to potentially improve the state-of-the-art. We will discuss some future directions in \Cref{ch:future}.  
 
 %such as shown on  \href{https://ma-lab-berkeley.github.io/CRATE/}{the CRATE website}. Content of this chapter might evolve based on ongoing research... 
 
-\yima{How the chapter progress... How to make learning data distribution better with principled objectives, interpretable architectures, and complete systems... }
+% \yima{How the chapter progress... How to make learning data distribution better with principled objectives, interpretable architectures, and complete systems... }
 
-\DP{The goal of this chapters is to start with the theoretical basis found in other chapters, and convert it to implementation-ready descriptions. We should convey this message in the introduction.}
+% \DP{The goal of this chapters is to start with the theoretical basis found in other chapters, and convert it to implementation-ready descriptions. We should convey this message in the introduction.}
 
 \section{Technical Setup and Outline of the Chapter}\label{sec:experiment_setup}
 
@@ -49,7 +54,7 @@ Let us define the set of possible data as \(\cD\) (eventually this will be the s
 
 We will repeatedly use this notation many times in this chapter, so please feel free to refer back to it if something doesn't make sense. This decomposition of our networks also closely mirrors most code implementations, and you can start your coding projects by defining these networks.
 
-In this chapter we will discuss applications of the book's principles to contrastive learning in \Cref{sec:contrastive_learning} --- this will serve as both an introduction to imagery data, data augmentation techniques, and the common architecture known as the transformer, \textit{as well as} a first demonstration of the drastic kinds of simplifications we can make using the demonstrated principles. We will continue with modifications to the \textit{network architecture} in \Cref{sec:image_classification,sec:ntp_text}, which demonstrate the capabilities of simplified architectures for \textit{encoding} within the image and text domains. We then demonstrate simplified architectures for \textit{autoencoding} in \Cref{sec:image_completion,sec:text_completion}. We will end our discussion of principled improvements by discussing a practical implementation of the \textit{closed-loop transcription} framework in \Cref{sec:ctrl}, as well as a myriad of empirically challenging tasks which the framework drastically simplifies. For the sake of completeness, we finish the chapter by discussing some tips and tricks for training models on real data, so as to be a helpful resource, and will try to explain them in a principled fashion.
+In this chapter we will discuss applications of the book's principles to contrastive learning in \Cref{sec:contrastive_learning}. This will serve as both an introduction to imagery data, data augmentation techniques, and the common architecture known as the transformer, \textit{as well as} a first demonstration of the drastic kinds of simplifications we can make using the demonstrated principles. We will continue with modifications to the \textit{network architecture} in \Cref{sec:image_classification,sec:ntp_text}, which demonstrate the capabilities of simplified architectures for \textit{encoding} within the image and text domains. We then demonstrate simplified architectures for \textit{autoencoding} in \Cref{sec:image_completion,sec:text_completion}. We will end our discussion of principled improvements by discussing a practical implementation of the \textit{closed-loop transcription} framework in \Cref{sec:ctrl}, as well as a myriad of empirically challenging tasks which the framework drastically simplifies. For the sake of completeness, we finish the chapter in \Cref{sec:training_tips} by discussing some principled tips and tricks for training models on real data.
 
 
 \section{Simplified Contrastive Learning}\label{sec:contrastive_learning}
@@ -58,23 +63,32 @@ Learning high-quality and faithful representations of data is a fundamental prob
 
 \subsection{Data}\label{sub:contrastive_learning_data}
 
-The data that we will use to explore and simplify the DINO methodology is all 2-dimensional image data. For \textit{training}, we will use the ImageNet-1K and ImageNet-21K datasets. Each sample in the dataset is an RGB image, of varying resolution, and a label indicating the object or scene that the image contains (i.e., the \textit{class} of the image). The ImageNet-1K dataset contains 1.28M training images and 50K validation images partitioned into 1K classes. The ImageNet-21K dataset contains 14.2M training images and 21.8K classes, but the classes are not disjoint (i.e., some classes are subsets of others). Since we are doing self-supervised learning, the labels will not be used during training, only during evaluation. For \textit{evaluation}, we will use a litany of datasets. Of these, the most common is CIFAR-10. CIFAR-10 is a dataset of 60K RGB 32 \(\times\) 32 natural images partitioned into 10 classes, with a pre-established training set of 50K samples and a validation set of 10K samples. The purpose of using CIFAR-10 will be to ensure that models which train on one distribution of images (ImageNet) can generalize to another distribution of images (CIFAR-10). We also refer to other similar datasets, such as CIFAR-100 (disjoint from CIFAR-10), Oxford Flowers, and Oxford Pets. Exemplars of ImageNet-1K and CIFAR-10 data are shown in \Cref{fig:in1k_cifar10_examples}. In order to increase robustness of our model, we often apply \textit{small data augmentations} to each image during processing, such as small rotations, small translations, flips, added small random noise, or random large crops; we do not include this in our notation, as each augmentation of a natural image is itself (very close to) a natural image in our dataset.
+The data that we will use to explore and simplify the DINO methodology is all 2-dimensional image data. For \textit{training}, we will use the ImageNet-1K and ImageNet-21K datasets. Each sample in the dataset is an RGB image, of varying resolution, and a label indicating the object or scene that the image contains (i.e., the \textit{class} of the image). The ImageNet-1K dataset contains 1.28M training images and 50K validation images partitioned into 1K classes. The ImageNet-21K dataset contains 14.2M training images and 21.8K classes, but the classes are not disjoint (i.e., some classes are subsets of others). Since we are doing self-supervised learning, the labels will not be used during training, only during evaluation. For \textit{evaluation}, we will use a litany of datasets. Of these, the most common is CIFAR-10. CIFAR-10 is a dataset of 60K RGB 32 \(\times\) 32 natural images partitioned into 10 classes, with a pre-established training set of 50K samples and a validation set of 10K samples. The purpose of using CIFAR-10 will be to ensure that models which train on one distribution of images (ImageNet) can generalize to another distribution of images (CIFAR-10). We also refer to other similar datasets, such as CIFAR-100 (disjoint from CIFAR-10), Oxford Flowers, and Oxford Pets. Exemplars of ImageNet-1K and CIFAR-10 data are shown in \Cref{fig:in1k_cifar10_examples}. In order to increase robustness of our model, we often apply \textit{small data augmentations} to each image during processing, such as flips, added small random noise, or random large crops; we do not include this in our notation, as each augmentation of a natural image is itself (very close to) a natural image in our dataset.
 
 \begin{figure}
     \centering
-    \DP{TODO: get some figures from both ImageNet-1K and CIFAR-10.}
-    \caption{\small\textbf{Images from ImageNet-1K \textit{(left)} and CIFAR-10 \textit{(right)}.}}
+    
+    \hfill 
+    \begin{subfigure}{0.3\textwidth}
+        \centering 
+        \includegraphics[width=\textwidth]{figs_chap7/imagenet.pdf}
+        \caption{\small ImageNet-1K samples.}
+    \end{subfigure}
+    \hfill 
+    \begin{subfigure}{0.26\textwidth}
+        \centering 
+        \includegraphics[width=\textwidth]{figs_chap7/cifar10.pdf}
+        \caption{\small CIFAR10 samples.}
+    \end{subfigure}
+    \hfill 
+    \phantom{}
+
+    \caption{\small\textbf{Images from ImageNet-1K \textit{(left)} and CIFAR-10 \textit{(right)}.} Notice that the CIFAR-10 images are much lower resolution, generally speaking, reducing the complexity of learning that distribution.}
     \label{fig:in1k_cifar10_examples}
 \end{figure}
 
 On a slightly more formal level, our data \(\vX\) will be images; we let \(\cI\) be the set of all images. Since an image is a rectangular array of pixels, and each pixel has a color given by RGB, CMYK, or another color format, we say that an image is an element of \(\R^{c \times h \times w}\) --- here \(c\) is the number of channels (i.e., \(3\) for RGB and \(4\) for CMYK), \(h\) is the image height, and \(w\) is the image width. Consequently, the set of all images \(\cI := \bigcup_{c, h, w = 1}^{\infty}\R^{c \times h \times w}\) is the set of all possible such data. Again, we will use this notation repeatedly.
 
-% \begin{figure}[t]
-%     \centering 
-%     \includegraphics[width=0.5\textwidth]{figs_chap7/patchify.png}
-%     \caption{An example of tokenizing an image into patches. \DP{NOTE: this image is from somewhere on the internet, and we should make our own before publishing anything.}}
-%     \label{fig:patchify}
-% \end{figure}
 
 \subsection{Task and Objective Function} \label{sub:contrastive_learning_objective}
 
@@ -107,12 +121,12 @@ This seems intuitive, but as previously mentioned, there are several empirical c
  \end{align}
  where \(d_{\mathrm{JS}}\) is the \textit{Jensen-Shannon} divergence, minimized if and only if \(\vp = \vq\). So minimizing \(d_{\CE}\) does two things: it makes \(\vp = \vq\), and it makes \(\vp\) and \(\vq\) have minimal entropy (i.e., vectors with \(1\) in one component and \(0\) elsewhere --- these are called \textit{one-hot vectors}). Overall, the goal of this objective is not \textit{just} to match \(\vp\) and \(\vq\) but also to shape them in a certain way to make them low-entropy. Keep this in mind when we discuss the formulation.
 
-The next question is, how should we obtain samples with similar global information? The answer of DINO (as well as nearly all contrastive learning) is \textit{data augmentation} --- from each sample, make several correlated samples which share the desired properties. In the DINO case, we use different crops or \textit{views} of the input image. Recall that we model an image as an element of the set \(\cI\). In this notation, a view is a function \(v \colon \cI \to \cI\). In the DINO case, the view is a \textit{random resized crop}: it takes a randomly chosen rectangular crop of the image (which has a fixed percentage \(p_{v} \in [0, 1]\) of the total area of the image), and then resizes it to a fixed shape \((C, S_{v}, S_{v})\) where \(S_{v} \geq 1\) is the size of the view and \(C\) is the number of channels in the original image. 
+The next question is, how should we obtain samples with similar global information? The answer of DINO (as well as nearly all contrastive learning) is \textit{data augmentation} --- from each sample, make several correlated samples which share the desired properties. In the DINO case, we use different crops or \textit{views} of the input image. Recall that we model an image as an element of the set \(\cI\). In this notation, a view is a function \(v \colon \cI \to \cI\). In the DINO case, the view is a \textit{random resized crop}: it takes a randomly chosen rectangular crop of the image (which has a fixed percentage \(p_{v} \in [0, 1]\) of the total area of the image), resize it proportionally so that the \textit{shorter edge} is \(S_{\rsz}\) pixels long, then resizes it to a fixed shape \((C, S_{v}, S_{v})\) where \(S_{v} \geq 1\) is the size of the view and \(C\) is the number of channels in the original image. 
 
 \begin{figure}
     \centering 
-    \includegraphics[width=0.7\textwidth]{figs_chap7/global_local_views.png}
-    \caption{\textbf{Local and global views in DINO.} Local views and global views take a rectangular crop of the input image and resize it to a square shape, which is then input into the network for processing. \DP{I took this picture from the internet, it should be redone when time allows.}}
+    \includegraphics[width=0.7\textwidth]{figs_chap7/global_local_views.pdf}
+    \caption{\textbf{Local and global views in DINO.} Local views and global views take a rectangular crop of the input image and resize it to a square shape, which is then input into the network for processing.}
     \label{fig:dino_local_global_views}
 \end{figure}
 
@@ -160,11 +174,19 @@ For the architecture, we use a standard vision transformer. Here is how such an 
 
 \begin{figure}
     \centering 
-    \includegraphics[width=0.7\textwidth]{figs_chap7/patchify.png}
-    \caption{\small\textbf{An example of an image turned into \(5 \times 5\) square patches.} Each patch is of the same size, and the grid of patches is of shape \((N_{H}, N_{W}) = (5, 5)\). \DP{I took this picture from the internet, it should be redone when time allows.}}
+    \includegraphics[width=0.8\textwidth]{figs_chap7/patchify.pdf}
+    \caption{\small\textbf{An example of an image turned into \(5 \times 5\) square patches, which are placed in raster order.} Each patch is of the same size, and the grid of patches is of shape \((N_{H}, N_{W}) = (5, 5)\). The grid of patches is then unrolled into a sequence of length \(5 \times 5 = 25\) in raster order.}
+    \label{fig:patchify_rasterize}
 \end{figure}
 
-\paragraph{Embedding.} Given imagery data \(\vX \in \cI\), we embed it as a sequence of tokens in \(\R^{d}\) using the map \(f_{\theta}^{\emb}\), as follows. 
+\begin{figure}
+    \centering 
+    \includegraphics[width=\textwidth]{figs_chap7/transformer_embedding.pdf}
+    \caption{\small\textbf{The transformer embedding pipeline.} Given a sequence of unrolled patches in raster order \(\vX^{\patch}\), each unrolled patch is linearly projected into the feature space, and equipped with an (additive) positional encoding and an additional token known as the class token. The output is the first-layer-input feature \(\vZ_{\theta}^{1}(\vX) = f_{\theta}^{\emb}(\vX)\).}
+    \label{fig:transformer_embedding}
+\end{figure}
+
+\paragraph{Embedding.} Given imagery data \(\vX \in \cI\), we embed it as a sequence of tokens in \(\R^{d}\) using the map \(f_{\theta}^{\emb}\), as follows. The first two steps are depicted in \Cref{fig:patchify_rasterize}, and the latter two are depicted in \Cref{fig:transformer_embedding}.
 \begin{enumerate}
     \item First, we turn the image data \(\vX\) into a sequence of patches of shape \((C, P_{H}, P_{W})\) where \(P_{H}\) and \(P_{W}\) are the patch dimensions. We assume that \(P_{H}\) and \(P_{W}\) evenly divide the height and width of \(\vX\), respectively (in the notation of \Cref{sub:contrastive_learning_objective} we assume that \(P_{H}\) and \(P_{W}\) evenly divide \(S_{\loc}\) and \(S_{\glo}\)). Let the resulting grid of patches have \(N_{H}\) rows and \(N_{W}\) columns.
     \item We unroll each patch into a vector of length \(D := CP_{H}P_{W}\). There are \(N := N_{H}N_{W}\) patch vectors, which we place in ``raster order'' (top left \(\to\) top right \(\to\) bottom left \(\to\) bottom right) into a matrix \(\vX^{\patch} \in \R^{D \times N}\), where \(\vX^{\patch} := f^{\patch}(\vX)\). Notice that \(D\) only depends on the patch size and number of channels. Since the latter quantity is normally constant among samples in the same dataset, \(D\) is the same for all images in the dataset, while \(N\) is different for larger and smaller images.
@@ -188,7 +210,14 @@ Thus, in the end we have
 \end{equation}
 All parameters \(\vz_{\cls}^{1}, \vW^{\emb}, \vE^{\pos}\) are contained in the parameter set \(\theta\).
 
-\paragraph{Backbone.} Given a token sequence \(\vZ_{\theta}^{1}(\vX) := f_{\theta}^{\emb}(\vX) \in \R^{d \times *}\), we process it using the backbone map \(f_{\theta}^{\backbone}\) as follows. The function \(f_{\theta}^{\backbone}\) is composed of \(L\) \textit{layers} \(f_{\theta}^{\ell}\), i.e.,
+\begin{figure}
+    \centering 
+    \includegraphics[width=\textwidth]{figs_chap7/transformer_backbone.pdf}
+    \caption{\small\textbf{One layer \(f_{\theta}^{\ell}\) of the transformer backbone.} The input features go through layer-normalization, multi-head self-attention, and multi-layer perceptron blocks in sequence to form the output features of the layer.}
+    \label{fig:transformer_backbone}
+\end{figure}
+
+\paragraph{Backbone.} Given a token sequence \(\vZ_{\theta}^{1}(\vX) := f_{\theta}^{\emb}(\vX) \in \R^{d \times *}\), we process it using the backbone map \(f_{\theta}^{\backbone}\) as follows and as depicted in \Cref{fig:transformer_backbone}. The function \(f_{\theta}^{\backbone}\) is composed of \(L\) \textit{layers} \(f_{\theta}^{\ell}\), i.e.,
 \begin{equation}
     f_{\theta}^{\backbone} = f_{\theta}^{L} \circ \cdots \circ f_{\theta}^{1}.
 \end{equation}
@@ -204,18 +233,24 @@ and \(f_{\theta}^{\ell}\) is defined such that \(f_{\theta}^{\ell}(\vZ_{\theta}^
     \item The \(\MHSA_{\theta}^{\ell}\) operator is multi-head-self-attention, the predecessor of the multi-head subspace self-attention (cf \Cref{ch:representation}). The formulation is as follows:
     \begin{align}
         \MHSA_{\theta}^{\ell}(\vZ) \label{eq:mhsa}
-        &:= \vU_{\out}^{\ell}\mat{([\vU_{\val}^{1, \ell}]^{\top}\vZ)\vA^{1, \ell}(\vZ) \\ \vdots \\ ([\vU_{\val}^{K, \ell}]^{\top}\vZ)\vA^{K, \ell}(\vZ)}, \\
-        \text{where} \qquad \vA^{k, \ell}(\vZ) \label{eq:attention_map}
-        &:= \softmax\rp{\frac{([\vU_{\key}^{k, \ell}]^{\top}\vZ)^{\top}([\vU_{\query}^{k, \ell}]^{\top}\vZ)}{\sqrt{d}}}
+        &:= \vU_{\out}^{\ell}\mat{\SA([\vU_{\query}^{1, \ell}]^{\top}\vZ, [\vU_{\key}^{1, \ell}]^{\top}\vZ, [\vU_{\val}^{1, \ell}]^{\top}\vZ) \\ \vdots \\ \SA([\vU_{\query}^{K, \ell}]^{\top}\vZ, [\vU_{\key}^{K, \ell}]^{\top}\vZ, [\vU_{\val}^{K, \ell}]^{\top}\vZ)} + \vb_{\out}^{\ell}\vone_{n}^{\top}, \\
+        \label{eq:self_attention}
+        \text{where} \qquad \SA(\vQ, \vK, \vV)
+        &:= \vV \underbrace{\softmax\rp{\frac{\vK^{\top}\vQ}{\sqrt{p}}}}_{:= \vA(\vQ, \vK)}
     \end{align}
-    where \(p\) is a positive integer, \(\vU_{\query}^{k, \ell}, \vU_{\key}^{k, \ell}, \vU_{\val}^{k, \ell} \in \R^{d \times p}\) and \(\vU_{\out}^{\ell} \in \R^{d \times Kp}\) are trainable parameters contained in the parameter set \(\theta\), and the \(\softmax\) is defined column-wise as 
+    where \(p\) is a positive integer, \(\vU_{\query}^{k, \ell}, \vU_{\key}^{k, \ell}, \vU_{\val}^{k, \ell} \in \R^{d \times p}\), \(\vU_{\out}^{\ell} \in \R^{d \times Kp}\), and \(\vb_{\out}^{\ell} \in \R^{d}\) are trainable parameters contained in the parameter set \(\theta\), and the \(\softmax\) is defined column-wise as 
     \begin{align}
         \softmax(\vM) 
         &:= \mat{\softmax(\vm_{1}) & \cdots & \softmax(\vm_{p})}, \\ 
         \forall \vM 
         &= \mat{\vm_{1}, \dots, \vm_{p}} \in \R^{n \times p}.
     \end{align}
-    In practice, the dimensions are usually picked is usually picked such that \(Kp = d\). The terms \(\vA^{k, \ell}(\vZ)\) and \((\vU_{\val}^{k, \ell}\vZ)\vA^{k, \ell}(\vZ)\) are also known as the \textit{\(k\th\) attention map} and \textit{\(k\th\) attention head output} at layer \(\ell\), respectively.
+    In practice, the dimensions are usually picked is usually picked such that \(Kp = d\). The terms 
+    \begin{equation}
+        \label{eq:attention_map}
+        \vA_{\theta}^{k, \ell}(\vZ) := \vA([\vU_{\query}^{k, \ell}]^{\top}\vZ, [\vU_{\key}^{k, \ell}]^{\top}\vZ), \qquad \SA_{\theta}^{k, \ell}(\vZ) := \SA([\vU_{\query}^{k, \ell}]^{\top}\vZ, [\vU_{\key}^{k, \ell}]^{\top}\vZ, [\vU_{\val}^{k, \ell}]^{\top}\vZ)
+    \end{equation}
+    are also known as the \textit{\(k\th\) attention map} and \textit{\(k\th\) attention head output} at layer \(\ell\), respectively.
     \item The \(\MLP_{\theta}^{\ell}\) is a two-layer perceptron, a regular nonlinearity used in deep networks, and has the form 
     \begin{equation}
         \MLP_{\theta}^{\ell}(\vZ) := \vW_{\down}^{\ell}\ReLU(\vW_{\up}^{\ell}\vZ + \vb_{\up}^{\ell}\vone_{n}^{\top}) + \vb_{\down}^{\ell}\vone_{n}^{\top}
@@ -243,10 +278,19 @@ The transformer is one of the most popular neural network architectures in histo
 
 \subsection{Optimization Strategy}\label{sub:contrastive_learning_optimization}
 
+\begin{figure}
+    \centering 
+    \includegraphics[width=\textwidth]{figs_chap7/dino_pipeline.pdf}
+    \caption{\small \textbf{The DINO pipeline.} Student features and teacher features are computed for each input. The objective attempts to align the student features with the teacher features by projecting both sets of features into a high-dimensional probability simplex and computing a cross-entropy loss. Notably, because of the ``stop-grad'', the gradient is only computed w.r.t.~the \textit{student parameters' outputs}.}
+    \label{fig:dino_pipeline}
+\end{figure}
+
 \paragraph{Optimizing DINO.} We have a loss function and an architecture, so we now discuss the optimization strategy. The optimization strategy for DINO uses \textit{two sets of weights for the same architecture}: \textit{student} weights \(\theta_{\student}\) and \textit{teacher} weights \(\theta_{\teacher}\). These correspond to two different neural networks, called the teacher network and student network, with the same architecture. The teacher network encodes all global views, while the student network encodes all ``other'' views. The goal of the loss is to distill teacher outputs into the student model. Namely, we train on the loss \(L_{\dino{}-\student\teacher}\):
 \begin{equation}\label{eq:dino_loss_teacherstudent}
     L_{\dino{}-\student\teacher}(\theta_{\student}, \theta_{\teacher}, \vW_{\student}, \vW_{\teacher}, \vmu) := \Ex[d_{\CE}(\vp_{\theta_{\student}, \vW_{\student}}(\vX_{c}), \vp_{\theta_{\teacher}, \vW_{\teacher}, \vmu}(\vX_{g}))].
 \end{equation}
+Now, we can fully describe the overall pipeline of DINO, depicted in \Cref{fig:dino_pipeline}.
+
 While it is easy to reason about \eqref{eq:dino_loss_teacherstudent}, it is impossible in practice to implement optimization algorithms such as gradient descent with a loss given by \(L_{\dino{}-\student\teacher}\). This is because the expectations in the loss are impossible to evaluate, much less take the gradient of. In this extremely frequent case, we approximate the expectation via finite samples. That is, at each timestep \(k\) we:
 \begin{itemize}
     \item Subsample \(B\) data points from our dataset \(\{\vX_{1}^{(k)}, \dots, \vX_{B}^{(k)}\} \subset \cI\).
@@ -286,11 +330,17 @@ The way that \(\nu\) and \(\rho\) change over the optimization trajectory (i.e.,
 
 Using the surrogate (``empirical'') loss transforms our intractable optimization problem, as in optimizing the loss in \eqref{eq:dino_loss}, into a tractable stochastic optimization problem which is run to train essentially every deep learning model in the world. This conversion is extremely natural once you have seen some examples, and we will hopefully give these examples throughout the chapter. 
 
+\begin{figure}
+    \centering 
+    \includegraphics[width=0.7\textwidth]{figs_chap7/simdino_pipeline.pdf}
+    \caption{\small\textbf{The SimDINO pipeline.} Here, in contrast to the DINO pipeline in \Cref{fig:dino_pipeline}, the loss is computed directly on the features without need of further manipulation. This shaves off several large matrices' worth of parameters and simplifies the pipeline, simultaneously making it more stable to train.}\label{fig:simdino_pipeline}
+\end{figure}
+
 \paragraph{Optimizing SimDINO.} The simplified DINO population-level objective is very similar in spirit but much simpler in execution, i.e.,
 \begin{equation}\label{eq:simdino_loss_teacherstudent}
     L_{\simdino-\student\teacher}(\theta_{\student}, \theta_{\teacher}) :=  \Ex\rs{d_{\ell^{2}}(\vz_{\theta_{\student}}(\vX_{c}), \vz_{\theta_{\teacher}}(\vX_{g}))} + \frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{\theta_{\student}}(\vX_{g})))}.
 \end{equation}
-Thus we can use a simpler version of the DINO training pipeline to optimize SimDINO. At each timestep \(k\), we:
+Thus, as elaborated in \Cref{fig:simdino_pipeline}, the SimDINO pipeline is strictly simpler than the DINO pipeline. We can use a simpler version of the DINO training pipeline to optimize SimDINO. At each timestep \(k\), we:
 \begin{itemize}
     \item Subsample \(B\) data points from our dataset \(\{\vX_{1}^{(k)}, \dots, \vX_{B}^{(k)}\} \subset \cI\).
     \item For each data point \(\vX_{b}^{(k)}\), sample \(M_{\glo}\) global views \(v_{b, g}^{(k), i}\) and \(M_{\loc}\) local views \(v_{b, \ell}^{(k), i}\). Apply the views to \(\vX_{b}^{(k)}\) to obtain \(\vX_{b, g}^{(k), i} := v_{b, g}^{(k), i}(\vX_{b}^{(k)})\) and \(\vX_{b, \ell}^{(k), i} := v_{b, \ell}^{(k), i}(\vX_{b}^{(k)})\).
@@ -322,12 +372,12 @@ Again, we re-iterate that the gradient is only taken w.r.t.~\(\theta_{\student}\
 
 
 \subsection{Evaluation Methodology}\label{sub:contrastive_learning_evals}
-There are several ways to evaluate a trained transformer model. We highlight two in this section. For DINO and SimDINO specifically, let us define the view \(v_{\evaluation} \colon \cI \to \cI\) through the following method:
+There are several ways to evaluate a trained transformer model. We highlight two in this section. Let us define the \textit{center crop} view \(v_{\cc} \colon \cI \to \cI\) which is a a \textit{deterministic resized crop}:
 \begin{itemize}
-    \item Resize the input proportionally so that the \textit{shorter edge} is \(S_{\evaluation}\) pixels.
-    \item Take a centered rectangular crop of the input (which has \(C\) channels) of shape \((C, S_{\glo}, S_{\glo})\).
+    \item it resizes the image so that the shortest edge is of size \(S_{\rsz}\) (similar to random resized crops with area percentage parameter \(1\));
+    \item then it takes the \textit{center} \(S_{\cc} \times S_{\cc}\) crop;
 \end{itemize}
-For an input \(\vX\) we write \(\vX_{\evaluation} := v_{\evaluation}(\vX)\). Here \(S_{\glo} \leq S_{\evaluation}\).
+so that the final shape is \((C, S_{\cc}, S_{\cc})\). Notice that the view \(v_{\cc}\) is completely deterministic given an input. For an input \(\vX\) we write \(\vX_{\cc} := v_{\cc}(\vX)\). Here \(S_{\cc} \leq S_{\rsz}\).
 
 
 \paragraph{Linear probing.}
@@ -336,11 +386,11 @@ The first, and most architecture-agnostic, way to evaluate an encoder model \(\v
 
 More formally, let us suppose that we want to evaluate the quality and faithfulness of the features of the encoder on image-label data \((\vX, \vy)\), where there are \(Q\) classes and \(\vy \in \{0, 1\}^{N_{\cls}}\) is a ``one-hot encoding'' (namely, zeros in all positions except a \(1\) in the \(i\th\) position if \(\vX\) is in the \(i\th\) class). One way to do this is to solve the logistic regression problem 
 \begin{equation}\label{eq:linear_probing}
-    \min_{\vW \in \R^{N_{\cls} \times d}}\Ex[\CE(\vy, \vW \vz_{\theta}(\vX_{\evaluation}))].
+    \min_{\vW \in \R^{N_{\cls} \times d}}\Ex[\CE(\vy, \vW \vz_{\theta}(\vX_{\cc}))].
 \end{equation}
 More practically, if we have labeled data \(\{(\vX_{b}, \vy_{b})\}_{b = 1}^{B}\), we can solve the \textit{empirical} logistic regression problem (akin to \eqref{eq:dino_loss} vs.~\eqref{eq:dino_loss_empirical}) given by 
 \begin{equation}\label{eq:linear_probing_empirical}
-    \min_{\vW \in \R^{N_{\cls} \times d}}\frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}, \vW \vz_{\theta}(\vX_{b, \evaluation})).
+    \min_{\vW \in \R^{N_{\cls} \times d}}\frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}, \vW \vz_{\theta}(\vX_{b, \cc})).
 \end{equation}
 This problem is a convex optimization problem in \(\vW\), and thus can be solved efficiently via (stochastic) gradient descent or a litany of other algorithms. This linear probe, together with the encoder, may be used as a classifier, and we can evaluate the classification accuracy. The usual practice is to train the model first on a large dataset (such as ImageNet-1K), then train the linear probe on a dataset (such as the training dataset of CIFAR-10), and evaluate it on a third (``holdout'') dataset which is drawn from the same distribution as the second one (such as the evaluation dataset of CIFAR-10).
 
@@ -348,34 +398,97 @@ This problem is a convex optimization problem in \(\vW\), and thus can be solved
     Prove that \eqref{eq:linear_probing} and \eqref{eq:linear_probing_empirical} are convex optimization problems.
 \end{exercise}
 
+\paragraph{\(k\)-nearest neighbors.}  We can also evaluate the performance of the features on classification tasks \textit{without needing to explicitly train a classifier} by using the \(k\)-nearest neighbor algorithm to get an average predicted label. Namely, given a dataset \(\{\vz_{b}\}_{b = 1}^{B} \subseteq \R^{d}\), define the \(k\)-nearest neighbors of another point \(\vz \in \R^{d}\) as \(\operatorname{NN}_{k}(\vz, \{\vz_{b}\}_{b = 1}^{B})\). Using this notation, we can compute the predicted label \(\hat{\vy}_{\theta}(\vX \mid \{(\vX_{b}, \vy_{b})\}_{b = 1}^{B})\) as 
+\begin{equation}
+    \hat{\vy}_{\theta}(\vX \mid \{(\vX_{b}, \vy_{b})\}_{b = 1}^{B}) = \ve_{i^{\star}} \quad \text{where} \quad i^{\star} := \argmax_{i \in [Q]}\sum_{b = 1}^{B}\vy_{b}\indvar[\vz_{\theta}(\vX_{\cc, b}) \in \operatorname{NN}_{k}(\vz_{\theta}(\vX_{\cc}))].
+\end{equation}
+Here, \(\ve_{i}\) is the \(i^{\mathrm{th}}\) standard basis vector, which is \(1\) in the \(i^{\mathrm{th}}\) coordinate and \(0\) elsewhere. That is, this procedure takes the most common label among the \(k\) nearest points in feature space. The \(k\)-nearest neighbor classification accuracy is just the accuracy of this predicted label, namely,
+\begin{equation}
+    \Ex_{\vX, \vy}[\indvar(\hat{\vy}_{\theta}(\vX \mid \{(\vX_{b}, \vy_{b})\}_{b = 1}^{B}) = \vy)]
+\end{equation}
+or more commonly its corresponding empirical version, where \((\vX, \vy)\) ranges over a finite dataset (\textit{not} the existing samples \((\vX_{b}, \vy_{b})\) which are used for the \(k\) neighbors).
+
 \paragraph{Fidelity of the attention maps.}
 
 Another way to check the performance of the representations, for a transformer-based encoder, is to examine the fidelity of the attention maps \(\vA^{L, k} \in \R^{n \times n}\) as defined in \Cref{eq:attention_map}, at the last layer \(L\), and given by the following pipeline:
 \begin{align}
     \vX \mapsto \cdots \mapsto \vZ^{L - 1} = [\underbrace{\vz_{1}^{L - 1}}_{\text{class token}}, \underbrace{\vz_{2}^{L - 1} \dots, \vz_{n}^{L - 1}}_{\text{patch tokens}}] \mapsto \vA^{k, L} = \mat{\vA_{1, 1}^{k, L} & \vA_{1, 2:}^{k, L} \\ \vA_{2:, 1}^{k, L} & \vA_{2:, 2:}^{k, L}}.
 \end{align}
-In particular, we examine what the attention maps for a given input reveal about the salient objects in the input image, i.e., which parts of the image provide the most globally-relevant information to the class token. One particular way to do this is to examine the component of the attention map where the class token is extracted as the query and removed from the value matrix, i.e., \(\vA_{2:, 1}^{k, L} \in \R^{1 \times (n - 1)} = \R^{1 \times N}\) or its transpose \(\va^{k, L} = (\vA_{2:, 1}^{k, L})^{\top} \in \R^{N}\). Notice that this vector \(\va^{k, L}\), which we label as the ``\textit{saliency vector} at the \(k\th\) attention head at layer \(L\),'' has a value for every patch, \(1, \dots, N\), and we use this value to describe how relevant each patch is towards the global information. In particular for visualization's sake we create a new image where each patch is replaced by its corresponding value in the saliency vector, showcasing the contribution of each patch; we call this image the ``\textit{saliency map} at the \(k\th\) attention head at layer \(L\)''. \Cref{fig:attention_maps_saliency_dino} show visualizations of saliency maps in DINO and our simplified DINO; note that selected saliency maps highlight the relevant parts of the input image.
-\begin{figure}
-    \begin{subfigure}[t]{0.45\textwidth}
-        \centering 
-        \includegraphics[width=0.75\textwidth]{figs_chap7/dino_attention_maps.png}
-        \caption{DINO.}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[t]{0.45\textwidth}
-        \centering 
-        % \includegraphics[width=0.75\textwidth]{figs_chap7/dino_attention_maps.png}
-        \caption{Simplified DINO. \DP{TODO @Ziyang}}
-    \end{subfigure}
-    \caption{\textbf{A qualitative comparison of saliency maps} generated by DINO \textit{(left)} and by our simplified DINO \textit{(right)}. For each image, three attention heads (denoted by \(k\)) in the last layer \(L\) are selected and their corresponding saliency maps are displayed.}
-    \label{fig:attention_maps_saliency_dino}
-\end{figure}
+In particular, we examine what the attention maps for a given input reveal about the salient objects in the input image, i.e., which parts of the image provide the most globally-relevant information to the class token. One particular way to do this is to examine the component of the attention map where the class token is extracted as the query and removed from the value matrix, i.e., \(\vA_{2:, 1}^{k, L} \in \R^{1 \times (n - 1)} = \R^{1 \times N}\) or its transpose \(\va^{k, L} = (\vA_{2:, 1}^{k, L})^{\top} \in \R^{N}\). Notice that this vector \(\va^{k, L}\), which we label as the ``\textit{saliency vector} at the \(k\th\) attention head at layer \(L\),'' has a value for every patch, \(1, \dots, N\), and we use this value to describe how relevant each patch is towards the global information. In particular for visualization's sake we create a new image where each patch is replaced by its corresponding value in the saliency vector, showcasing the contribution of each patch; we call this image the ``\textit{saliency map} at the \(k\th\) attention head at layer \(L\)''. To visualize the total relevance of each patch towards the global information across all heads, we can average the saliency vector, i.e., \(\tilde{\va}^{L} := \frac{1}{K}\sum_{k = 1}^{K}\va^{k, L}\) and expand into the \textit{average saliency map}. The average saliency maps should highlight the relevant parts of the input image.
 
-Of course, we also wish to have quantitative evaluations of the power of the attention maps. For this, we use the existing methodology MaskCut \citep{wang2023cut} to obtain a segmentation of the input image into several objects from the saliency map. A full description of this methodology is highly involved and it uses several different computer vision techniques; as such a full description is out of scope of this book.\footnote{\citet{yu2023emergence} provides a mathematically precise description of the method.}
+
+\paragraph{Object detection and segmentation.}
+
+We can evaluate how the representations capture the fine-grained (i.e., smaller or more detailed) properties of the input by using them for \textit{semantic segmentation}. Roughly, this means that we use the features to construct bounding boxes for all objects in the input. There are several ways to do this, and several ways to score the resulting bounding boxes compared to a ground-truth. Each combination of methods corresponds to a particular segmentation metric. We do not formally describe them here as they are not particularly insightful, but the DINO paper \citep{caron2021emerging} and DINOv2 paper \citep{oquab2023dinov2} contain references to all metrics that are used in practice.
 
 \subsection{Experimental Setup and Results} \label{sub:contrastive_learning_experiment_results}
 
-\DP{Rest is still TODO (@Ziyang, Jingyuan).}
+Since SimDINO is directly built upon DINO, we compare the optimal settings for DINO as given by their original paper \citep{caron2021emerging} with the same settings applied to SimDINO for fair comparison. 
+
+\paragraph{Objective function.} We use \(10\) local views (i.e., \(M_{\loc} = 10\)) of resolution \(96 \times 96\) (i.e., \(S_{\loc} = 96\)) and \(2\) global views (i.e., \(M_{\glo} = 2\)) of resolution \(224 \times 224\) (i.e., \(S_{\glo} = 224\)) for all experiments. The corresponding portions of the original images cropped for local and global views are \(p_{\loc} \in [\frac{1}{20}, \frac{3}{10}]\) and \(p_{\glo} \in [\frac{3}{10}, 1]\) (chosen randomly per-view). The smaller edge size within the resized crops is \(S_{\rsz} = 256\), and the center crop (evaluation) view edge size is \(S_{\cc} = 224\). All of these settings apply to both DINO and SimDINO.
+
+\paragraph{Model architecture.} For all inputs we set the patch size to be \(16 \times 16\) (namely, \(P_{H} = P_{W} = 16\)). We use the small, base, and large models of the ViT \citep{dosovitskiy2020image} architecture as the embedding and backbone. The feature extractor is a three-layer MLP with a hidden size of \(2048\) and an output dimension of \(256\), followed by an \(\ell^{2}\)-normalization, as specified in \Cref{sub:contrastive_learning_architecture}. For DINO architectures (i.e., not SimDINO architectures), the DINO head \(\vW\) is a matrix in \(\R^{65536 \times 256}\), and the parameter \(\vmu\) is a vector in \(\R^{65536}\). 
+
+\paragraph{Datasets and optimization.} For pre-training, both our DINO reproduction and SimDINO use the ImageNet-1K dataset across all methods. We use AdamW \citep{loshchilov2017decoupled} as the optimizer, which is a very standard choice. We follow the following hyperparameter recommendations:
+\begin{itemize}
+    \item The batch size is \(B = 1024\).
+    \item The learning rate (for AdamW and the student model) has ``base'' value \(2 \times 10^{-3}\). In the first \(10\) epochs the learning rate linearly increases from \(0\) to the base value (i.e., at the \(i^{\mathrm{th}}\) epoch the learning rate is \((i/10) \cdot 2 \times 10^{-3}\), for \(1 \leq i \leq 10\)). Then over the next \(90\) epochs the learning rate decays via a so-called \textit{cosine schedule} back down to \(0\). The definition of a cosine schedule is given in many places, including \href{https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CosineAnnealingLR.html}{PyTorch documentation}, and it is commonly used when training deep vision models.
+    \item The weight decay (the W in AdamW) follows a cosine schedule from 0.04 to \(0.4\) over training.
+    \item The EMA rate \(\nu\) follows a cosine schedule from \(0.996\) to \(1.0\) over training. Specifically for DINO, the centering EMA rate \(\rho\) is fixed at \(0.9\).
+    \item Specifically for DINO, the teacher temperature \(\tau_{\teacher}\) is fixed at \(0.1\), while the student temperature \(\tau_{\student}\) linearly increases from \(0.04\) to \(0.07\) during the first \(30\) epochs and is fixed at \(0.07\) thereafter.
+\end{itemize}
+We use some (essentially information-preserving) data augmentations, such as flips, color jittering, Gaussian blur, and solarization, for each seen image during training, before taking the local and global views. The exact hyperparameters governing these are not listed here, but are referenced in the DINO paper \citep{caron2021emerging}.
+
+For linear probing, the linear probe is usually trained using the AdamW optimizer with learning rate \(2 \times 10^{-4}\), weight decay \(0.01\), and batch size \(512\), but these are often modified on a case-by-case basis to minimize the loss.
+
+
+\begin{table}
+    \centering
+    \begin{tabular}{@{}lcccc@{}} % Removed extra horizontal padding
+        \toprule
+        Method & Model & Epochs & 20-NN & Linear Probing 
+        \\
+        \midrule 
+        DINO & ViT-B & 100 & 72.9 & 76.3 \\
+        SimDINO & ViT-B & 100 & \bf 74.9 & \bf 77.3 \\
+        DINO & ViT-L & 100 & -- & -- \\
+        SimDINO & ViT-L & 100 & \bf 75.6 & \bf 77.4 \\
+        \midrule
+        \color{gray} SwAV & \color{gray} ViT-S & \color{gray} 800 & \color{gray} 66.3 & \color{gray} 73.5 \\
+        \color{gray} MoCov3 & \color{gray} ViT-B & \color{gray} 300  & \color{gray} -- & \color{gray} 76.7 \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small\textbf{Classification performance} on hold-out test data for DINO and SimDINO, using both \(k\)-nearest neighbor accuracy (\(k = 20\)) and linear probing. At the same number of iterations (\(100\)), SimDINO is clearly better in terms of performance, and is more stable (the DINO training running on ViT-L backbone with the provided settings has very unstable optimization and obtains NaN loss in short order). We also compare to other standout methods, namely SwAV and MoCov3, which DINO was built on.}
+    \label{tab:dino_imagenet_linear_probing}
+\end{table}
+
+\begin{figure}
+    \centering 
+    \includegraphics[width=\textwidth]{figs_chap7/dino_attention_maps.png}
+    \caption{\small\textbf{A qualitative comparison of saliency maps} generated by DINO \textit{(middle row)} and by SimDINO \textit{(bottom row)}. For each image, we compute and display the average saliency map in the last layer \(L\). The saliency maps are similar across models, meaning that all models converge to a similar notion of what objects are important. Note that although \(X_{\evaluation}\) is a square image, it is interpolated back into rectangular shape to make this visualization.}
+    \label{fig:dino_attention_maps_saliency}
+\end{figure}
+
+\begin{table}
+    \centering 
+    \begin{tabular}{@{}llcccccccc@{}}
+        \toprule
+         &  & \multicolumn{3}{c}{Detection $\uparrow$} &  \multicolumn{3}{c}{Segmentation $\uparrow$} \\ 
+        Method & Model & AP$_{50}$  & AP$_{75}$ & AP & AP$_{50}$ & AP$_{75}$ & AP  \\ 
+        \midrule
+        SimDINO &ViT-L/16 &\bf 5.4 &1.9 &2.4 &4.5 &1.4 &1.9 \\
+        SimDINO &ViT-B/16 &5.2 & \bf 2.0 & \bf 2.5 & \bf4.7 & \bf 1.5 & \bf 2.0 \\
+        DINO &ViT-B/16 &3.9 &1.5 &1.8 &3.1 &1.0 &1.4 \\
+        \midrule
+        \color{gray} DINO & \color{gray} ViT-B/8 & \color{gray}5.1 & \color{gray}2.3 & \color{gray}2.5 & \color{gray}4.1 & \color{gray}1.3 & \color{gray}1.8 \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small\textbf{Segmentation performance} of pre-trained DINO and SimDINO models on COCO val2017 \citep{lin2014microsoft}, a segmentation dataset which contains object location metadata. We do not train on COCO, merely using the pre-trained embedding and backbone, and the bounding boxes are extracted from the features via a method called MaskCut \citep{wang2023cut}. Nevertheless, SimDINO surpasses DINO at object detection and segmentation at fair comparison, and even surpasses DINO with smaller patch size (side length \(8\) instead of \(16\)). Smaller patch sizes are known to help performance, especially with detection and segmentation tasks, so this result is quite surprising and encouraging.}
+    \label{tab:dino_segmentation}
+\end{table}
+
+\paragraph{Evaluation results.} In terms of downsream classification performance, we obtain the performance in \Cref{tab:dino_imagenet_linear_probing}. We observe that the performance of SimDINO is much higher than in DINO under fair comparison. Also, it is much more stable: the prescribed settings of DINO cannot train a ViT-L(arge) model. On the other hand, \Cref{fig:dino_attention_maps_saliency} shows visualizations of the average saliency maps in DINO and our simplified DINO, observing that the saliency maps look quite similar across models, indicating that the models learn features which are at least as good at capturing fine-grained details. The segmentation and object detection performances in \Cref{tab:dino_segmentation} confirm this claim quantitatively, where SimDINO features show substantive improvement over those of DINO.
+
 
 \begin{exercise}
     Read the DINO paper \cite{caron2021emerging}.
@@ -392,26 +505,30 @@ In the previous section, we simplified an overly complex learning objective usin
 
 Let us first start with arguably the most classical task in machine learning: \textit{image classification}, which is often used as a standard task to evaluate pattern recognition algorithms or deep network architectures. From our discussion of white-box architectures in \Cref{ch:representation}, we only need a semantically meaningful task to learn good representations with white-box architectures. We will validate this idea in this section.
 
-First, the dataset stays largely the same as \Cref{sub:contrastive_learning_data}. Both the training and test data consist of labeled images, i.e., image-label pairs \((\vX, \vy) \in \R^{C \times H \times W} \times \{0, 1\}^{N_{\cls}}\). We still apply various data augmentations (e.g., rotations, translations, flips, etc.) to each sample in each new batch. 
-
-\DP{Remember to put this elsewhere}
-For training, we consider a single class of views \(v_{r}\) of the data, which performs a random resized crop of the input data such that the crop's area is \(p_{\rsz} \approx 1\) of the area of the input image, and resizes the crop to a size \((C, S_{\rsz}, S_{\rsz}) \). We define \(\vX_{r} := v_{r}(\vX) \in \R^{C \times S_{\rsz} \times S_{\rsz}}\). 
+First, the dataset stays largely the same as \Cref{sub:contrastive_learning_data}. Both the training and test data consist of labeled images, i.e., image-label pairs \((\vX, \vy) \in \R^{C \times H \times W} \times \{0, 1\}^{N_{\cls}}\). We still apply various data augmentations (e.g., flips, Gaussian blurring, solarization, etc.) to each sample in each new batch. 
 
 \subsection{Task and Objective} \label{sub:image_classification_objective}
 
-Unlike before, our task is not just to learn a good representation of the data, but also simultaneously build a classifier. Formally, we have labeled data pairs \((\vX, \vy)\), where \(\vy \in \{0, 1\}^{N_{\cls}}\) is a one-hot vector denoting the class membership of \(\vX\). We consider a view \(v_{r}\) of the input data \(\vX\), which is a \textit{random resized crop} (cf \Cref{sub:contrastive_learning_objective}) of the input data \(\vX\): it crops a randomly chosen rectangular region from \(\vX\) whose area is a fixed percentage \(p_{\rsz} \approx 1\) of the area of \(\vX\), then resizes this crop to size \((C, S_{\rsz}, S_{\rsz})\) (where \(C\) is the number of channels of \(\vX\), and \(S_{\rsz}\) is a fixed size). We want to jointly train a feature mapping \((f_{\theta}, f_{\theta}^{\ext})\) and a \textit{classification head} \(h_{\theta}\), defined as follows:
+Unlike before, our task is not just to learn a good representation of the data, but also simultaneously build a classifier. Formally, we have labeled data pairs \((\vX, \vy)\), where \(\vy \in \{0, 1\}^{N_{\cls}}\) is a one-hot vector denoting the class membership of \(\vX\). We consider a deterministic \textit{center crop view} \(v_{\cc}\) of the input data \(\vX\) (cf \Cref{sub:contrastive_learning_objective}) of the input data \(\vX\). We want to jointly train a feature mapping \((f_{\theta}, f_{\theta}^{\ext})\) and a \textit{classification head} \(h_{\theta}\), defined as follows:
 \begin{equation}
     h_{\theta}(\vz) := \softmax(\vW^{\head}\vz + \vb^{\head}), \qquad  \forall \vz \in \R^{d}
 \end{equation}
-where \((\vW^{\head}, \vb^{\head}) \in \R^{N_{\cls} \times d} \times \R^{N_{\cls}}\) are trainable parameters in the parameter set \(\theta\), such that the map \(\vX_{r} \mapsto \hat{\vy}_{\theta}(\vX_{r}) := h_{\theta}(\vz_{\theta}(\vX_{r}))\) predicts a smoothed label for the view \(\vX_{r} = v_{r}(\vX)\) of the input \(\vX\). The learning problem attempts to minimize the distance between \(\hat{\vy}_{\theta}\) and \(\vy\) measured through cross-entropy:
+where \((\vW^{\head}, \vb^{\head}) \in \R^{N_{\cls} \times d} \times \R^{N_{\cls}}\) are trainable parameters in the parameter set \(\theta\), such that the map \(\vX_{\cc} \mapsto \hat{\vy}_{\theta}(\vX_{\cc}) := h_{\theta}(\vz_{\theta}(\vX_{\cc}))\) predicts a smoothed label for the view \(\vX_{\cc} = v_{\cc}(\vX)\) of the input \(\vX\). The learning problem attempts to minimize the distance between \(\hat{\vy}_{\theta}\) and \(\vy\) measured through cross-entropy:
 \begin{equation}\label{eq:classification_ce_loss}
-    \min_{\theta}\bc{L_{\CE}(\theta) := \Ex[\CE(\vy, \hat{\vy}_{\theta}(\vX_{r}))]}.
+    \min_{\theta}\bc{L_{\CE}(\theta) := \Ex[\CE(\vy, \hat{\vy}_{\theta}(\vX_{\cc}))]}.
 \end{equation}
 
 
 \subsection{The CRATE Architecture}\label{sub:image_classification_architecture}
 
-The architecture that we use is the CRATE architecture, described in some level of detail in \Cref{ch:representation}. The overall setup is similar to that of the regular transformer in \Cref{sub:contrastive_learning_architecture}, with a few changes. While the embedding step is the same as both DINO and SimDINO in \Cref{sub:contrastive_learning_architecture}, the feature extraction step is the same as SimDINO in \Cref{sub:contrastive_learning_architecture} as it just extracts the feature corresponding to the class token, and the classification head is described in \Cref{sub:image_classification_objective}, the backbone architecture is different. Each layer takes the form
+\begin{figure}
+    \centering 
+    \includegraphics[width=\textwidth]{figs_chap7/crate_backbone.pdf}
+    \caption{\small\textbf{One layer \(f_{\theta}^{\ell}\) of the CRATE backbone.} The input features go through layer-normalization, multi-head subspace self-attention, and iterative shrinkage-thresholding blocks in sequence to form the output features.}
+    \label{fig:crate_backbone}
+\end{figure}
+
+The architecture that we use is the CRATE architecture, described in some level of detail in \Cref{ch:representation}. The overall setup is similar to that of the regular transformer in \Cref{sub:contrastive_learning_architecture}, with a few changes. While the embedding step is the same as both DINO and SimDINO in \Cref{sub:contrastive_learning_architecture}, the feature extraction step is the same as SimDINO in \Cref{sub:contrastive_learning_architecture} as it just extracts the feature corresponding to the class token, and the classification head is described in \Cref{sub:image_classification_objective}, the backbone architecture is different. Each layer writes
 \begin{align}
     \vZ_{\theta}^{\ell + 1/2}(\vX)
     &= \vZ_{\theta}^{\ell}(\vX) + \MSSA_{\theta}^{\ell}(\LN_{\theta}^{1, \ell}(\vZ_{\theta}^{\ell}(\vX))), \\ 
@@ -421,32 +538,29 @@ The architecture that we use is the CRATE architecture, described in some level 
 where the \(\MSSA_{\theta}^{\ell}\) and \(\ISTA_{\theta}^{\ell}\) blocks are as described in \Cref{ch:representation}, namely:
 \begin{itemize}
     \item The \(\MSSA\) operator is multi-head-subspace-self-attention, defined as follows:
-    \begin{align}
-        \MSSA_{\theta}^{\ell}(\vZ) 
-        &:= \vU_{\out}^{\ell}\mat{([\vU^{1, \ell}]^{\top}\vZ)\vA^{1, \ell}(\vZ) \\ \vdots \\ ([\vU^{K, \ell}]^{\top}\vZ)\vA^{K, \ell}(\vZ)} \\ 
-        \text{where} \qquad \vA^{k, \ell}(\vZ) 
-        &:= \softmax\rp{\frac{([\vU^{k, \ell}]^{\top}\vZ)^{\top}([\vU^{k, \ell}]^{\top}\vZ)}{\sqrt{d}}}
-    \end{align}
-    where \(\vU^{k, \ell} \in \R^{d \times p}\) and \(\vU_{\out}^{\ell} \in \R^{d \times Kp}\) are trainable parameters belonging to the parameter set \(\theta\).
+    \begin{equation}
+        \MSSA_{\theta}^{\ell}(\vZ) := \vU_{\out}^{\ell}\mat{\SA([\vU^{1, \ell}]^{\top}\vZ, [\vU^{1, \ell}]^{\top}\vZ, [\vU^{1, \ell}]^{\top}\vZ)\\ \vdots \\ \SA([\vU^{K, \ell}]^{\top}\vZ, [\vU^{K, \ell}]^{\top}\vZ, [\vU^{1, \ell}]^{\top}\vZ)} + \vb_{\out}^{\ell}\vone_{n}^{\top}
+    \end{equation}
+    where \(\vU^{k, \ell} \in \R^{d \times p}\), \(\vU_{\out}^{\ell} \in \R^{d \times Kp}\), and \(\vb_{\out}^{\ell} \in \R^{d}\) are trainable parameters belonging to the parameter set \(\theta\), and (recall) the self-attention operator \(\SA\) is defined in \eqref{eq:self_attention}.
     \item The \(\ISTA\) operator is the iterative-shrinkage-thresholding-algorithm operator, defined as follows:
     \begin{equation}
         \ISTA_{\theta}^{\ell}(\vZ) := \ReLU(\vZ - \beta (\vD^{\ell})^{\top}(\vD^{\ell}\vZ - \vZ) + \beta\lambda \vone_{d}\vone_{n}^{\top}),
     \end{equation}
-    so named because the map \(\vX \mapsto \ReLU(\vX - \beta \vD^{\top}(\vD\vX - \vZ))\) is one step of the well-established ISTA algorithm to find an element-wise non-negative sparse representation for \(\vZ\) with respect to the complete dictionary \(\vD\) (cf \Cref{sec:dictionary_learning}).
+    so named because the map \(\vX \mapsto \ReLU(\vX - \beta \vD^{\top}(\vD\vX - \vZ) + \beta  \lambda \vone_{d}\vone_{n}^{\top})\) is one step of the well-established ISTA algorithm to find an element-wise non-negative sparse representation for \(\vZ\) with respect to the complete dictionary \(\vD\) (cf \Cref{sec:dictionary_learning}).
 \end{itemize}
 
-We call this architecture CRATE. CRATE models, on top of being interpretable, are generally also highly performant as well as parameter-efficient. 
+We call this architecture CRATE, and a layer of the backbone is depicted in \Cref{fig:crate_backbone}. CRATE models, on top of being interpretable, are generally also highly performant as well as parameter-efficient. 
 
 \subsection{Optimization} \label{sub:image_classification_optimization}
 
 We train our classifier using a simple end-to-end stochastic optimization procedure, where we sub-sample data and views, compute the average loss and its gradient over these samples, and use an optimization algorithm to change the parameters. At each timestep \(k\), we:
 \begin{itemize}
     \item Subsample \(B\) different labeled samples \(\{(\vX_{b}^{(k)}, \vy_{b}^{(k)})\}_{b = 1}^{B} \subseteq \cI \times \{0, 1\}^{N_{\cls}}\).
-    \item For each labeled sample \((\vX_{b}^{(k)}, \vy_{b}^{(k)})\), compute a different randomized resized crop \(v_{b, r}^{(k)}\) and apply it to \(\vX_{b}^{(k)}\) to get \(\vX_{b, r}^{(k)} := v_{b, r}^{(k)}(\X_{b}^{(k)})\).
-    \item Compute the smoothed pseudo-labels \(\hat{\vy}_{\theta}(\vX_{b, r}^{(k)}) := (h_{\theta} \circ f_{\theta}^{\ext} \circ f_{\theta})(\vX_{b, r}^{(k)})\).
+    \item For each labeled sample \((\vX_{b}^{(k)}, \vy_{b}^{(k)})\), compute the central crop view \(v_{b, \cc}^{(k)}\) and apply it to \(\vX_{b}^{(k)}\) to get \(\vX_{b, \cc}^{(k)} := v_{b, \cc}^{(k)}(\X_{b}^{(k)})\).
+    \item Compute the smoothed pseudo-labels \(\hat{\vy}_{\theta}(\vX_{b, \cc}^{(k)}) := (h_{\theta} \circ f_{\theta}^{\ext} \circ f_{\theta})(\vX_{b, \cc}^{(k)})\).
     \item Form the surrogate stochastic loss 
     \begin{equation}
-        \hat{L}_{\CE}^{(k)}(\theta) := \frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}^{(k)}, \hat{\vy}_{\theta}(\vX_{b, r}^{(k)})).
+        \hat{L}_{\CE}^{(k)}(\theta) := \frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}^{(k)}, \hat{\vy}_{\theta}(\vX_{b, \cc}^{(k)})).
     \end{equation}
     \item Compute one step of an optimization algorithm on \(\theta\), giving the following iteration:
     \begin{equation}
@@ -457,12 +571,68 @@ We train our classifier using a simple end-to-end stochastic optimization proced
 
 \subsection{Evaluation Setup} \label{sub:image_classification_evals}
 
-We use the same evaluation procedure as \Cref{sub:contrastive_learning_evals}, with \(S_{\rsz}\) substituted for \(S_{\glo}\). To summarize, for all evaluations we use an evaluation view \(v_{\evaluation}\) which resizes the input proportionally so that the smaller edge is \(S_{\evaluation}\) pixels, then resizes again to a square image of side length \(S_{\rsz}\). We can then do linear probing and attention map visualization.
+We use the same evaluation procedure as \Cref{sub:contrastive_learning_evals}. To summarize, for all evaluations (as well as training) we use a center crop view \(v_{\cc}\) which reshapes the input image and takes a large central crop of size \((C, S_{\cc}, S_{\cc})\) where \(C\) is the number of channels in the input image. We can then do linear probing, attention map visualization, and detection/segmentation benchmarks, given the output of this view.
 
 \subsection{Experimental Setup and Results}\label{sub:image_classification_experiments}
 
-\DP{TODO @Druv}
-Table \DP{TODO} demonstrates that CRATE's classification performance achieves parity or improvement compared to the popular Vision Transformer (ViT) architecture at similar parameter counts. 
+Since CRATE is directly based on the transformer, we compare the optimal settings for ViT as given by \citet{dosovitskiy2020image,touvron2020training} with the same settings applied to CRATE for fair comparison.
+
+\paragraph{Model architecture.} The center crop resizes the whole image so that the shorter edge is of size \(256\) (i.e., \(S_{\rsz} = 256\)) before taking a center crop of size \(224 \times 224\) (i.e., \(S_{\cc} = 224\)), both in evaluation and training. We take patch size \(16\) (i.e., \(P_{H} = P_{W} = 16\)). We use the tiny, small, base, and large models of the ViT \citep{dosovitskiy2020image} architecture as the embedding and backbone, swapping out the MHSA and MLP components for MSSA and ISTA respectively, using the same number of heads and head dimension in the case of MSSA, and therefore reducing the number of training parameters drastically. For CRATE, we set \((\beta, \lambda) = (1, 0.1)\).
+
+\paragraph{Datasets and optimization.} For pre-training, we use the ImageNet-1K dataset. We use the LION optimizer \citep{chen2024symbolic} to pre-train both our ViT replication as well as CRATE. We set the base learning rate as \(2.4 \times 10^{-4}\), the weight decay as \(0.5\), and batch size as \(B = 2048\). Our learning rate schedule increases the learning rate linearly to the base learning rate over the first \(5\) epochs, and decreases to \(0\) using a cosine schedule over the next \(145\) epochs (training all models for \(150\) epochs each). For pre-training, we apply a usual regime of data augmentations (flips, Gaussian blurs, solarization, etc) to the image data, and also add small noise to the labels (this is called \textit{label smoothing} \citep{muller2019does}).
+
+For linear probing, we use several evaluation datasets such as CIFAR10, Oxford-Flowers, and Oxford-IIT-Pets. We use the AdamW optimizer to train the linear probe, using learning rate \(5 \times 10^{-5}\), weight decay \(0.01\), and batch size \(B = 256\). We also apply the aforementioned data augmentations to the image data.
+
+\begin{table}
+    \centering
+    \begin{tabular}{@{}lcccc|cc@{}}
+    \toprule
+    \textbf{Model} & CRATE-T  &  CRATE-S & CRATE-B & CRATE-L & { \color{gray} ViT-T} &  { \color{gray}ViT-S } \\ 
+    \midrule
+    \midrule
+     \# parameters & 6.09M & 13.12M & 22.80M & 77.64M & { \color{gray} 5.72M} & { \color{gray} 22.05M} \\
+    \midrule
+     ImageNet-1K & 66.7 & 69.2 & 70.8 & 71.3 & { \color{gray} 71.5} & { \color{gray} 72.4} \\
+     ImageNet-1K ReaL & 74.0 & 76.0 & 76.5 & 77.4 & { \color{gray} 78.3 } & { \color{gray} 78.4} \\
+    %  \midrule
+     CIFAR10 & 95.5 & 96.0 & 96.8 & 97.2 & { \color{gray} 96.6} & { \color{gray} 97.2} \\
+     CIFAR100 & 78.9 & 81.0 & 82.7 & 83.6 & { \color{gray} 81.8} & { \color{gray} 83.2}\\
+     Oxford Flowers-102 & 84.6 & 87.1 & 88.7 & 88.3 & { \color{gray} 85.1} & { \color{gray} 88.5}\\
+     Oxford-IIIT-Pets & 81.4 & 84.9 & 85.3 & 87.4 & { \color{gray} 88.5} & { \color{gray} 88.6} \\
+     \bottomrule
+    \end{tabular}
+    \caption{\small \textbf{Linear probing classification accuracy of CRATE and ViT} on various datasets with different model sizes when the backbone is pre-trained for classification on ImageNet-1K. We observe that given the same model configuration, CRATE has comparable classification performance with a simpler, more principled, and more parameter-efficient design.}
+    \label{tab:crate_classification_linear_probing}
+\end{table}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{figs_chap7/crate_semantic_heads.pdf}
+    \caption{\small\textbf{Interpretable saliency maps in CRATE} with patch size \(8\). When given images with similar properties (perhaps but not necessarily from the same class), the saliency maps corresponding to different attention heads in the last layer each highlight a specific property. One can observe that the average saliency map (not included) then highlights all relevant objects in the image, showing that it uses all fine-grained details of the input image for classification. This is the \textit{first} machine learning system to do this, to the authors' knowledge, much less automatically without training on any segmentation data.}
+    \label{fig:crate_semantic_heads}
+\end{figure}
+
+\begin{table}
+    \centering
+    \begin{tabular}{@{}lcccccccc@{}}
+    \toprule
+     &  \multicolumn{3}{c}{Detection (\(\uparrow\))} &  \multicolumn{3}{c}{Segmentation (\(\uparrow\))} \\ 
+    Model & AP$_{50}$ & AP$_{75}$ & AP & AP$_{50}$ & AP$_{75}$ & AP  \\ 
+    \midrule
+    CRATE-S/8 & \textbf{2.9} & \textbf{1.0} & 1.1 & 1.8 & \textbf{0.7} & 0.8 \\
+    CRATE-B/8 & \textbf{2.9} & \textbf{1.0} & \textbf{1.3} & \textbf{2.2} & \textbf{0.7} & \textbf{1.0} \\
+    ViT-S/8 & 0.1& 0.1 & 0.0 & 0.0 & 0.0 & 0.0 \\
+    ViT-B/8 & 0.8 & 0.2 & 0.4 & 0.7 & 0.5 & 0.4 \\
+    \bottomrule
+    \end{tabular}
+    \caption{\small \textbf{Object detection and fine-grained segmentation via MaskCut on COCO {val2017}~\citep{lin2014microsoft}}. Here all models are trained with patch size \(8\) instead of \(16\). CRATE conclusively performs better than the ViT at detection and segmentation metrics when both are trained using supervised classification.}
+    \label{tab:crate_detection_segmentation}
+\end{table}
+
+
+\paragraph{Experiment results.} 
+
+\Cref{tab:crate_classification_linear_probing} demonstrates that CRATE models achieve parity or improvement compared to the popular Vision Transformer (ViT) architecture at similar parameter counts, at least in terms of the linear separability of their features w.r.t.~different classes. In terms of attention map fidelity, \Cref{fig:crate_semantic_heads} demonstrates a truly extraordinary result: without needing to train on any segmentation or object detection data, \textit{not only} do the saliency maps effectively capture all relevant parts of the input image, the saliency maps \textit{self-organize} to each correspond to a discrete set of concepts, even across samples and classes! This is the first system to do this, to the authors' knowledge, and it can do this without using any extra data except for the image classification data. \Cref{tab:crate_detection_segmentation} confirms these qualitative insights quantitatively, showing significant improvement over ViTs trained in the same supervised classification setup.
 
 \section{Text Prediction}\label{sec:ntp_text}
 
@@ -496,7 +666,7 @@ where $\mathrm{CausalMask}(\bm A)_{ij} = A_{ij}$ if $i \le j$ and otherwise $-\i
 
 \section{Scaling White-Box Transformers}\label{sec:scalable}
 
-In this section, we will discuss three ways in which various parts of CRATE-type models can be scaled up or made more efficient while still remaining white-box. These developments mix both conceptual and empirical insights, and can be viewed as case studies about how to use white-box understanding to improve deep learning models in practice. The task we use to evaluate the methods will be image classification, the data will be ImageNet, the optimization procedure will be the same backpropagation, and the only thing that changes is the architecture.
+In this section, we will discuss three ways in which various parts of CRATE-type models can be scaled up or made more efficient while still remaining white-box. These developments mix both conceptual and empirical insights, and can be viewed as case studies about how to use white-box understanding to improve deep learning models in practice. The tasks that we use to evaluate the methods will be image classification and next-token-prediction, the data will be ImageNet and OpenWebText respectively, the optimization procedure will be the same backpropagation, and the only thing that changes is the architecture.
 
 \subsection{Increasing Network Width: CRATE-\(\alpha\)}\label{sub:crate_alpha_experiments}
 
@@ -531,13 +701,66 @@ In practice, giving (1) is less tractable for efficiency reasons. Giving up (2) 
 \begin{equation}
     \vZ_{\theta}^{\ell + 1} = \vD^{\ell}\vA_{\theta}^{\ell, T}; \qquad \vA_{\theta}^{\ell, t + 1} = \ISTA_{\theta}^{\ell}(\vA_{\theta}^{\ell, t} \mid \vZ_{\theta}^{\ell + 1/2}); \qquad \vA_{\theta}^{\ell, 0} = \vzero,
 \end{equation}
-i.e., takes the sparse codes obtained via proximal gradient descent and multiplies by the dictionary, to get the denoised version of the input. Thus CRATE-\(\alpha\)'s nonlinearity computes a denoised version of the input which is amenable to sparse coding, not the actual sparse codes themselves.
+i.e., takes the sparse codes obtained via proximal gradient descent and multiplies by the dictionary, to get the denoised version of the input. Thus CRATE-\(\alpha\)'s nonlinearity computes a denoised version of the input which is amenable to sparse coding, not the actual sparse codes themselves. The map from \(\vZ_{\theta}^{\ell + 1/2}\) to \(\vZ_{\theta}^{\ell + 1}\) here is called the Overcomplete Dictionary Learning (ODL) block and denoted \(\operatorname{ODL}_{\theta}^{\ell}\), i.e.,
+\begin{equation}
+    \vZ_{\theta}^{\ell + 1}(\vX) := \operatorname{ODL}_{\theta}^{\ell}(\vZ_{\theta}^{\ell + 1/2}(\vX)).
+\end{equation}
 
-In practice this modification performs very well at both supervised tasks like image classification (see Table \DP{TODO}) and unsupervised tasks like segmentation (see Table \DP{TODO} and Figure \DP{TODO}). It generally improves the computational capacity significantly compared to CRATE, and is a promising avenue to scaling up the performance to match black-box models such as transformers.  \DP{TODO: Druv}
+\begin{figure}
+    \centering 
+    \includegraphics[width=\textwidth]{figs_chap7/crate_alpha_backbone.pdf}
+    \caption{\small\textbf{One layer of the CRATE-\(\alpha\) backbone.} The difference from CRATE is that the \(\ISTA_{\theta}^{\ell}\) block is replaced by the \(\operatorname{ODL}_{\theta}^{\ell}\) block, which performs several \(\ISTA\) steps with an overcomplete dictionary.}
+    \label{fig:crate_alpha_backbone}
+\end{figure}
 
-\subsection{Linear Time Complexity Transformer ToST}\label{sub:tost_experiments}
+\begin{figure}
+    \centering 
+    \includegraphics[width=\textwidth]{figs_chap7/crate_alpha_semantic_heads.pdf}
+    \caption{\small\textbf{Saliency maps from CRATE-\(\alpha\) with patch size \(8\).} Each row is a different image and each column corresponds to a different attention head in the last layer. We observe that the saliency maps strongly correspond to the objects in the input image.}
+    \label{fig:crate_alpha_saliency_maps}
+\end{figure}
 
-In practice, deep learning models suffer bottlenecks to space and time complexity, representing problem sizes which they cannot scale beyond given fixed resources. One such bottleneck, particularly meaningful when dealing with data where each sample is itself high-dimensional and rich (such as long streams of text or videos), is the \textit{time complexity} of processing long sequences of data. In order to alleviate the time-complexity of processing data using transformers, we can apply white-box thinking. In particular, we can use the ToST architecture (see \Cref{sub:tost}) for long-context tasks. In particular, denoting the ToST attention operator as \(\TSSA\) (for ``Token Statistics Self-Attention''), we use the following layer as a drop-in replacement for a layer in CRATE:
+\begin{table}
+    \centering
+    \begin{tabular}{@{}lcccccccc@{}}
+    \toprule
+     &  & \multicolumn{3}{c}{Detection} &  \multicolumn{3}{c}{Segmentation} \\ 
+    Model & AP$_{50} \uparrow $ & AP$_{75} \uparrow $ & AP $\uparrow$ & AP$_{50} \uparrow$ & AP$_{75} \uparrow $ & AP $\uparrow$ \\ 
+    \midrule
+    \midrule
+    CRATE-\(\alpha\)-B/8 & 3.5 & 1.1 & 1.5 & 2.2 & 1.0 & 1.1 \\
+    CRATE-\(\alpha\)-L/8 & \textbf{4.0} & \textbf{1.7} & \textbf{2.0} & \textbf{2.7} & \textbf{1.1} & \textbf{1.4} \\
+    \midrule
+    \color{gray}CRATE-B/8 & \color{gray}2.9 & \color{gray}1.0 & \color{gray}1.3 & \color{gray}2.2 & \color{gray}0.7 & \color{gray}1.0 \\
+    \color{gray}ViT-B/8 & \color{gray}0.8 & \color{gray}0.2 & \color{gray}0.4 & \color{gray}0.7 & \color{gray}0.5 & \color{gray}0.4 \\
+    \bottomrule
+    \end{tabular}
+    \caption{\small \textbf{Object detection and fine-grained segmentation via MaskCut on COCO val2017~\citep{lin2014microsoft}}. Here all models are trained with patch size \(8\) instead of \(16\). Compared with existing models such as CRATE and ViT, the CRATE-\(\alpha\) model family noticeably has improved performance as well as scalability.}
+    \label{tab:crate_alpha_detection_segmentation}
+\end{table}
+
+\begin{table}
+    \centering 
+    \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    Model & GPT-2-B(ase) & CRATE-B & CRATE-\(\alpha\)-S(mall) & CRATE-\(\alpha\)-B \\ 
+    \midrule
+    \midrule
+    \# parameters & 124M & 60M & 57M & 120M \\
+    OWT val.~loss & 2.85 & 3.37 & 3.28 & 3.14 \\
+    \bottomrule
+    \end{tabular}
+    \caption{\small\textbf{Validation loss in language modeling.} Here all models are pre-trained on most of OpenWebText, and the validation cross-entropy loss is measured on a hold-out subset of OpenWebText. CRATE-\(\alpha\) shows significant improvement over the CRATE design, though there still exists a gap with traditional transformers like GPT-2.}
+    \label{tab:crate_alpha_lm}
+\end{table}
+
+The CRATE-\(\alpha\) layer is shown in \Cref{fig:crate_alpha_backbone}. In practice this modification of CRATE performs very well at larger scales. For example, when we pre-train CRATE-\(\alpha\) models on ImageNet-21K, unsupervised tasks like segmentation (see \Cref{fig:crate_alpha_saliency_maps} and \Cref{tab:crate_alpha_detection_segmentation}) generally have significantly improved performance compared to CRATE. Similar trends are present in language model training using causal self-attention (see \Cref{tab:crate_alpha_lm}). Overall, it is a promising avenue to scaling up the performance to match black-box models such as transformers.\footnote{Note that the experimental results in this section use a slightly different model architecture, which add very slight empirical gains. The changes are: (1) an additional residual connection on the ODL block, (2) modifying \(\ISTA\) to use two separate dictionaries instead of \(\vD^{\ell}\) and \((\vD^{\ell})^{\top}\).} 
+
+\DP{@YM: note that CRATE-\(\alpha\) paper has no linear probing experiments, only full fine-tuning. Since full fine-tuning doesn't make sense from representation learning perspective, we omit it. Feel free to delete this comment when you are done reading.}
+
+\subsection{Linear Time Complexity Transformers}\label{sub:tost_experiments}
+
+In practice, deep learning models suffer bottlenecks to space and time complexity, representing problem sizes which they cannot scale beyond given fixed resources. One such bottleneck, particularly meaningful when dealing with data where each sample is itself high-dimensional and rich (such as long streams of text or videos), is the \textit{time complexity} of processing long sequences of data. In order to alleviate the time-complexity of processing data using transformers, in \Cref{sub:tost} we proposed a \textit{token statistics self-attention} operator \(\TSSA_{\theta}^{\ell}\). We now build a \textit{token statistics transformer}, called ToST, around it, which we can use for long-context tasks. In particular, we can use the following layer (depicted in \Cref{fig:tost_backbone}) as a drop-in replacement for a backbone layer in CRATE:
 \begin{align}
     \vZ_{\theta}^{\ell + 1/2}(\vX)
     &= \vZ_{\theta}^{\ell}(\vX) + \TSSA_{\theta}^{\ell}(\LN_{\theta}^{1, \ell}(\vZ_{\theta}^{\ell}(\vX))) \\ 
@@ -546,15 +769,97 @@ In practice, deep learning models suffer bottlenecks to space and time complexit
 \end{align}
 where the \(\TSSA\) block is defined as in \Cref{sub:tost}. Notice that this is exactly the same as a vision transformer architecture as discussed in \Cref{sub:contrastive_learning_architecture}, except that \(\TSSA\) replaces the conventional multi-head self-attention block \(\MHSA\). Regardless, the computational complexity of the forward pass of this layer is linear in all problem variables --- sequence length, feature dimension, number of heads, and head dimension.
 
-Moreover, the proposed architecture, named ToST (for ``Token Statistics Transformer'') is highly performant at vision tasks (cf Table \DP{TODO} and Figure \DP{TODO}). This is especially true for long-sequence-length tasks (cf Table \DP{TODO}), where it is both more performant and much more efficient than conventional transformers.
+\begin{figure}
+    \centering 
+    \includegraphics[width=\textwidth]{figs_chap7/tost_backbone.pdf}
+    \caption{\small\textbf{One layer of the ToST backbone}. Token representations go through layer-norms, the token statistics self-attention (TSSA) operator, and an MLP, in order to form the layer's output.}
+    \label{fig:tost_backbone}
+\end{figure}
 
-\subsection{Attention Only Transformer AoT} \label{sub:aot_experiments}
+\begin{table}
+    \centering 
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{@{}lccc|cc|cc@{}}
+    \toprule
+    Datasets & ToST-T(iny) & ToST-S(mall) & ToST-M(edium) &  { \color{gray} XCiT-S} &  { \color{gray}XCiT-M} &  {\color{gray}ViT-S} & {\color{gray}ViT-B(ase)}\\ 
+    \toprule
+     \# parameters & 5.8M & 22.6M & 68.1M &  { \color{gray}24.9M }& { \color{gray}80.2M } & { \color{gray} 22.1M } & { \color{gray}86.6 M } \\
+    \midrule
+     ImageNet & 67.3 & 77.9 & 80.3 &  { \color{gray} 80.5} & { \color{gray} 81.5 } & { \color{gray} 79.8} & { \color{gray} 81.8} \\
+     ImageNet ReaL & 72.2  & 84.1 & 85.6 &  { \color{gray} 85.6 } & { \color{gray} 85.9} & { \color{gray} 85.6 } & { \color{gray} 86.7 }\\
+     \midrule
+     CIFAR10 & 95.5 & 96.5 & 97.5 &  { \color{gray} 98.1} & { \color{gray} 98.3} & { \color{gray} 98.6} & { \color{gray} 98.8}\\
+     CIFAR100 & 78.3 & 82.7 & 84.5 &  { \color{gray} 86.1} & { \color{gray} 87.6} & { \color{gray} 88.8} & { \color{gray} 89.3}\\
+     Oxford Flowers-102 & 88.6 & 92.8 & 94.2 &  { \color{gray} 93.9} & { \color{gray} 94.0} & { \color{gray} 94.0}& { \color{gray} 95.7}\\
+     Oxford-IIIT-Pets & 85.6 & 91.1 & 92.8 &  { \color{gray} 92.9} & { \color{gray} 94.0} & { \color{gray} 92.8} & { \color{gray} 94.1} \\
+     \bottomrule
+    \end{tabular}%
+    }
+    \caption{\small \textbf{Linear probing classification accuracy of ToST} on various datasets with different model sizes when the backbone is pre-trained for ImageNet-1K classification. We observe that, compared to the XCiT (a empirically-designed transformer-like architecture specialized for efficient processing of long sequences) and the ViT, ToST maintains relatively similar performance, even while enjoying benefits like faster runtime and white-box design.}
+    \label{tab:tost_linear_probing}
+\end{table}
 
-Another bottleneck to remove from deep learning models, specifically transformer-like architectures, is the memory bottleneck which comes from massive matrix multiplications in MLPs, where the internal dimension is far greater than the feature dimension \(d\). It thus is an interesting and important question to ask: do we \textit{really} need the MLP inside a transformer, and how good can the performance get without it? To explore this question, we use the AoT architecture (see \Cref{sub:aot}). Namely, each layer is simply of the form 
+\begin{table}
+    \centering 
+    \begin{tabular}{@{}lcccccc@{}}
+        \toprule
+        Model & \# params & OWT & Lambada & Wikitext & PTB & Avg $\downarrow$ \\ \midrule
+        GPT-2-Base & 124M & 2.84 & 4.32 & 4.13 & 5.75 & 4.26 \\
+        ToST-Base & 110M & 3.20 & 4.98 & 4.77 & 6.39 & 4.84 \\
+        ToST-Medium & 304M & 2.88 & 4.45 & 4.30 & 5.64 & 4.32 \\
+        ToST-Large & 655M & 2.72 & 4.32 & 3.99 & 5.03 & 4.02 \\ \bottomrule
+    \end{tabular}%
+    \caption{\small\textbf{Language modeling validation loss} computed on (holdout sets of) a variety of natural language datasets, after pre-training the model on that dataset. We observe that ToST scales well, so that ToST-Large surpasses the baseline GPT-2-Base in causal language modeling, while enjoying superior efficiency in long contexts.}
+    \label{tab:tost_lm}
+\end{table}
+
+\begin{table}
+    \centering
+    
+    \begin{tabular}{@{}lccccccc@{}}
+            \toprule
+            Model        & ListOps  & Text     & Retrieval & Image    & Pathfinder & Avg      \\
+            \midrule
+            \midrule
+            Reformer              & \textbf{37.27} & 56.10             & 53.40              & 38.07             & 68.50               & 50.56             \\
+            BigBird               & 36.05             & 64.02             & 59.29              & 40.83             & 74.87                & 54.17             \\
+            LinFormer         & 16.13             & \underline{65.90} & 53.09              & 42.34             & \underline{75.30}               & 50.46             \\
+            Performer             & 18.01             & 65.40             & 53.82              & 42.77             & \textbf{77.05}                & 51.18             \\
+            Transformer           & 37.11             & 65.21             & \underline{79.14}              & \underline{42.94}             & 71.83              & \underline{59.24}            \\
+            ToST & \underline{37.25}    & \textbf{66.75}    & \textbf{79.46}     & \textbf{46.62}    &    69.41      &     \textbf{59.90}\\
+            
+            \bottomrule
+        \end{tabular}%
+    \caption{\small \textbf{Long-Range Arena (LRA) performance comparison of ToST(-B) versus the top transformer variants optimized for long-context.} Long-Range Arena is a family of benchmarks that test the long sequence modeling capability of algorithms and architectures, by fixing the dataset and evaluation mechanism. ToST scores at the top of the leaderboard compared to all known transformer variants, including XCiT and the regular (ViT) transformer (cf \Cref{tab:tost_linear_probing}). Moreover, ToST has the lowest time- and space-complexity inference. (In this table, the best score for a particular benchmark is bolded, and the second-best score is underlined.)}
+    \label{tab:tost_lra_results}
+\end{table}
+
+Moreover, the proposed architecture, named ToST (for ``Token Statistics Transformer'') performs well at vision tasks (i.e., \Cref{tab:tost_linear_probing}) and language tasks (i.e., \Cref{tab:tost_lm}). This is especially true for long-sequence-length tasks (cf \Cref{tab:tost_lra_results}), where it is both more performant and much more efficient than conventional transformers and all other transformer-like architectures.
+
+\subsection{Attention Only Transformers} \label{sub:aot_experiments}
+
+Another bottleneck to remove from deep learning models, specifically transformer-like architectures, is the memory bottleneck which comes from massive matrix multiplications in MLPs, where the internal dimension is far greater than the feature dimension \(d\). It thus is an interesting and important question to ask: do we \textit{really} need the MLP inside a transformer, and how good can the performance get without it? To explore this question, we use the attention-only-transformer (AoT) architecture (see \Cref{sub:aot}), depicted in \Cref{fig:aot_backbone}. Namely, each layer is simply of the form 
 \begin{equation}
     \vZ_{\theta}^{\ell + 1}(\vX) = \vZ_{\theta}^{\ell}(\vX) + \MSSA_{\theta}^{\ell}(\LN_{\theta}^{\ell}(\vZ_{\theta}^{\ell}(\vX))).
 \end{equation}
-It turns out that this architecture is \textit{also} viable, though the depth of the network needs to be much deeper in order to achieve equivalent performance as the usual CRATE or transformer architecture (cf Table \DP{TODO}).
+It turns out that this architecture is \textit{also} viable, though the depth of the network needs to be much deeper in order to achieve equivalent performance as the usual CRATE or transformer architecture (i.e., \Cref{tab:aot_lm}).
+
+\DP{Frankly, the vision benchmark results here are very poor, and I cannot advertise them. I will just put the language benchmark.}
+
+\begin{figure}
+    \centering 
+    \includegraphics[width=0.7\textwidth]{figs_chap7/aot_backbone.pdf}
+    \caption{\small\textbf{One layer of the AoT backbone.} Token representations merely go through a layer-norm and the multi-head (subspace) self-attention operator to form the layer's output. Notice that there is no token-wise nonlinearity such as MLP or ISTA or ODL.}
+    \label{fig:aot_backbone}
+\end{figure}
+
+\begin{table}
+    \centering 
+    \DP{I think the chart in the AoT Overleaf is wrong (there is Base and Medium model sizes, lol), so I'm omitting it here, for now. TODO @Yifu @Peng}
+    \caption{\small\textbf{Language modeling performance of AoT} on several datasets, measuring the validation cross-entropy loss measured on hold-out sets. We can see a favorable scaling: the largest versions of AoT are much better than the smaller versions, and score comparably with GPT-2-Base.}
+    \label{tab:aot_lm}
+\end{table}
+
 
 \section{Masked Autoencoding for Imagery Data}\label{sec:image_completion}
 
@@ -574,7 +879,7 @@ Essentially this means that the features \(\vZ_{\theta}(\vX_{m})\) of the view \
 
 We use a CRATE encoder and decoder, though of course it is possible to use a regular transformer encoder and decoder. Details follow now.
 
-\paragraph{The encoder.} The encoder is the same as the CRATE encoder in \Cref{sub:image_classification_architecture}, with the caveat that there is no feature extract \(f_{\theta}^{\ext}\). However, both the embedding map \(f_{\theta}^{\emb}\) and the backbone map \(f_{\theta}^{\backbone}\) are the same.
+\paragraph{The encoder.} The encoder is the same as the CRATE encoder in \Cref{sub:image_classification_architecture}, with the caveat that there is no feature extractor \(f_{\theta}^{\ext}\). However, both the embedding \(f_{\theta}^{\emb}\) and the backbone \(f_{\theta}^{\backbone}\) are the same.
 
 \paragraph{The decoder backbone.} The decoder backbone is the CRATE decoder described in \Cref{ch:autoencoding}. For completeness' sake, we describe it now. Given a feature sequence \(\vZ_{\theta}(\vX) := f_{\theta}(\vX) \in \R^{d \times *}\), we can process it using the decoder backbone \(g_{\eta}^{\backbone}\) as follows. The function \(g_{\eta}^{\backbone}\) is composed of \(L\) layers \(g_{\eta}^{\ell}\), i.e.,
 \begin{equation}
@@ -620,13 +925,13 @@ As in \Cref{sub:image_classification_optimization}, we use a simple optimization
 
 \subsection{Evaluation}\label{sub:image_completion_optimization}
 
-This is the first autoencoder network we discuss in this section. We use the same evaluation view \(v_{\evaluation}\) as in \Cref{sub:contrastive_learning_evals,sub:image_classification_evals}, resizing the final image to a square with side length \(S_{\mask}\) pixels so as to match the shapes of the input images seen during training. 
+This is the first autoencoder network we discuss in this section. We use the same center crop view \(v_{\cc}\) as in \Cref{sub:contrastive_learning_evals,sub:image_classification_evals}, resizing the final image to a square with side length \(S_{\mask}\) pixels so as to match the shapes of the input images seen during training. 
 
-On top of evaluating the masked autoencoding loss itself, it is also possible to evaluate the features \(\vZ_{\theta}(\vX_{\evaluation})\) of the view \(\vX_{\evaluation} := v_{\evaluation}(\vX)\) of the data \(\vX\) directly. For the sake of attention map fidelity evaluation, just obtaining \(\vZ_{\theta}(\vX_{\evaluation})\) is enough, but for linear probing we need to extract a summarized or aggregate feature from \(\vZ_{\theta}\). To do this, we can use a (parameter-free) feature extraction map which just returns the feature corresponding to the class token, i.e.,
+On top of evaluating the masked autoencoding loss itself, it is also possible to evaluate the features \(\vZ_{\theta}(\vX_{\cc})\) of the view \(\vX_{\cc} := v_{\cc}(\vX)\) of the data \(\vX\) directly. For the sake of attention map fidelity evaluation, just obtaining \(\vZ_{\theta}(\vX_{\cc})\) is enough, but for linear probing we need to extract a summarized or aggregate feature from \(\vZ_{\theta}\). To do this, we can use a (parameter-free) feature extraction map which just returns the feature corresponding to the class token, i.e.,
 \begin{equation}
     f_{\theta}^{\ext}(\vZ) := f_{\theta}^{\ext}([\vz^{1}, \dots, \vz^{n}]) = \vz^{1},
 \end{equation}
-as in (for example) \Cref{sub:image_classification_objective,sub:image_classification_architecture}. With this, we have a way to obtain aggregate features \(\vz_{\theta}(\vX_{\evaluation}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{\evaluation})\), at which point we can perform linear probing.
+as in (for example) \Cref{sub:image_classification_objective,sub:image_classification_architecture}. With this, we have a way to obtain aggregate features \(\vz_{\theta}(\vX_{\cc}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{\cc})\), at which point we can perform linear probing.
 
 \subsection{Experiments}\label{sub:image_completion_experiments}
 \DP{TODO: @Druv}
