@@ -888,7 +888,7 @@ The dataset is kept to be the same imagery datasets as discussed in \Cref{sub:co
 
 \subsection{Task and Objective}\label{sub:image_completion_objective}
 
-As the name suggests, masked autoencoding involves a view \(v_{m}\) which, given an input, performs a random resized crop to turn the input image into a square image of size \((C, S_{\mask}, S_{\mask})\), then \textit{masks} (i.e., sets to zero) a fixed percentage \(p_{\mask} \in [0, 1]\) of pixels in the input. For efficiency reasons\footnote{The original implementation of MAE by \citet{he2022masked} embeds the whole image, \textit{removes} the tokens that would be masked, feeds the resulting token set through the encoder, adds back learned placeholder tokens in the masked spots and adds back the appropriate positional encoding, and feeds the resulting token set through the decoder to get the autoencoding prediction. This is more efficient since the encoder has fewer tokens to go through, but conceptually is the same as the method discussed in the text, and the resulting models' performance in the masked autoencoding task and downstream evaluations is very similar.}, the masking is done patch-wise, i.e.,  after embedding the whole image, \(p_{\mask}\) percentage of \textit{patches} are set to zero. The goal of MAE is to train an encoder \(f_{\theta} \colon \cI \to \R^{d \times *}\) and a decoder \(g_{\eta} \colon \R^{d \times *} \to \cI\) which can reconstruct an input from its masking, i.e., writing \(\hat{\vX}_{\theta, \eta} := g_{\eta} \circ f_{\theta}\), we have
+As the name suggests, masked autoencoding involves a view \(v_{m}\) which, given an input, performs a random resized crop (cf \Cref{sub:contrastive_learning_objective}) to turn the input image into a square image of size \((C, S_{\mask}, S_{\mask})\), then \textit{masks} (i.e., sets to zero) a fixed percentage \(p_{\mask} \in [0, 1]\) of pixels in the input. For efficiency reasons\footnote{The original implementation of MAE by \citet{he2022masked} embeds the whole image, \textit{removes} the tokens that would be masked, feeds the resulting token set through the encoder, adds back learned placeholder tokens in the masked spots and adds back the appropriate positional encoding, and feeds the resulting token set through the decoder to get the autoencoding prediction. This is more efficient since the encoder has fewer tokens to go through, but conceptually is the same as the method discussed in the text, and the resulting models' performance in the masked autoencoding task and downstream evaluations is very similar.}, the masking is done patch-wise, i.e.,  after embedding the whole image, \(p_{\mask}\) percentage of \textit{patches} are set to zero. The goal of MAE is to train an encoder \(f_{\theta} \colon \cI \to \R^{d \times *}\) and a decoder \(g_{\eta} \colon \R^{d \times *} \to \cI\) which can reconstruct an input from its masking, i.e., writing \(\hat{\vX}_{\theta, \eta} := g_{\eta} \circ f_{\theta}\), we have
 \begin{equation}
     \min_{\theta, \eta}\bc{L_{\mathrm{MAE}}(\theta, \eta) := \Ex\norm{\hat{\vX}_{\theta, \eta}(\vX_{m}) - \vX}_{F}^{2}}
 \end{equation}
@@ -896,7 +896,13 @@ Essentially this means that the features \(\vZ_{\theta}(\vX_{m})\) of the view \
 
 \subsection{Architecture}\label{sub:image_completion_architecture}
 
-We use a CRATE encoder and decoder, though of course it is possible to use a regular transformer encoder and decoder. Details follow now.
+\begin{figure}
+    \centering 
+    \includegraphics[width=\textwidth]{figs_chap7/crate_ae_backbone.pdf}
+    \caption{\small\textbf{One layer of the encoder and decoder in a CRATE autoencoder backbone.} The encoder and decoder layers both feed their inputs through multi-head subspace self-attention and a dictionary learning or dictionary encoding step. Note that the encoder and decoder layers are symmetrically designed; the conceptual goal of each decoder layer is to invert an encoder layer, so this symmetry is very much by design (see e.g., \Cref{ch:autoencoding}).}
+\end{figure}
+
+We use a CRATE encoder and decoder, depicted in \Cref{fig:}, though of course it is possible to use a regular transformer encoder and decoder. Details follow now.
 
 \paragraph{The encoder.} The encoder is the same as the CRATE encoder in \Cref{sub:image_classification_architecture}, with the caveat that there is no feature extractor \(f_{\theta}^{\ext}\). However, both the embedding \(f_{\theta}^{\emb}\) and the backbone \(f_{\theta}^{\backbone}\) are the same.
 
@@ -944,16 +950,52 @@ As in \Cref{sub:image_classification_optimization}, we use a simple optimization
 
 \subsection{Evaluation}\label{sub:image_completion_optimization}
 
-This is the first autoencoder network we discuss in this section. We use the same center crop view \(v_{\cc}\) as in \Cref{sub:contrastive_learning_evals,sub:image_classification_evals}, resizing the final image to a square with side length \(S_{\mask}\) pixels so as to match the shapes of the input images seen during training. 
+This is the first autoencoder network we discuss in this section. We use the same center crop view \(v_{\cc}\) as in \Cref{sub:contrastive_learning_evals,sub:image_classification_evals}, resizing the final image to a square with side length \(S_{\cc} = S_{\mask}\) pixels so as to match the shapes of the input images seen during training. 
 
 On top of evaluating the masked autoencoding loss itself, it is also possible to evaluate the features \(\vZ_{\theta}(\vX_{\cc})\) of the view \(\vX_{\cc} := v_{\cc}(\vX)\) of the data \(\vX\) directly. For the sake of attention map fidelity evaluation, just obtaining \(\vZ_{\theta}(\vX_{\cc})\) is enough, but for linear probing we need to extract a summarized or aggregate feature from \(\vZ_{\theta}\). To do this, we can use a (parameter-free) feature extraction map which just returns the feature corresponding to the class token, i.e.,
 \begin{equation}
     f_{\theta}^{\ext}(\vZ) := f_{\theta}^{\ext}([\vz^{1}, \dots, \vz^{n}]) = \vz^{1},
 \end{equation}
-as in (for example) \Cref{sub:image_classification_objective,sub:image_classification_architecture}. With this, we have a way to obtain aggregate features \(\vz_{\theta}(\vX_{\cc}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{\cc})\), at which point we can perform linear probing.
+as in (for example) \Cref{sub:image_classification_objective,sub:image_classification_architecture}. With this, we have a way to obtain aggregate features \(\vz_{\theta}(\vX_{\cc}) := (f_{\theta}^{\ext} \circ f_{\theta})(\vX_{\cc})\), at which point we can perform linear probing, segmentation evaluations, and so on.
 
 \subsection{Experiments}\label{sub:image_completion_experiments}
-\DP{TODO: @Druv}
+
+Since CRATE-MAE is directly based on the ViT-MAE, we compare the optimal settings for ViT-MAE as given by \citep{he2022masked} with the same settings applied to CRATE-MAE for fair comparison.
+
+\paragraph{Model architecture.} During training, the masked crop \(v_{m}\) resizes the whole image so that the shorter edge is of size \(256\) (i.e., \(S_{\rsz} = 256\)) before taking a random crop of size \(224 \times 224\) (i.e., \(S_{\mathrm{mask}} = 224\)), and masking \(p_{\mathrm{mask}} = \frac{3}{4}\) of the patches. We take patch size \(16\) (i.e., \(P_{H} = P_{W} = 16\)). We use the small and base variants of the ViT-MAE architecture as the embedding and backbone for both the encoder and decoder, swapping out the MHSA and MLP components for MSSA, ISTA, and linear layers respectively. We use the same number of heads and head dimension in the case of MSSA. However, the original ViT-MAE uses an encoder which uses nearly all the total layers and a decoder which only uses a few layers; we allocate half the total number of layers (which stays the same from ViT-MAE to CRATE-MAE) to our encoder and decoder, as suggested by the conceptual and theoretical framework in \Cref{ch:autoencoding}. For CRATE-MAE we set \((\beta, \lambda) = (1, 0.1)\).
+
+\paragraph{Datasets and optimization.} For pre-training, we use the ImageNet-1K dataset. We use the AdamW optimizer to pre-train both our ViT-MAE replication as well as CRATE-MAE. We set the base learning rate as \(3 \times 10^{-5}\), the weight decay as \(0.1\), and batch size as \(B = 4096\). Our learning rate schedule increases the learning rate linearly to the base learning rate over the first \(40\) epochs, and decreases to \(0\) using a cosine schedule over the next \(760\) epochs (training all models for \(800\) epochs each). For pre-training, we apply the usual regime of data augmentations (flips, Gaussian blurs, solarization, etc) to the image data.
+
+For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100, Oxford-Flowers, and Oxford-IIT-Pets. For linear probing, we precompute the feature of all samples in the target dataset and apply a fast linear regression solver, e.g., from a standard package such as Scikit-Learn.
+
+\paragraph{Experiment results.} \Cref{tab:crate_mae_linear_probing} demonstrates that CRATE-MAE models achieve, roughly speaking, parity compared to the popular ViT-MAE architecture at similar parameter counts, and also that the feature learning performance (as measured by performance on downstream classification tasks) increases with scale. Meanwhile, \Cref{fig:crate_mae_semantic_heads} demonstrates that the encoder saliency maps (and therefore the fine-grained features learned by the encoder) indeed isolate and highlight the key parts of the input image.
+
+
+\begin{table}
+    \centering 
+    \begin{tabular}{@{}lcc|cc@{}}
+        \toprule 
+        \textbf{Model} & CRATE-MAE-S(mall) & CRATE-MAE-B(ase) & {\color{gray} ViT-MAE-S} & {\color{gray} ViT-MAE-B} \\
+        \midrule
+        \midrule
+        \# parameters & 25.4M & 44.6M & 47.6M & {\color{gray}143.8M} \\
+        \midrule
+        CIFAR10 & 79.4 & 80.9 & {\color{gray} 79.9} & {\color{gray} 87.9} \\
+        CIFAR100 & 56.6 & 60.1 & {\color{gray} 62.3} & {\color{gray} 68.0} \\
+        Oxford Flowers-102 & 57.7 & 61.8 & {\color{gray} 66.8} & {\color{gray} 66.4} \\
+        Oxford-IIIT-Pets & 40.6 & 46.2 & {\color{gray} 51.8} & {\color{gray} 80.1} \\
+        \bottomrule
+    \end{tabular}
+    \caption{\small\textbf{Linear probing classification accuracy of CRATE-MAE and ViT-MAE} on various datasets with different model sizes when the backbone is pre-trained for masked autoencoding on ImageNet-1K. Given the same parameter count, CRATE-MAE achieves roughly similar performance, while simultaneously enjoying a simpler and more principled architecture design.}
+    \label{tab:crate_mae_linear_probing}
+\end{table}
+
+\begin{figure}
+    \centering 
+    \includegraphics[width=\textwidth]{figs_chap7/crate_mae_semantic_heads.pdf}
+    \caption{\small\textbf{Saliency maps of CRATE-MAE.} Each pair of images consists of the original image (left) and a selected saliency map (right) corresponding to an attention head in the last layer. As is usual for CRATE models, but unusual for general transformer-like models, the saliency maps correspond to the objects in the input image.}
+    \label{fig:crate_mae_semantic_heads}
+\end{figure}
 
 \section{Masked Completion for Text Data}\label{sec:text_completion}
 
