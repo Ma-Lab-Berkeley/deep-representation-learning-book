@@ -6,8 +6,16 @@
 \chapter{Optimization Methods}
 \label{app:optimization}
 
+\begin{quote}
+``{\em Since the building of all the universe is perfect and is created by the wisdom creator, nothing arises in the universe in which one cannot see the sense of some maximum or minimum.}''
 
-\section{Gradient Descent}
+$~$\hfill -- L. Euler
+ \end{quote}
+\vspace{5mm}
+
+In this chapter, we give a brief introduction to some of the most basic but important optimization algorithms used in this book. The purpose is only to help the reader apply these algorithms to problems studied in this book, not to gain a deep understanding about these algorithms. Hence, we will not provide a thorough justification for the algorithms introduced, in terms of  performance guarantees. 
+
+\section{Steepest Descent}
 
 {\color{red} TODO ideas for writing this section:
 \begin{enumerate}
@@ -22,7 +30,9 @@ Optimization is concerned with the question of how to find where a function, say
 \end{equation}
 where $\mathcal{C}$ represents a domain to which the argument $\x$ is confined. Often $\mathcal{C}$ is simply $\R^n$. Without loss of generality, we may assume that here the function $f(\x)$ is smooth\footnote{In case the function is not smooth, we may replace its gradient with subgradient.}. 
 
-\subsection{The Steepest Descent Algorithm}
+Obviously, how efficiently one can find the (global) minima depends on what information we have about the function, also known as the oracle. For most optimization problems considered in this book, the dimension of $\x$ is very large. That makes computing or accessing (local) information about the function, say gradients or Hessians, very expensive. Hence, it is typical to assume that we only has the first-order information, namely the gradient, of the function as the oracle. Therefore, all optimization algorithms that we introduce below only use the gradient of the function.\footnote{We refer the readers to the book by \cite{Wright-Ma-2022} for a more systematic introduction to optimization algorithms in a high-space, including algorithms assuming higher-order oracles.}  
+
+\subsection{Gradient Descent and SGD}
 Probably the simplest, also the most widely used, method for optimization is {\em gradient descent} (GD). It was first introduced by Cauchy in 1847. The idea is very simple: starting from an initial state, say $\x_0$, one iteratively takes small steps such that each step reduces the value of the function $f(\x)$. 
 
 Suppose that the current state is $\x$. We want to take a small step, say of distance $t$, in a direction, indicated by a vector $\vv$, to reach a new state $\x'=\x + t \vv$ such that the value of the function decreases:
@@ -69,9 +79,11 @@ for some constant $L > 0$. Then it is easy to show\footnote{We leave this as an 
 for some function $c(\x)$ that does not depend on $\y$. Note that at the point $\x$, we have $g(\x) = f(\x)$. 
 
 Hence, at any iterate $\x_k$, to ensure that the value of the function $f(\x_{k+1})$ at the next iterate $\x_{k+1}$ is strictly smaller than $f(\x_k)$, we could find the minimal point of this upper bound to find the next iterate $\x_{k+1}$:
-\begin{equation*}
- \x_{k+1} := \argmin_{\x} \Big\{g(\x) = f(\x_{k})+\langle \nabla f(\x_{k}), \x-\x_{k}\rangle + \frac{L}{2}\|\x-\x_{k}\|_2^2 \Big\}. 
-\end{equation*}
+\begin{eqnarray}
+ \x_{k+1} &:=& \argmin_{\x} \Big\{g(\x) = f(\x_{k})+\langle \nabla f(\x_{k}), \x-\x_{k}\rangle + \frac{L}{2}\|\x-\x_{k}\|_2^2 \Big\}\\
+&:=& \argmin_{\x} \Big\{\langle \nabla f(\x_{k}), \x-\x_{k}\rangle + \frac{L}{2}\|\x-\x_{k}\|_2^2 \Big\}
+\label{eqn:steepest-descent-2-norm}
+\end{eqnarray}
 Since $g(\x_k) = f(\x_k)$ and $g(\x)$ is an upper bound of $f(\x)$ around $\x_k$, we have the following relationship:
 \begin{equation}
     f(\x_{k+1}) \le g(\x_{k+1}) \le g(\x_k) = f(\x_k) 
@@ -81,7 +93,7 @@ This is easily to see from the geometric relationship between a function and its
 \begin{equation}
 \x_{k+1}= \x_{k} - \frac{1}{L} \nabla f(\x_{k}).
 \end{equation}
-In practice, when optimizing a deep neural network, we normally do not know the exact  value of the (local) Lipschitz constant $L$. The step size $t = 1/L$ is also known as the {\em learning rate} and is usually set based on some empirical rules. 
+The step size $t = 1/L$ is also known as the {\em learning rate}. In practice, however, when optimizing a deep neural network, we normally do not know an accurate value of the (local) Lipschitz constant $L$. Hence the learning rate $t$ is usually chosen based on some empirical rules. 
 
 \begin{figure}[h]
     \centering
@@ -90,7 +102,25 @@ In practice, when optimizing a deep neural network, we normally do not know the 
     \label{fig:optimization-upper-bound}
 \end{figure}
 
-\section{Back-Propagation}
+\yima{Maybe here introducing stochastic gradient descent for the case when $f(\x)$ needs to be estimated as an expectation $f(\x) = \mathbb{E}_{\boldsymbol{w}}(f(\x, \boldsymbol{w})$ samples of another random variable $\boldsymbol{w}$, as in the case of training a neural networks with an expected loss over a batch of samples. Druv or Sam? One problem is that here we use $\x$ as the optimization variable but in the deep networks below we use $\bm(\theta)$... and $\x$ for the samples. Make notation better later!}
+
+\subsection{Sign Descent and ADAM}
+We see that in the above gradient descent scheme, a key property of the next iterate $\x_{k+1}$ that it minimizes the objective \eqref{eqn:steepest-descent-2-norm} in which the distance between $\x_k$ and $\x_{k+1}$ is measured by the $\ell^2$-norm (or known as the Euclidean norm). 
+
+In general, this distance can be measured by any norm to promote different properties of the descent. For instance, if we adopt the $\ell^1$-norm, it would promote the number of coordinates updated from $\x_k$ to $\x_{k+1}$ is sparse. Another typical choice is the $\ell^\infty$-norm:
+\begin{eqnarray}
+ \x_{k+1} &:=& \argmin_{\x} \Big\{\langle \nabla f(\x_{k}), \x-\x_{k}\rangle + \frac{L}{2}\|\x-\x_{k}\|^2_\infty \Big\}
+\label{eqn:steepest-descent-infinity-norm}
+\end{eqnarray}
+It has been shown by \cite{bernstein2024oldoptimizernewnorm} that this leads to the following {\em sign descent} scheme for the iterates:
+\begin{equation}
+    \x_{k+1} = \x_k - \frac{\|\nabla f(\x_k)\|_1}{L} \mbox{sign}(\nabla f(\x_k)) = \x_k - \frac{\|\nabla f(\x_k)\|_1}{L} \cdot \frac{\nabla f(\x_k)}{\sqrt{\nabla f(\x_k)^2}}.
+\end{equation}
+
+\yima{Now introduce the Adam algorithm as the stochastic version of the sign descent scheme, including how to estimate $\nabla f(\x_k)$ and $\nabla f(\x_k)^2$ ... also probably justify the general form of Adam with the connection to the heavy ball method that tries to approximate some second-order information with momentum...  Druv? }
+
+\section{Back Propagation}
+\yima{Probably rewrite this section and also straighten out notation $\x, \vec{x}, \bm{\theta}$, $\bm{w}$ etc between this section and the above one...}
 
 The most basic class of neural networks are ``multi-layer perceptrons,'' or functions of the form \(\vec{f} \colon \R^{n} \times \Theta \to \R^{p}\), where \(\Theta\) is the so-called ``parameter space'', and have the form
 \begin{align}
@@ -259,6 +289,10 @@ In combination with the expression for \(\nabla_{\vec{b}^{(i)}}\), we can effici
 
 
 \section{Minmax Optimization}
-
+As we have seen in Chapter \ref{ch:closed-loop}, the problem of learning the optimal encoder and decoder via a closed-loop transcription can be formulated as a two-player game.\footnote{This is also the case with the problem of learning a distribution via the generative adversarial network (GAN).} In such cases, we need to find stationary saddle points of a minmax problem:
+\begin{equation}
+    \min_{\bm{\theta}} \max_{\bm{\eta}} f(\bm{\theta}, \bm{\eta}).
+\end{equation}
+\yima{Any particular clean (convergence) results and (alternating minmax) algorithms that we want to feature here? Just sufficient for the reader to understand the basics so that they can implement and apply  to practical problems.}
 
 \end{document}
