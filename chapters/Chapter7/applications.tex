@@ -32,8 +32,20 @@ However, in our honest opinion, the solutions and results given here are designe
 
 In previous chapters, we alluded to different setups in which we used representation-learning techniques to process real data at scale. In this chapter, we will describe such setups in great detail. The objective of this section is to get you, the reader, to be able to reproduce any experiment discussed in this section (or indeed the book) using just the description we will give in the book, the principles introduced in previous chapters and expanded on in this chapter, and hyperparameters taken from a smattering of papers whose results are discussed in this chapter. To this end, we will \textit{precisely} describe all procedures in a detailed language, pseudocode, or mathematical notation that can be directly implemented in code. Wherever possible, we will discuss how the concrete implementations connect to the principles presented earlier in the book.
 
+\begin{figure}
+    \includegraphics[width=\textwidth]{figs_chap7/encoder_pipeline.pdf}
+    \caption{\small\textbf{A diagram of the encoder pipeline.} Data \(\vX \in \cD\) is fed through the embedding \(f_{\theta}^{\emb}\) to get a sequence in \(\R^{d \times *}\). The embedding is fed through a backbone \(f_{\theta}^{\mathrm{bb}}\) to get features \(\vZ_{\theta}(\vX)\) for each token. We can extract an aggregate feature \(\vz_{\theta}(\vX)\) using the extraction map \(f_{\theta}^{\mathrm{ext}}\). Finally, to use the aggregate feature in downstream tasks, we can use the task-specific head \(h_{\theta}\).}
+    \label{fig:overall_encoder_pipeline}
+\end{figure}
+
+\begin{figure}
+    \includegraphics[width=\textwidth]{figs_chap7/autoencoder_pipeline.pdf}
+    \caption{\small\textbf{A diagram of the autoencoder pipeline.} Data \(\vX \in \cD\) is fed through the embedding \(f_{\theta}^{\emb}\) to get a sequence in \(\R^{d \times *}\). The embedding is fed through an encoder backbone \(f_{\theta}^{\mathrm{bb}}\) to get features \(\vZ_{\theta}(\vX)\) for each token. To decode \(\vZ_{\theta}(\vX)\), we pass it through a decoder backbone \(g_{\eta}^{\mathrm{bb}}\). To map the decoder backbone output back to data space \(\cD\), we use an \textit{unembedding} layer \(g_{\eta}^{\mathrm{unemb}}\), overall obtaining a reconstruction \(\hat{\vX}_{\theta, \eta}(\vX)\) (here stylized to be a pixelated reconstruction of the input).}
+    \label{fig:overall_autoencoder_pipeline}
+\end{figure}
+
 Let us define the set of possible data as \(\cD\) (eventually this will be the set of images \(\cI\), for example, or the set of text \(\cT\)), and the set of finite sequences of tokens in \(\R^{d}\) (i.e., the set of matrices with \(d\) rows) as \(\R^{d \times *} := \bigcup_{T = 1}^{\infty}\R^{d \times T}\). In order to discuss the wealth of applications we introduce in this chapter, we first recall that in the rest of the book, we discuss two different types of model architectures.
-\yima{It would be good if we can have a diagram for each of the following two architectures, with the associated notations and terminologies...}
+%\yima{It would be good if we can have a diagram for each of the following two architectures, with the associated notations and terminologies...}
 \begin{itemize}
     \item An \textit{encoder} architecture, parameterized by \(\theta\), which is composed of several components:
     \begin{itemize}
@@ -42,7 +54,7 @@ Let us define the set of possible data as \(\cD\) (eventually this will be the s
         \item A \textit{aggregate feature extractor} \(f_{\theta}^{\ext} \colon \R^{d \times *} \to \R^{d}\), which extracts an aggregate representation of the whole sequence. This is used to define a single feature for the entire data sample.
         \item A \textit{task-specific head} \(h_{\theta} \colon \R^{d} \to \R^{m}\), which extracts an \(m\)-dimensional output for prediction.
     \end{itemize}
-    We also define \(f_{\theta} := f_{\theta}^{\backbone} \circ f_{\theta}^{\emb} \colon \cD \to \R^{d \times *}\). Given an input \(\vX\), we write \(\vZ_{\theta}(\vX) := f_{\theta}(\vX)\) and \(\vz_{\theta}(\vX) := f_{\theta}^{\ext}(\vZ_{\theta}(\vX))\).
+    We also define \(f_{\theta} := f_{\theta}^{\backbone} \circ f_{\theta}^{\emb} \colon \cD \to \R^{d \times *}\). Given an input \(\vX\), we write \(\vZ_{\theta}(\vX) := f_{\theta}(\vX)\) and \(\vz_{\theta}(\vX) := f_{\theta}^{\ext}(\vZ_{\theta}(\vX))\). The overall pipeline is depicted in \Cref{fig:overall_encoder_pipeline}.
     \item An \textit{autoencoder} architecture, which is composed of several components:
     \begin{itemize}
         \item An \textit{embedding} \(f_{\theta}^{\emb} \colon \cD \to \R^{d \times *}\), which converts the input data \(\cD\) into a series of \textit{tokens} which are embedded in \(D\)-dimensional space.
@@ -50,7 +62,7 @@ Let us define the set of possible data as \(\cD\) (eventually this will be the s
         \item A \textit{decoder backbone} \(g_{\eta}^{\backbone} \colon \R^{d \times *} \to \R^{d \times *}\), which conceptually undoes the operation of the encoder backbone.
         \item An \textit{unembedding} \(g_{\eta}^{\unemb} \colon \R^{d \times *} \to \cD\), which acts as an inverse of the embedding.
     \end{itemize}
-    We also define \(f_{\theta} := f_{\theta}^{\backbone} \circ f_{\theta}^{\emb} \colon \cD \to \R^{d \times *}\) and \(g_{\eta} := g_{\eta}^{\unemb} \circ g_{\eta}^{\backbone} \colon \R^{d \times *} \to \cD\). Given an input \(\vX\), we write \(\vZ_{\theta}(\vX) := f_{\theta}(\vX)\) and \(\hat{\vX}_{\theta, \eta}(\vX) := g_{\eta}(\vZ_{\theta}(\vX))\).
+    We also define \(f_{\theta} := f_{\theta}^{\backbone} \circ f_{\theta}^{\emb} \colon \cD \to \R^{d \times *}\) and \(g_{\eta} := g_{\eta}^{\unemb} \circ g_{\eta}^{\backbone} \colon \R^{d \times *} \to \cD\). Given an input \(\vX\), we write \(\vZ_{\theta}(\vX) := f_{\theta}(\vX)\) and \(\hat{\vX}_{\theta, \eta}(\vX) := g_{\eta}(\vZ_{\theta}(\vX))\). The overall pipeline is depicted in \Cref{fig:overall_autoencoder_pipeline}.
 \end{itemize}
 
 We will repeatedly use this notation many times in this chapter, so please feel free to refer back to it if something doesn't make sense. This decomposition of our networks also closely mirrors most code implementations, and you can start your coding projects by defining these networks.
@@ -976,7 +988,7 @@ As in \Cref{sub:image_classification_optimization}, we use a simple optimization
 
 \subsection{Evaluation}\label{sub:image_completion_optimization}
 
-This is the first autoencoder network we discuss in this section. We use the same center crop view \(v_{\cc}\) as in \Cref{sub:contrastive_learning_evals,sub:image_classification_evals}, resizing the final image to a square with side length \(S_{\cc} = S_{\mask}\) pixels so as to match the shapes of the input images seen during training. 
+This is the first autoencoder network we discuss in this chapter. We use the same center crop view \(v_{\cc}\) as in \Cref{sub:contrastive_learning_evals,sub:image_classification_evals}, resizing the final image to a square with side length \(S_{\cc} = S_{\mask}\) pixels so as to match the shapes of the input images seen during training. 
 
 On top of evaluating the masked autoencoding loss itself, it is also possible to evaluate the features \(\vZ_{\theta}(\vX_{\cc})\) of the view \(\vX_{\cc} := v_{\cc}(\vX)\) of the data \(\vX\) directly. For the sake of attention map fidelity evaluation, just obtaining \(\vZ_{\theta}(\vX_{\cc})\) is enough, but for linear probing we need to extract a summarized or aggregate feature from \(\vZ_{\theta}\). To do this, we can use a (parameter-free) feature extraction map which just returns the feature corresponding to the class token, i.e.,
 \begin{equation}
