@@ -642,15 +642,7 @@ For linear probing, we use several evaluation datasets such as CIFAR10, Oxford-F
 
 \section{Text Prediction}\label{sec:ntp_text}
 
-\DP{TODO: Peng? Yifu?}
-
-We now study \textit{next-token prediction} for text, which is a special case of classification in which the set of classes (i.e., the ``vocabulary'') is very large. Next-token prediction is the pre-training objective for large language models (LLMs) and certain kinds of vision models (with a so-called ``visual tokenizer''). In this section, we mainly focus on generative pre-training (GPT) \cite{radford2019language} tasks for learning language representations. 
-
-\subsection{Data}
-\pw{Yifu} 
-The data that we will use to explore the CRATE architecture for language tasks is \pw{xx}. For pre-training, we use \pw{xx}. 
-
-For pre-training, we use OpenWebText~\citep{Gokaslan2019OpenWeb}, an open-source reproduction of the unreleased WebText dataset used by OpenAI to train GPT2. For zero-shot evaluation, we use the following datasets for cross entropy validation loss:  WikiText~\citep{merity2016pointer}\footnote{For WikiText2 and WikiText103~\citep{merity2016pointer}, the test splits are the same, so we merge them as a single dataset referred to as WikiText.}, LAMBADA~\citep{paperno2016lambadadatasetwordprediction}\footnote{To obtain the accuracy on LAMBADA dataset, we use greedy decoding.}, and PTB~\citep{marcus-etal-1993-building}. In addition, we compute zero-shot accuracy on LAMBADA for predicting the final word of sentences, as well as on the Children’s Book Test (CBT)~\citep{hill2016goldilocksprinciplereadingchildrens}, where the task is to choose either common nouns (CN) or named entities (NE) from 10 possible options for an omitted word in a paragraph.
+We now study \textit{next-token prediction} for text, which is a special case of classification in which the set of classes (i.e., the ``vocabulary'') is very large. Next-token prediction is the pre-training objective for large language models (LLMs) and certain kinds of vision models (with a so-called ``visual tokenizer''). In this section, we mainly focus on generative pre-training (GPT) \cite{radford2019language} tasks for learning language representations. To explore the CRATE architecture for language tasks, we use the following datasets. For pre-training, we use OpenWebText (OWT)~\cite{Gokaslan2019OpenWeb}, an open-source reproduction of the unreleased WebText dataset used by OpenAI to train GPT-2. For zero-shot evaluation, we evaluate cross-entropy validation loss on WikiText~\cite{merity2016pointer}\footnote{For WikiText2 and WikiText103~\cite{merity2016pointer}, the test splits are the same, so we merge them as a single dataset referred to as WikiText.}, LAMBADA~\cite{paperno2016lambadadatasetwordprediction}\footnote{To obtain the accuracy on LAMBADA dataset, we use greedy decoding.}, and PTB~\cite{marcus-etal-1993-building}. % In addition, we compute zero-shot accuracy on LAMBADA for predicting the final word of sentences, as well as on the Children’s Book Test (CBT)~\cite{hill2016goldilocksprinciplereadingchildrens}, where the task is to choose either common nouns or named entities from 10 possible options for an omitted word in a paragraph.
 
 \subsection{Task and Objective}
 
@@ -664,15 +656,15 @@ where $f^{\rm embed}$ is an embedding function which maps input tokens $\vx_i$ t
 \end{align*}
 where $\vW^{\rm head} \in \R^{V\times d}$.  
 
-The training objective of GPT is next word prediction (causal language modeling), which is defined as 
+The training objective of GPT is next-word prediction (causal language modeling), which is defined as 
 \begin{align*}
-    L_{\rm GPT}\left(f ,f^{\rm head}\right) = \mathbb{E}_{\vX}\left[ \frac{1}{N - 1}\sum_{i=1}^{N-1} H\left(\mathbf{1}(\bm x_{i+1}), \mathrm{softmax}\left\{ (f^{\rm head} \odot f)(\bm X)_i \right\}\right) \right],
+    L_{\rm GPT}\left(f ,f^{\rm head}\right) = \mathbb{E}_{\vX}\left[ \frac{1}{N - 1}\sum_{i=1}^{N-1} \CE\left(\mathbf{1}(\bm x_{i+1}), \mathrm{softmax}\left\{ (f^{\rm head} \odot f)(\bm X)_i \right\}\right) \right],
 \end{align*}
-where $H(\bm p, \bm q) =\mathbb{E}_{x \sim \bm p}[-\log \bm q(x)]$ denotes the cross-entropy function, $ (f^{\rm head} \odot f)(\bm X)_i \in \R^V$ denotes the $i$-th index \yima{$i$-th or $i+1$-th?} of the model output (that is, the log-probability of each potential token in the vocabulary to take up the $i$-th index in the sequence $\bm X$), and $\mathbf{1}(\bm x_{i}) \in \{0,1\}^V$ represents the one-hot embedding vector of the token $\bm x_i$ in the vocabulary. \yima{$\x_i$ or $\x_{i+1}$?} This objective trains the model to maximize the likelihood of correctly predicting the next token at each position in the sequence while minimizing the prediction error using cross-entropy loss. The model operates autoregressively, meaning that predictions at later positions depend on correctly predicting earlier ones. This setup enforces the sequential generation constraint essential for applications such as text completion and dialogue generation. 
+where $ (f^{\rm head} \odot f)(\bm X)_i \in \R^V$ denotes the $i$-th index of the model output (that is, the log-probability of each potential token in the vocabulary to take up the $i$-th index in the sequence $\bm X$), and $\mathbf{1}(\bm x_{i}) \in \{0,1\}^V$ represents the one-hot embedding vector of the token $\bm x_i$ in the vocabulary. This objective trains the model to maximize the likelihood of correctly predicting the next token at each position in the sequence while minimizing the prediction error using cross-entropy loss. The model operates autoregressively, meaning that predictions at later positions depend on correctly predicting earlier ones. This setup enforces the sequential generation constraint essential for applications such as text completion and dialogue generation. 
 
 \subsection{The Causal CRATE Architecture}
 
-    The CRATE architecture we use here is similar to the one in \Cref{sub:image_classification_architecture}, with a few modifications to adapt it for language tasks. Following the setup in \cite{radford2019language}, we adapt the CRATE architecture by incorporating a casual mask to align with the next word prediction task in GPT. In standard transformers, a causal mask is used to prevent information leakage during autoregressive generation by ensuring that each token can only attend to previous and current tokens in the sequence. This constraint enforces a left-to-right generation process, which is essential for tasks such as language modeling. Mathematically, given a sequence of length $T$, the causal mask for a matrix $\bm A \in \R^{T\times T}$ in GPT-2 \cite{radford2019language} is defined as follows:
+    The CRATE architecture we use here is similar to the one in \Cref{sub:image_classification_architecture}, with a few modifications to adapt it for language tasks. Following the setup in \cite{radford2019language}, we adapt the CRATE architecture by incorporating a casual mask to align with the next word prediction task in GPT. In standard transformers, a causal mask is used to prevent information leakage during autoregressive generation by ensuring that each token can only attend to previous and current tokens in the sequence. This constraint enforces a left-to-right generation process, which is essential for tasks such as language modeling. Mathematically, given a sequence of length $T$, the causal mask for a matrix $\bm A \in \R^{T\times T}$ in GPT2 \cite{radford2019language} is defined as follows:
 \begin{align}\label{eq:mask}
     \mathrm{CausalMask}(\bm A)_{ij} = \begin{cases}
         A_{ij},\quad \text{if}\ i \ge j,\quad (\text{allow attention to past and current tokens}) \\
@@ -687,19 +679,25 @@ where $\bm Z$ is the output. Substituting this into \eqref{eq:CARTE updates} yie
 
 \subsection{Optimization Method}
 
-For GPT pertaining, we mainly follow the implementations in the nano GPT repository \cite{nanogpt}. Specifically, we use a batch size of 384 and train for 600,000 steps with the Adam optimizer~\citep{kingma2014adam}. For the Adam optimizer, we use $(\beta_1, \beta_2)=(0.9, 0.95)$, and weight decay of $0.1$. For the learning rate scheduler, we apply the linear warm-up and cosine decay, with a peak value of $\eta=6\times 10^{-4}$ at the $2,000$ iteration, and minimum value $6\times 10^{-5}$. The training and validation losses over iterations are shown in Figure~\ref{fig:crate-text-evals}~(right) \pw{@Yifu: add a figure here and update according to your experiments.}. The training/validation loss converges around $3.37$ after training with a batch size of 384 and 600,000 iterations. In comparison, the open GPT-2 implementation is pre-trained on OpenWebText with a batch size of 512 and 600,000 steps and converges to a validation loss of $2.85$ \citep{nanogpt}.  
+For GPT pertaining, we mainly follow the implementations in the nano GPT repository \cite{nanogpt}. Specifically, we use a batch size of 384 and train for 600,000 steps with the Adam optimizer~\citep{kingma2014adam}. For the Adam optimizer, we use $(\beta_1, \beta_2)=(0.9, 0.95)$ and weight decay of $0.1$. For the learning rate scheduler, we apply the linear warm-up and cosine decay, with a peak value of $\eta=6\times 10^{-4}$ at the $2,000$ iteration, and minimum value $6\times 10^{-5}$. The training and validation losses over iterations are shown in Figure~\ref{fig:crate-text-evals}. The training/validation loss converges around $3.37$ after training with a batch size of 384 and 600,000 iterations. In comparison, the open GPT-2 implementation is pre-trained on OpenWebText with a batch size of 512 and 600,000 steps and converges to a validation loss of $2.85$ \citep{nanogpt}.  
 
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\textwidth]{figs_chap7/gpt-loss.pdf}
+    \caption{The loss curve of CRATE-GPT-Base trained on the OpenWebText dataset.}
+    \label{fig:crate-text-evals}
+\end{figure}
 
-\subsection{Evaluation}
+\subsection{Evaluation and Results}
 
 We evaluate CRATE-GPT models by measuring the zero-shot cross-entropy loss on different datasets. We evaluate CRATE-GPT-Base on OpenWebText (OWT) as well as other datasets as shown in \citep{radford2019language}. We compare with the official release of GPT2-Base which is pre-trained on WebText \cite{huggingface_gpt}, while CRATE-GPT-Base is pre-trained on OWT. {Meanwhile, in order to compare CRATE-GPT and the GPT2 model under a similar number of model parameters, we consider the GPT2 with a smaller model size, denoted by GPT2-Small, and apply the same training setup described in \cite{nanogpt}.} Therefore, we first fine-tune GTP2-Base on OWT before evaluating the OWT test dataset. The evaluation results on the test datasets are shown in Table~\ref{tab:gpt-eval}. We also present the pre-training loss of CRATE-GPT with respect to progressing
-pre-training steps in Figure~\ref{fig:crate-text-evals}~(right).
-From both Table~\ref{tab:gpt-eval} and Figure~\ref{fig:crate-text-evals}~(right), we can observe that the CRATE architecture can be applied as backbones for generative language models and achieve competitive performance compared to GPT2.  
+pre-training steps in Figure~\ref{fig:crate-text-evals}.
+From both Table~\ref{tab:gpt-eval} and Figure~\ref{fig:crate-text-evals}, we can observe that the CRATE architecture can be applied as backbones for generative language models and achieve competitive performance compared to GPT2.  
 
 \begin{table}[t!]
 \def\arraystretch{1.1}
     \small
-    \caption{\small Zero-shot cross-entropy loss of the CRATE-GPT2-Base model and GPT2-Small, GPT2-Base model evaluated on the test split of the datasets (lower is better). 
+    \caption{\small Zero-shot cross-entropy loss of the CRATE-GPT2-Base model and GPT2-Small, GPT2-Base model evaluated on the test split of the datasets (lower is better). \pt{Maybe an arrow point down instead}
     }
     \centering
     \begin{tabular}{ccccccc}
@@ -716,8 +714,8 @@ From both Table~\ref{tab:gpt-eval} and Figure~\ref{fig:crate-text-evals}~(right)
 
 
 
-\subsection{Experimental Setup and Results} 
-\pw{Yifu} 
+% \subsection{Experimental Setup and Results} 
+% \pw{Yifu} 
 
 
 
