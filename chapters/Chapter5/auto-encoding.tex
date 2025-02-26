@@ -135,12 +135,18 @@ here, the consistent encoding and decoding mappings are given by a single-layer
 linear transform:
 \begin{equation}
   \X \xrightarrow{\hspace{2mm} \mathcal{E} = \vU^\top \hspace{2mm}}
-  \Z \xrightarrow{\hspace{2mm} \mathcal{D} = \vU \hspace{2mm}}   \hat{\X}.
+  \Z \xrightarrow{\hspace{2mm} \mathcal{D} = \vU \hspace{2mm}}   \hat{\X},
   \label{eqn:autoencoding-PCA-2}
 \end{equation}
-As we saw in Chapter \ref{ch:classic}, when the distribution of $\vx$ is
-supported on a low-dimensional subspace $\vU_o$, the compactness of
-the representation
+where $\vU \in \mathbb{R}^{D\times d}$ typically with $d\ll D$. Hence $\vU^\top $ represents a projection from a higher-dimensional space $\mathbb{R}^{D}$  to a lower one $\mathbb{R}^{d}$, as illustrated in Figure \ref{fig:AE}.
+\begin{figure}
+    \centering \includegraphics[width=0.5\linewidth]{figs_chap5/autoencoder.png} 
+    \caption{Illustration of a typical autoencoder such as PCA, seeking a low-dimensional representation $\bm{z}$ of high-dimensional data $\vx$.}
+    \label{fig:AE}
+\end{figure}
+
+As we saw in Chapter \ref{ch:classic}, when the distribution of $\vx$ is indeed
+supported on a low-dimensional subspace $\vU_o$, the compactness of the representation
 $\vz$ produced by $\cE$ is a direct consequence of correctly estimating (and enforcing) the dimension of this subspace.  Finally, recall that gradient descent on the reconstruction criterion exactly
 yields these sample-wise consistent mappings: indeed, the optimal solution to the problem
 \begin{equation}\label{eq:pca-reconstruction-ch5}
@@ -254,9 +260,9 @@ succeed in learning consistent autoencoders}.
   \label{fig:idealized_interpolation}
 \end{figure}
 
-\paragraph{\sdb{Sparse Autoencoders.}}
 
-\subsection{Nonlinear PCA and Deep Networks}
+
+\subsection{Nonlinear PCA}
 Of course, one should expect that things will no longer be so simple
 when we deal with more complex distributions whose underlying
 low-dimensional structure could be nonlinear.
@@ -342,7 +348,7 @@ rate distortion measure introduced in this book.}
 % \sdb{We can connect to Oja's here too: we learn with BP (don't just call GD)
 % + it becomes nonlocal...}
 
-\paragraph{Manifold Flattening.} 
+\paragraph{Manifold Flattening via a Deeper Network.} 
 Based on the modern practice of deep networks, such classical shallow and wide network architectures are known to be rather difficult to train effectively and efficiently via back propagation (BP), partly due to the diminishing gradient of the sigmoid function. Hence, the modern practice normally suggests to further
 decompose the nonlinear transform $f$ (or $g$) into a composition of many more layers of simpler transforms, resulting a deeper network architecture
 \cite{Hinton504}, as illustrated in Figure \ref{fig:ccnet_layers}.
@@ -413,7 +419,7 @@ through a geometric angle related to the task of flattening the nonlinear
 manifold on which our hypothesized data distribution is supported. A purely
 constructive approach to flattening the manifold proceeds incrementally, in
 parallel to what we have seen in \Cref{ch:compression,ch:representation} with
-the interplay between diffusion, denoising, and compression. In the geometric
+the interaction between diffusion, denoising, and compression. In the geometric
 setting, the incremental \textit{flattening process} corresponding to $f_{\ell}$
 takes the form of transforming a neighborhood of one point of the manifold to be
 closer to a flat manifold (i.e., a subspace), and enforcing local consistency
@@ -427,6 +433,27 @@ manifolds in a white-box fashion \cite{Psenka-JMLR24}. However, the approach is
 limited in its applicability to high-dimensional data distributions such as
 images due to unfavorable scalability, motivating the development of more
 flexible methods to incremental autoencoding.
+
+
+\subsection{Sparse Autoencoding}
+In the above autoencoding schemes, the dimension of the feature space $d$ is typically chosen to be much lower than that the original data space $D$ so as to explicitly enforce or promote the learned representation to be low-dimensional. However, in practice, we normally do not know the intrinsic dimension of the data distribution. Hence, the choice of the feature space dimension for autoencoding is often done empirically. In more general situations, the data distribution can be a mixture of a few low-dimensional subspaces or submanifolds. In these cases, it is no longer feasible to enforce a single low-dimensional space for all the features together.
+
+The sparse autoencoder is meant to resolve some of the limitation. In particular, the dimension of the feature space can be equal to or even higher than that of the data space, as illustrated in Figure \ref{fig:SAE}. However, the features are  required to be highly sparse in the feature space. So if we impose sparsity as the measure of parsimony in addition to the rate reduction in the objective \eqref{eqn:auto-encoding-objective}, we obtain a new objective for the sparse autoencoding:
+\begin{equation}
+     \min_{f, g} 
+     \lambda \|\Z\|_0 - \Delta R(\Z) + d(\X, \hat \X),
+    \label{eqn:autoencode-sparse}
+\end{equation}
+where the $\ell^0$-norm $\|\cdot\|_1$ is known to promote sparsity. This is very similar to  the sparse rate reduction objective \eqref{eq:sparse-rr} which we used in the previous Chapter \ref{ch:representation} to derive the white-box CRATE architecture.
+
+\begin{figure}
+    \centering
+\includegraphics[width=0.5\linewidth]{figs_chap5/SAE_diagram.png}
+    \caption{Illustration of a sparse autoencoder (SAE), compared to that of a typical autoencoder (AE) in Figure \ref{fig:AE}. }
+    \label{fig:SAE}
+\end{figure}
+
+\yima{There are other ways to promote the sparsity of the learned features $\Z$, including enforcing the frequency of activations for each coordinate of $\z$ to be small... But here we can justify SAE through its natural connection to sparse rate reduction. Anthropic AI seems to advocate that sparse autoencoding learns more interpretable features... }
 
 \subsection{Variational Autoencoding}
 
@@ -525,17 +552,18 @@ where $g = (g_1, g_2)$ are deep networks with parameters $\vtheta$, which we
 will see correspond to the
 \textit{decoder} in the autoencoder.
 Similarly, for the approximate posterior $q(\vz \mid \vx;\, \vphi)$, we use
-a Gaussian distribution with parameters given by an encoder MLP $f = (f_1,
-f_2)$ with parameters $\vphi$:
+a special Gaussian distribution with parameters given by an encoder MLP $f = (f_1, f_2)$ with parameters $\vphi$:
 \begin{equation*}
   \vz \mid \vx \sim \cN(f_1(\vx), \diag(f_2(\vx)) \vI).
 \end{equation*}
+\yima{We really need to elucidate what are the true implications of the above two assumptions on the forms of the two conditional distributions. How do these assumptions enforce certain desired structures of the representation and how are the structures related to what rate reduction and sparsity are promoting? }
+
 
 \subsubsection{Interpreting VAE Training as Standard Autoencoding}
 
 \section{Data Completion via Masked Autoencoding}
 \label{sec:MAE}
-As we have alluded to at the beginning of the chapter, a good autoencoding should enable us to utilize the learned joint  distribution of the data and the representation $(\x,\z)$ for various estimation and generation tasks under different conditions, either on the data $\x$, on the feature $\z$, or on both. In this section, we investigate how to exploit such an autoencoding representation for completion (or prediction) task in the data domain.
+As we have alluded to at the beginning of the chapter, a good autoencoding should enable us to utilize the learned joint  distribution of the data and the representation $(\x,\z)$ for various estimation and generation tasks under different conditions, either on the data $\x$, on the feature $\z$, or on both. In this section, we investigate how to exploit such an autoencoding representation for completion (or prediction) tasks in the data domain. More precisely, we study how to exploit the auoencoding for completing a data conditioned on partial observation of the data. We leave the study of data generation conditioned on given features to the next Section \ref{sec:conditioned-decoding}.
 
 Notice that in the above setting,  the autoencoding network is
 trained to reconstruct a set of complete samples of the random vector

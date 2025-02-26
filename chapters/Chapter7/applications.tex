@@ -642,19 +642,32 @@ For linear probing, we use several evaluation datasets such as CIFAR10, Oxford-F
 
 \section{Text Prediction}\label{sec:ntp_text}
 
-We now study \textit{next-token prediction} for text, which is a special case of classification in which the set of classes (i.e., the ``vocabulary'') is very large. Next-token prediction is the pre-training objective for large language models (LLMs) and certain kinds of vision models (with a so-called ``visual tokenizer''). In this section, we mainly focus on generative pre-training (GPT) \cite{radford2019language} tasks for learning language representations. To explore the CRATE architecture for language tasks, we use the following datasets. For pre-training, we use OpenWebText (OWT)~\cite{Gokaslan2019OpenWeb}, an open-source reproduction of the unreleased WebText dataset used by OpenAI to train GPT-2. For zero-shot evaluation, we evaluate cross-entropy validation loss on WikiText~\cite{merity2016pointer}\footnote{For WikiText2 and WikiText103~\cite{merity2016pointer}, the test splits are the same, so we merge them as a single dataset referred to as WikiText.}, LAMBADA~\cite{paperno2016lambadadatasetwordprediction}\footnote{To obtain the accuracy on LAMBADA dataset, we use greedy decoding.}, and PTB~\cite{marcus-etal-1993-building}. % In addition, we compute zero-shot accuracy on LAMBADA for predicting the final word of sentences, as well as on the Children’s Book Test (CBT)~\cite{hill2016goldilocksprinciplereadingchildrens}, where the task is to choose either common nouns or named entities from 10 possible options for an omitted word in a paragraph.
+We now study \textit{next-token prediction} for text, which is a special case of classification in which the set of classes (i.e., the ``vocabulary'') is very large. Next-token prediction is the pre-training objective for large language models (LLMs) and certain kinds of vision models (with a so-called ``visual tokenizer''). In this section, we mainly focus on generative pre-training (GPT) \cite{radford2019language} tasks for learning language representations. To explore the CRATE architecture for language tasks, we use the following datasets. For pre-training, we use OpenWebText (OWT)~\cite{Gokaslan2019OpenWeb}, an open-source reproduction of the unreleased WebText dataset used by OpenAI to train GPT2. For zero-shot evaluation, we evaluate cross-entropy validation loss on WikiText~\cite{merity2016pointer}\footnote{For WikiText2 and WikiText103~\cite{merity2016pointer}, the test splits are the same, so we merge them as a single dataset referred to as WikiText.}, LAMBADA~\cite{paperno2016lambadadatasetwordprediction}\footnote{To obtain the accuracy on LAMBADA dataset, we use greedy decoding.}, and PTB~\cite{marcus-etal-1993-building}. % In addition, we compute zero-shot accuracy on LAMBADA for predicting the final word of sentences, as well as on the Children’s Book Test (CBT)~\cite{hill2016goldilocksprinciplereadingchildrens}, where the task is to choose either common nouns or named entities from 10 possible options for an omitted word in a paragraph.
 
 \subsection{Task and Objective}
 
-For GPT pre-training, we apply the Byte Pair Encoding tokenizer as the default tokenizer, with a vocabulary size $V=50257$ following the setting of GPT2 \cite{radford2019language}. After tokenization, the input is represented as a sequence of $N$ tokens $\bm X = [\bm x_1,\dots,\bm x_{N}] \in \R^{D \times N}$. The goal of CRATE is to learn a map $f$ that transforms these tokens into structured and compact token representations, denoted as $\bm Z$, that facilitate language tasks. To begin, we introduce the pre-processing layer as follows:
+For GPT pre-training, we apply the Byte Pair Encoding (BPE) tokenizer as the default tokenizer, with a vocabulary size $V=50257$ following the setting of GPT2 \cite{radford2019language}. Here, BPE is a subword tokenization algorithm that iteratively merges the most frequent adjacent character pairs in a corpus to create a vocabulary of subwords. Specifically, it starts with a vocabulary consisting of individual bytes and then repeatedly combines the most common pairs into new subword tokens until a predefined vocabulary size $V=50257$ is reached; see \Cref{fig:BPE}. Using the BPE tokenizer, the input is represented as a sequence of $N$ tokens $\bm X = [\bm x_1,\dots,\bm x_{N}] \in \R^{D \times N}$.  
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.45\textwidth]{figs_chap7/BPE1}\hspace{0.6in} 
+    \includegraphics[width=0.45\textwidth]{figs_chap7/BPE2} 
+    \caption{\small {\bf The process of tokenizing text data using BPE.} (Image credit to \url{https://huggingface.co/learn/nlp-course/chapter6/5}). (Left) We begin by analyzing the given text corpus and constructing an initial vocabulary that consists of individual characters (or bytes in the case of byte-level BPE). Then, we compute the frequencies of adjacent character pairs in the corpus. This involves scanning the entire text and counting how often each two-character sequence (bigram) appears. (Right) After computing the frequencies of adjacent character pairs, we identify the most frequent pair in the corpus. This pair is then merged into a new subword unit, which is added to the vocabulary as a single token. This process is repeated iteratively until the predefined vocabulary size is reached. }
+    \label{fig:BPE}
+\end{figure}
+
+In general, the goal of CRATE is to learn a mapping $f$ that transforms the initial token into structured and compact token representations, denoted as $\bm Z$, that facilitate language tasks. Now, we introduce the details about this map $f$. Once the text is tokenized into individual tokens, GPT2 maps each token to a dense vector, which consists of real-valued numbers. These vectors are referred to as {\em token embeddings} and are stored in a look-up table known as the embedding matrix. In GPT2, the embedding size is typically 768, which means each token is converted into a vector of 768 floating-point numbers. These token embeddings are not fixed but are learned during training. Initially, the embeddings are randomly assigned, but as training progresses, they are adjusted through backpropagation to better capture the semantic meaning of tokens. After token embeddings are computed, GPT2 adds positional embeddings to capture the order of tokens in a sequence. The positional encoding is added to the token embeddings to give the model information about the position of each token in the input sequence. The positional encoding vectors are also learned and have the same dimensionality as the token embeddings (768 in GPT2). Formally, we write the pre-processing layer as follows:
 \begin{align*}
     f^{\rm pre}(\vX) = f^{\rm embed}(\vX) + \vE_{\rm pos}, 
 \end{align*}
-where $f^{\rm embed}$ is an embedding function which maps input tokens $\vx_i$ to embedding vectors in $\R^d$, and $\bm E_{\rm pos}$ is the sinusoid positional embedding defined in \cite{vaswani2017attention}. The final output layer takes the form of a linear head: 
+where $f^{\rm embed}$ is an embedding function which maps input tokens $\vx_i$ to embedding vectors in $\R^d$, and $\bm E_{\rm pos}$ is the sinusoid positional embedding defined in \cite{vaswani2017attention}. Next, we employ the CRATE architecture (see \Cref{sub:image_classification_architecture}） to construct the intermediate layers of the mapping $f$. These intermediate layers are designed to iteratively refine the token representations, progressively capturing more complex and higher-level semantic structures from the input sequence.
+
+
+
+The final output layer in GPT-2 takes the form of a linear transformation, often referred to as the {\em linear head}. This layer is responsible for producing the final output tokens based on the processed representations from the model’s transformer layers. Formally, the final output layer takes the form of 
 \begin{align*}
     f^{\rm head}(\vZ) = \vW^{\rm head}\vZ,
 \end{align*}
-where $\vW^{\rm head} \in \R^{V\times d}$.  
+where $\vW^{\rm head} \in \R^{V\times d}$ is the output weight matrix.  
 
 The training objective of GPT is next-word prediction (causal language modeling), which is defined as 
 \begin{align*}
@@ -662,9 +675,16 @@ The training objective of GPT is next-word prediction (causal language modeling)
 \end{align*}
 where $ (f^{\rm head} \odot f)(\bm X)_i \in \R^V$ denotes the $i$-th index of the model output (that is, the log-probability of each potential token in the vocabulary to take up the $i$-th index in the sequence $\bm X$), and $\mathbf{1}(\bm x_{i}) \in \{0,1\}^V$ represents the one-hot embedding vector of the token $\bm x_i$ in the vocabulary. This objective trains the model to maximize the likelihood of correctly predicting the next token at each position in the sequence while minimizing the prediction error using cross-entropy loss. The model operates autoregressively, meaning that predictions at later positions depend on correctly predicting earlier ones. This setup enforces the sequential generation constraint essential for applications such as text completion and dialogue generation. 
 
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.3\textwidth]{figs_chap7/causal.jpg} 
+    \caption{\small {\bf Causal mask in GPT2.} (Image credit to \url{https://github.com/sshleifer/blog_v2/blob/master/_notebooks/2020-03-12-bart.ipynb})}.
+    \label{fig:causal}
+\end{figure}
+
 \subsection{The Causal CRATE Architecture}
 
-    The CRATE architecture we use here is similar to the one in \Cref{sub:image_classification_architecture}, with a few modifications to adapt it for language tasks. Following the setup in \cite{radford2019language}, we adapt the CRATE architecture by incorporating a casual mask to align with the next word prediction task in GPT. In standard transformers, a causal mask is used to prevent information leakage during autoregressive generation by ensuring that each token can only attend to previous and current tokens in the sequence. This constraint enforces a left-to-right generation process, which is essential for tasks such as language modeling. Mathematically, given a sequence of length $T$, the causal mask for a matrix $\bm A \in \R^{T\times T}$ in GPT2 \cite{radford2019language} is defined as follows:
+    The CRATE architecture we use here is similar to the one in \Cref{sub:image_classification_architecture}, with a few modifications to adapt it for language tasks. Following the setup in \cite{radford2019language}, we adapt the CRATE architecture by incorporating a casual mask to align with the next word prediction task in GPT. In standard transformers, a causal mask is used to prevent information leakage during autoregressive generation by ensuring that each token can only attend to previous and current tokens in the sequence; see \Cref{fig:causal}. This constraint enforces a left-to-right generation process, which is essential for tasks such as language modeling. Mathematically, given a sequence of length $T$, the causal mask for a matrix $\bm A \in \R^{T\times T}$ in GPT2 \cite{radford2019language} is defined as follows:
 \begin{align}\label{eq:mask}
     \mathrm{CausalMask}(\bm A)_{ij} = \begin{cases}
         A_{ij},\quad \text{if}\ i \ge j,\quad (\text{allow attention to past and current tokens}) \\
@@ -675,18 +695,15 @@ Next, the MSSA operator in the CRATE architecture with a causal mask can be expr
 \begin{align*}
 \mathrm{CausalMask}\MSSA_{\theta}^{\ell}(\vZ) = \sum_{k=1}^K \bm U_k\bm U_k^T \bm Z\mathrm{softmax}\left( \mathrm{CausalMask} \left( \bm Z^{T}\bm U_k \bm U_k^T\bm Z\right) \right),    
 \end{align*}
-where $\bm Z$ is the output. Substituting this into \eqref{eq:CARTE updates} yields the CRATE architecture for language tasks. 
+where $\bm Z$ is the output.  
+
+By incorporating this causal attention mechanism, the CRATE architecture enables efficient computation in language modeling tasks. It ensures that the model processes tokens in a sequential manner, with each token attending only to previous tokens and its own representation. This mechanism reduces the computational complexity associated with allowing future tokens to influence current predictions, making the model more efficient and well-suited for tasks like next-word prediction. Substituting this operator into the update rules in \eqref{eq:CARTE updates} results in the final CRATE architecture optimized for language tasks, preserving both the efficiency and the accuracy required for autoregressive generation. 
+
+
 
 \subsection{Optimization Method}
 
 For GPT pertaining, we mainly follow the implementations in the nano GPT repository \cite{nanogpt}. Specifically, we use a batch size of 384 and train for 600,000 steps with the Adam optimizer~\citep{kingma2014adam}. For the Adam optimizer, we use $(\beta_1, \beta_2)=(0.9, 0.95)$ and weight decay of $0.1$. For the learning rate scheduler, we apply the linear warm-up and cosine decay, with a peak value of $\eta=6\times 10^{-4}$ at the $2,000$ iteration, and minimum value $6\times 10^{-5}$. The training and validation losses over iterations are shown in Figure~\ref{fig:crate-text-evals}. The training/validation loss converges around $3.37$ after training with a batch size of 384 and 600,000 iterations. In comparison, the open GPT-2 implementation is pre-trained on OpenWebText with a batch size of 512 and 600,000 steps and converges to a validation loss of $2.85$ \citep{nanogpt}.  
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\textwidth]{figs_chap7/gpt-loss.pdf}
-    \caption{The loss curve of CRATE-GPT-Base trained on the OpenWebText dataset.}
-    \label{fig:crate-text-evals}
-\end{figure}
 
 \subsection{Evaluation and Results}
 
@@ -694,7 +711,7 @@ We evaluate CRATE-GPT models by measuring the zero-shot cross-entropy loss on di
 pre-training steps in Figure~\ref{fig:crate-text-evals}.
 From both Table~\ref{tab:gpt-eval} and Figure~\ref{fig:crate-text-evals}, we can observe that the CRATE architecture can be applied as backbones for generative language models and achieve competitive performance compared to GPT2.  
 
-\begin{table}[t!]
+\begin{table}[!htbp]
 \def\arraystretch{1.1}
     \small
     \caption{\small Zero-shot cross-entropy loss of the CRATE-GPT2-Base model and GPT2-Small, GPT2-Base model evaluated on the test split of the datasets (lower is better). \pt{Maybe an arrow point down instead}
@@ -714,6 +731,13 @@ From both Table~\ref{tab:gpt-eval} and Figure~\ref{fig:crate-text-evals}, we can
 
 
 
+\begin{figure}[t] 
+    \centering
+    \includegraphics[width=0.5\textwidth]{figs_chap7/gpt-loss.pdf}
+    \caption{\bf The loss curve of CRATE-GPT-Base trained on the OpenWebText dataset.}
+    \label{fig:crate-text-evals}
+\end{figure}
+ 
 % \subsection{Experimental Setup and Results} 
 % \pw{Yifu} 
 
@@ -811,7 +835,7 @@ i.e., takes the sparse codes obtained via proximal gradient descent and multipli
 
 The CRATE-\(\alpha\) layer is shown in \Cref{fig:crate_alpha_backbone}. In practice this modification of CRATE performs very well at larger scales. For example, when we pre-train CRATE-\(\alpha\) models on ImageNet-21K, unsupervised tasks like segmentation (see \Cref{fig:crate_alpha_saliency_maps} and \Cref{tab:crate_alpha_detection_segmentation}) generally have significantly improved performance compared to CRATE. Similar trends are present in language model training using causal self-attention (see \Cref{tab:crate_alpha_lm}). Overall, it is a promising avenue to scaling up the performance to match black-box models such as transformers.\footnote{Note that the experimental results in this section use a slightly different model architecture, which add very slight empirical gains. The changes are: (1) an additional residual connection on the ODL block, (2) modifying \(\ISTA\) to use two separate dictionaries instead of \(\vD^{\ell}\) and \((\vD^{\ell})^{\top}\).} 
 
-\DP{@YM: note that CRATE-\(\alpha\) paper has no linear probing experiments, only full fine-tuning. Since full fine-tuning doesn't make sense from representation learning perspective, we omit it. Feel free to delete this comment when you are done reading.}
+%\DP{@YM: note that CRATE-\(\alpha\) paper has no linear probing experiments, only full fine-tuning. Since full fine-tuning doesn't make sense from representation learning perspective, we omit it. Feel free to delete this comment when you are done reading.} That is ok.
 
 \subsection{Linear Time Complexity Transformers}\label{sub:tost_experiments}
 
