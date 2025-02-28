@@ -648,9 +648,9 @@ three key insights:
     input data $\vx$ (where relevant) using deep networks.
   \item We replace the posterior $p(\vz \mid \vx;\, \vtheta)$, used for encoding
     and whose form is implied (by Bayes rule) by our modeling choices for $\vz$,
-    with a tractable approximation $q(\vz \mid \vx;\, \vphi)$, which has its own
-    parameters $\vphi$.
-  \item We jointly learn $\vtheta$ and $\vphi$ via maximizing a tractable lower
+    with a tractable approximation $q(\vz \mid \vx;\, \veta)$, which has its own
+    parameters $\veta$.
+  \item We jointly learn $\vtheta$ and $\veta$ via maximizing a tractable lower
     bound for the likelihood $p(\vx ;\, \vtheta)$, known as the evidence lower
     bound (ELBO).
 \end{enumerate}
@@ -665,9 +665,9 @@ distributions:
 where $g = (g_1, g_2)$ are deep networks with parameters $\vtheta$, which we
 will see correspond to the
 \textit{decoder} in the autoencoder.
-Similarly, for the approximate posterior $q(\vz \mid \vx;\, \vphi)$, we use
+Similarly, for the approximate posterior $q(\vz \mid \vx;\, \veta)$, we use
 a special Gaussian distribution with parameters given by an encoder
-MLP $f = (f_1, f_2)$ with parameters $\vphi$:
+MLP $f = (f_1, f_2)$ with parameters $\veta$:
 \begin{equation*}
   \vz \mid \vx \sim \cN(f_1(\vx), \diag(e^{f_2(\vx)}) \vI).
 \end{equation*}
@@ -683,35 +683,35 @@ For learning the encoder and decoder, we start from the maximum likelihood
 objective \Cref{eq:VAE-MLE}, and derive a convenient lower bound known as the
 evidence lower bound, or ELBO. Starting from simple algebraic manipulations
 \begin{align*}
-  \log p(\vx; \vtheta) &=
-  \log \frac{p(\vx, \vz; \vtheta)}{p(\vz \mid \vx; \vtheta)}
+  \log p(\vx;\, \vtheta) &=
+  \log \frac{p(\vx, \vz;\, \vtheta)}{p(\vz \mid \vx;\, \vtheta)}
   \\
   &=
-  \log \frac{p(\vx, \vz; \vtheta)}{q(\vz \mid \vx; \vphi)}
+  \log \frac{p(\vx, \vz;\, \vtheta)}{q(\vz \mid \vx;\, \veta)}
   +
-  \log \frac{q(\vz \mid \vx; \vphi)}{p(\vz \mid \vx; \vtheta)},
+  \log \frac{q(\vz \mid \vx;\, \veta)}{p(\vz \mid \vx;\, \vtheta)},
 \end{align*}
-we take expectations with respect to $\vz \sim q(\,\cdot\, \mid \vx; \vphi)$ and
+we take expectations with respect to $\vz \sim q(\,\cdot\, \mid \vx;\, \veta)$ and
 use the Gibbs inequality (\Cref{thm:information-inequality}) to get
 \begin{equation*}
-  \log p(\vx; \vtheta)
+  \log p(\vx;\, \vtheta)
   \geq
-  \bE_{\vz \sim q(\,\cdot\, \mid \vx ; \vphi)} \left[
-    \log \frac{p(\vx, \vz; \vtheta)}{q(\vz \mid \vx; \vphi)}
+  \bE_{\vz \sim q(\,\cdot\, \mid \vx ;\, \veta)} \left[
+    \log \frac{p(\vx, \vz;\, \vtheta)}{q(\vz \mid \vx;\, \veta)}
   \right].
 \end{equation*}
 The righthand side of this bound is the ELBO; as a lower bound for the pointwise
-log-likelihood of $p(\vx; \theta)$, its maximization offers a
+log-likelihood of $p(\vx;\, \theta)$, its maximization offers a
 principled compromise
 between the maximum likelihood objective and computational tractability.
 Interestingly, the derivation above shows that its tightness depends on the KL
-divergence between the approximate posterior $q(\vz \mid \vx; \vphi)$ and the
-true posterior $p(\vz \mid \vx; \vtheta)$. Thus, the VAE objective is:
+divergence between the approximate posterior $q(\vz \mid \vx;\, \veta)$ and the
+true posterior $p(\vz \mid \vx;\, \vtheta)$. Thus, the VAE objective is:
 \begin{equation}\label{eq:elbo-objective}
-  \max_{\vtheta, \vphi}\,
+  \max_{\vtheta, \veta}\,
   \bE_{\vx}
-  \bE_{\vz \sim q(\,\cdot\, \mid \vx ; \vphi)} \left[
-    \log \frac{p(\vx, \vz; \vtheta)}{q(\vz \mid \vx; \vphi)}
+  \bE_{\vz \sim q(\,\cdot\, \mid \vx ;\, \veta)} \left[
+    \log \frac{p(\vx, \vz;\, \vtheta)}{q(\vz \mid \vx;\, \veta)}
   \right].
 \end{equation}
 By our derivation, maximization of this objective corresponds to a tradeoff
@@ -726,46 +726,52 @@ Monte Carlo estimators for the associated gradients. However, the task is
 simpler under the Gaussian assumptions we have made above. In this case, the
 ELBO reads
 \begin{align*}
-  \max_{\vtheta, \vphi}\,
+  \max_{\vtheta, \veta}\,
   \bE_{\vx}
-  \bE_{\vz \sim q(\,\cdot\, \mid \vx ; \vphi)} \left[
-    \log \frac{p(\vx, \vz; \vtheta)}{q(\vz \mid \vx; \vphi)}
+  \bE_{\vz \sim q(\,\cdot\, \mid \vx ;\, \veta)} \left[
+    \log \frac{p(\vx, \vz;\, \vtheta)}{q(\vz \mid \vx;\, \veta)}
   \right]
   &=
-  \max_{\vtheta, \vphi}\,
+  \max_{\vtheta, \veta}\,
   \left\{
     \bE_{\vx}
-    \bE_{\vz \sim q(\,\cdot\, \mid \vx ; \vphi)} \left[
-      \log p(\vx, \vz; \vtheta)
+    \bE_{\vz \sim q(\,\cdot\, \mid \vx ;\, \veta)} \left[
+      \log p(\vx, \vz;\, \vtheta)
     \right]
     + \frac{d \log(2\pi e)}{2}
-    + \frac{1}{2}\sum_{i=1}^d f_{2, i}(\vx)
+    % + \frac{1}{2}\sum_{i=1}^d f_{2, i}(\vx)
+    + \frac{1}{2} \ip{ \bE_{\vx}[f_2(\vx)]}{\mathbf{1}}
   \right\}
   \\
   &\equiv
-  \max_{\vtheta, \vphi}\,
+  \max_{\vtheta, \veta}\,
   \left\{
     \bE_{\vx}
-    \bE_{\vz \sim q(\,\cdot\, \mid \vx ; \vphi)} \left[
-      \log p(\vx \mid \vz; \vtheta)
+    \bE_{\vz \sim q(\,\cdot\, \mid \vx ;\, \veta)} \left[
+      \log p(\vx \mid \vz;\, \vtheta)
+      + \log p(\vz)
     \right]
-    +
-    \bE_{\vz \sim q(\,\cdot\, \mid \vx ; \vphi)} \left[
-      \log p(\vz)
-    \right]
-  + \frac{1}{2}\sum_{i=1}^d f_{2, i}(\vx)
+    % +
+    % \bE_{\vz \sim q(\,\cdot\, \mid \vx ; \veta)} \left[
+    %   \log p(\vz)
+    % \right]
+  % + \frac{1}{2}\sum_{i=1}^d f_{2, i}(\vx)
+  + \frac{1}{2} \ip{ \bE_{\vx}[f_2(\vx)]}{\mathbf{1}}
   \right\}
   \\
   &\equiv
-  \max_{\vtheta, \vphi}\,
+  \max_{\vtheta, \veta}\,
   \left\{
-    \bE_{\vx}
-    \bE_{\vz \sim q(\,\cdot\, \mid \vx ; \vphi)} \left[
-      \log p(\vx \mid \vz; \vtheta)
-    \right]
-    + \frac{1}{2}\sum_{i=1}^d \left(
-      f_{2, i}(\vx) - f_{1, i}(\vx) - e^{f_{2, i}(\vx)}
-    \right)
+    2\bE_{\vx}\left[
+      \bE_{\vz \sim q(\,\cdot\, \mid \vx ;\, \veta)} \left[
+        \log p(\vx \mid \vz;\, \vtheta)
+        \right]
+      + \ip{ f_2(\vx) - e^{f_2(\vx)}}{\mathbf{1}}
+      - \norm{f_1(\vx)}_2^2
+      % + \frac{1}{2}\sum_{i=1}^d \left(
+      %   f_{2, i}(\vx) - f_{1, i}^2(\vx) - e^{f_{2, i}(\vx)}
+      % \right)
+      \right]
   \right\}, \labelthis \label{eq:elbo-for-gaussians}
 \end{align*}
 following the Gaussian entropy calculation done in
@@ -778,19 +784,19 @@ the decoder when latents $\vz$ are distribited according to the approximate
 posterior (generated by the encoder applied to a data sample $\vx$), which is
 a probabilistic form of autoencoding.
 To see this more directly, consider the special case where the approximate
-posterior concentrates on its mean $f_1(\vx)$, for any $\vx$: this is the limit
+posterior concentrates on its mean $f_1(\vx)$, for every $\vx$: this is the limit
 where its log-variance $f_{2,i}(\vx) \to -\infty$ for each coordinate $i = 1, \dots, d$.
 For simplicity, assume moreover that $g_2(\vx) = \mathbf{1}$, giving the decoder
 constant unit variance on each coordinate.
 Then the loss term in question converges to
 \begin{align*}
   \bE_{\vx}
-  \bE_{\vz \sim q(\,\cdot\, \mid \vx ; \vphi)} \left[
-    \log p(\vx \mid \vz; \vtheta)
+  \bE_{\vz \sim q(\,\cdot\, \mid \vx ;\, \veta)} \left[
+    \log p(\vx \mid \vz;\, \vtheta)
   \right]
   &\to
   \bE_{\vx} \left[
-    \log p(\vx \mid f_1(\vx); \vtheta)
+    \log p(\vx \mid f_1(\vx);\, \vtheta)
   \right]
 \\
   % &=
@@ -805,16 +811,40 @@ Then the loss term in question converges to
     \|\vx - g_1\circ f_1(\vx)\|_2^2
   \right].
 \end{align*}
-So with a highly-confident encoder, which deterministically maps each sample
+So with a highly confident encoder, which deterministically maps each sample
 $\vx$ to a single point $f_1(\vx)$ in $\vz$-space, and an isotropic decoder,
 the ``autoencoding'' part of the ELBO maximization problem indeed becomes
 a classical autoencoding objective!\footnote{In the general case where $g_2$ is
 not fixed as $\mathbf{1}$, the reader can verify that the autoencoding term in
 the ELBO objective converges to a \textit{regularized} classical autoencoding
 objective.}
-At the same time, note that this special case is actually excluded, by the
+At the same time, note that this special case is actually excluded by the
 extra terms in \Cref{eq:elbo-for-gaussians}---these effectively correspond to
 regularization terms that discourage the encoder from collapsing.
+The general ELBO loss (\Cref{eq:elbo-objective,eq:elbo-for-gaussians}) is
+therefore a strict generalization of the classical autoencoding reconstruction
+objective (\Cref{eq:nonlinear-pca-ch5}), both in terms of its data fidelity term
+and in terms of the inclusion of regularization terms.
+
+\subsubsection{Training a VAE}
+VAEs are typically trained by alternating stochastic gradient ascent on the ELBO
+objective (\Cref{eq:elbo-for-gaussians}), given individual samples $\vx$ from the
+true data distribution and from $\vz \sim q(\,\cdot\,\mid \vx;\, \veta)$. In
+particular, it is standard to collect and train on many independently-generated
+samples $\vz^{i}$ for each sample $\vx$. To take gradients of
+\Cref{eq:elbo-for-gaussians} with respect to the encoder parameters $\veta$, 
+one makes use of the so-called reparameterization trick by writing $\vz \sim
+q(\,\cdot\,\mid \vx;\, \veta)$ as 
+\begin{equation*}
+  \vz =_{\mathrm{d}} f_1(\vx) + \diag(e^{\tfrac{1}{2}f_2(\vx)}) \vg, \quad \vg \sim
+  \cN(0, \vI),
+\end{equation*}
+where $=_{\mathrm{d}}$ denotes equality in distribution. Then one can simply
+take many independent standard Gaussian samples $\vg^{i}$ for each data sample
+$\vx$, generate the corresponding samples from the approximate posterior
+$\vz^i$, and compute gradients with respect to $\veta$ using automatic
+differentiation without any issues.
+
 
 \section{Data Completion via Masked Autoencoding}
 \label{sec:MAE}
