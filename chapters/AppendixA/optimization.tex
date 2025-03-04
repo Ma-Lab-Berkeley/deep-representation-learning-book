@@ -391,171 +391,287 @@ where \(\eta_{k}\) is the parameter-wise adaptively set learning rate. This sche
 
 
 
-\section{Computing Gradients in Practice via Backpropagation}
-\yima{Probably rewrite this section and also straighten out notation $\x, \vec{x}, \bm{\theta}$, $\bm{w}$ etc between this section and the above one...}
+\section{Computing Gradients via Automatic Differentiation}
 
-The most basic class of neural networks are ``multi-layer perceptrons,'' or functions of the form \(\vec{f} \colon \R^{n} \times \Theta \to \R^{p}\), where \(\Theta\) is the so-called ``parameter space'', and have the form
+Above, we discussed several optimization algorithms for deep networks which assumed access to a \textit{first-order oracle}, i.e., a device which would allow us to compute \(L(\theta)\) and \(\nabla L(\theta)\). For simple functions \(L\), it is possible to do this by hand. However, for deep neural networks, it is intractable to do this by hand, and so we would require a general algorithm which would allow us to efficiently compute the gradients of arbitrary (sub)differentiable network architectures. In this section, we introduce the basics of \textit{automatic differentiation} (AD or \textit{autodiff}), which is a computationally efficient way to compute gradients and Jacobians with respect to the network parameters.
+
+The main idea of AD is to compute the chain rule. Let us do a simple example to start. Let \(L \colon \R \to \R\) be defined by \(L = a \circ b \circ c\) where \(a, b, c \colon \R \to \R\) are differentiable. Then the \textit{chain rule} gives
+\begin{equation}
+    L^{\prime}(\theta) = a^{\prime}(b(c(\theta)))b^{\prime}(c(\theta))c^{\prime}(\theta).
+\end{equation}
+To compute \(L(\theta)\), we first compute \(c(\theta)\) then \(b(c(\theta))\) then \(a(b(c(\theta)))\), and store them all. There are two ways to compute \(L^{\prime}(\theta)\). The \textit{forward-mode AD} will compute 
+\begin{equation}
+    L^{\prime}(\theta) \implies b^{\prime}(c(\theta))c^{\prime}(\theta) \implies a^{\prime}(b(c(\theta)))b^{\prime}(c(\theta))c^{\prime}(\theta)
+\end{equation}
+i.e., computing the derivatives ``from the bottom-up''. The \textit{reverse mode AD} will compute 
+\begin{equation}
+    a^{\prime}(b(c(\theta))) \implies a^{\prime}(b(c(\theta)))b^{\prime}(c(\theta)) \implies a^{\prime}(b(c(\theta)))b^{\prime}(c(\theta))c^{\prime}(\theta),
+\end{equation}
+i.e., computing the derivatives ``from the top down''. To see why this matters, suppose that \(f \colon \R^{p} \to \R^{s}\) is given by \(f = a \circ b \circ c\) where \(a \colon \R^{r} \to \R^{s}\), \(b \colon \R^{q} \to \R^{r}\), \(c \colon \R^{p} \to \R^{q}\). Then the chain rule is (where \(D\) is the Jacobian):
+\begin{equation}
+    (Df)(\vx) = [(Da)(b(c(\vx)))][(Db)(c(\vx))][(Dc)(\vx)]
+\end{equation}
+where \(Da \colon \R^{r} \to \R^{s \times r}\), \(Db \colon \R^{q} \to \R^{r \times s}\), and \(Dc \colon \R^{p} \to \R^{q \times p}\) are the Jacobians of the respective functions. Assuming that computing each Jacobian is trivial and the only cost is multiplication (which is often the case in neural networks, where each compositional element is simple and the Jacobian can be computed in closed-form). Then doing forward-mode AD has the following computational costs associated with the matrix multiplication (assuming that multiplying \(A \in \R^{m \times n}, B \in \R^{n \times k}\) takes \(\cO(mnk)\) time):
 \begin{align}
-    \vec{f}(\vec{x}, \bm{\theta}) 
-    &= W^{(m)}\vec{\sigma}^{(m)}(W^{(m-1)}(\cdots \vec{\sigma}^{(1)}(W^{(0)}\vec{x} + \vec{b}^{(0)}) \cdots) + \vec{b}^{(m - 1)}) + \vec{b}^{(m)} \\ 
-    \text{where} \quad \bm{\theta}
-    &= (W^{(0)}, \vec{b}^{(0)}, W^{(1)}, \vec{b}^{(1)}, W^{(2)}, \vec{b}^{(2)}, \dots, W^{(m)}, \vec{b}^{(m)}) \in \Theta,
+    &\text{computing}\ (Dc)(\vx) \in \R^{q \times p}\ \text{takes negligible time} \\
+    &\text{computing}\ [(Db)(c(\vx))][(Dc)(\vx)] \in \R^{r \times p}\ \text{takes \(\cO(pqr)\) time} \\
+    &\text{computing}\ [(Da)(b(c(\vx)))][(Db)(c(\vx))][(Dc)(\vx)] \in \R^{s \times p}\ \text{takes \(\cO(pqr + prs)\) time.}
 \end{align}
-and \(\vec{\sigma}^{(1)}, \dots, \vec{\sigma}^{(m)}\) are ``activation functions,'' which we treat as generic differentiable nonlinear functions. Here \(\bm{\theta}\) is bolded because it should not be thought of as a scalar, vector, or matrix, but rather as a collection of matrices and vectors, an object we haven't discussed so far in this class. 
-
-More precisely, if we define the functions \((\vec{z}^{(i)})_{i = 0}^{m}\) and \((\vec{f}^{(i)})_{i = 0}^{m}\) as 
+Meanwhile, doing reverse-mode AD has the following computational costs:
 \begin{align}
-    \vec{z}^{(0)}(\vec{x}, \bm{\theta})
-    &= \vec{f}^{(0)}(\vec{x}, \bm{\theta}) = W^{(0)}\vec{x} + \vec{b}^{(0)} \\ 
-    \vec{z}^{(i)}(\vec{x}, \bm{\theta})
-    &= \vec{f}^{(i)}(\vec{z}^{(i - 1)}(\vec{x}, \bm{\theta}), \bm{\theta}) = W^{(i)}\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)}) + \vec{b}^{(i)}, \qquad \forall\ i \in \{1, \dots, m\},
+    &\text{computing}\ (Da)(b(c(\vx))) \in \R^{s \times r}\ \text{takes negligible time} \\
+    &\text{computing}\ [(Da)(b(c(\vx)))][(Db)(c(\vx))] \in \R^{s \times q}\ \text{takes \(\cO(qrs)\) time} \\
+    &\text{computing}\ [(Da)(b(c(\vx)))][(Db)(c(\vx))][(Dc)(\vx)] \in \R^{s \times p}\ \text{takes \(\cO(qrs + pqs)\) time.}
 \end{align}
-then this formulation gives 
-\begin{equation}
-    \vec{f}(\vec{x}, \bm{\theta}) = \vec{z}^{(m)}(\vec{x}, \bm{\theta}) = \vec{f}^{(m)} \circ \cdots \circ \vec{f}^{(0)}(\vec{x}, \bm{\theta}).
-\end{equation}
+In other words, the forward-mode AD takes \(\cO(p(qr + rs))\) time, and the reverse-mode AD takes \(\cO(s(pq + qr))\) time. \textit{These take a different amount of time!} 
 
-When we say that we ``train'' this neural network, we mean just that we optimize \(\bm{\theta}\) to minimize some loss function evaluated on the data. Given a (differentiable) loss function \(\ell \colon \R^{p} \times \R^{p} \to \R\) and a data point \((\vec{x}, \vec{y}) \in \R^{n} \times \R^{p}\), we evaluate the loss on this data point as \(L(\vec{f}(\vec{x}, \bm{\theta}), \vec{y})\). The true ``empirical loss'' across a batch of \(q\) data points \((\vec{x}_{i}, \vec{y}_{i})\) is 
+More generally, suppose that \(f = f^{L} \circ \cdots \circ f^{1}\) where each \(f^{\ell} \colon \R^{d^{\ell - 1}} \to \R^{d^{\ell}}\), so that \(f \colon \R^{d^{0}} \to \R^{d^{L}}\). Then the forward-mode AD takes \(\cO(d^{0}(\sum_{\ell = 2}^{L}d^{\ell - 1}d^{\ell}))\) time while the reverse-mode AD takes \(\cO(d^{L}(\sum_{\ell = 1}^{L - 1}d^{\ell - 1}d^{\ell}))\) time. From the above rates, we see that all else equal:
+\begin{itemize}
+    \item If the function to optimize has \textit{more outputs than inputs}, use \textit{forward-mode AD}.
+    \item If the function to optimize has \textit{more inputs than outputs}, use \textit{reverse-mode AD}.
+\end{itemize}
+In a neural network, we compute the gradient of a \textit{loss function} \(L \colon \Theta \to \R\), where the parameter space \(\Theta\) is usually very high-dimensional. So in practice we always use reverse-mode AD for training neural networks. Reverse-mode AD, in the context of training neural networks, is called \textit{backpropagation}.
+
+\subsection{Backpropagation}
+
+In this section, we will discuss algorithmic backpropagation using a simple yett completely practical example. Suppose that we fix an input-label pair \((\vX, \vy)\), and fix a network architecture \(f_{\theta} = f_{\theta^{m}}^{m} \circ \cdots \circ f_{\theta^{1}}^{1} \circ f_{\theta^{\emb}}^{\emb}\) where \(\theta = (\theta^{\emb}, \theta^{1}, \dots, \theta^{m}, \theta^{\head})\) and task-specific head \(h_{\theta^{\head}}\), and write
+\begin{align}
+    &\vz_{\theta}^{1}(\vX) := f_{\theta^{\emb}}^{\emb}(\vX), \\ 
+    &\vz_{\theta}^{i + 1}(\vX) := f_{\theta^{i}}^{i}(\vz_{\theta}^{i}(\vX)), \quad \forall i \in \{1, \dots, m\}, \\
+    &\hat{\vy}_{\theta^{\head}}(\vX) := h_{\theta^{\head}}(\vz_{\theta}^{m+1}(\vX)).
+\end{align}
+Then, we can define the loss on this one term by 
 \begin{equation}
-    L(\bm{\theta}) \doteq \sum_{i = 1}^{q}L(\vec{f}(\vec{x}_{i}, \bm{\theta}), \vec{y}_{i}),
+    L(\theta) := \ell(\vy, \hat{\vy}_{\theta}(\vX)),
 \end{equation}
-and a ``training algorithm'' attempts to optimize \(\bm{\theta}\) to minimize \(L\).
+where \(\ell\) is a differentiable function of its second argument. Then the backward-mode AD instructs us to compute the derivatives in the order \(\theta^{\head}, \theta^{m}, \dots, \theta^{1}, \theta^{\emb}\). We compute 
+\begin{align}
+    \nabla_{\theta^{\head}}L(\theta)
+    &= \nabla_{\theta^{\head}}\ell(\vy, \hat{\vy}_{\theta}(\vX)) \\
+    &= [D_{\theta^{\head}}\hat{\vy}_{\theta}(\vX)][\nabla_{\hat{\vy}}\ell(\vy, \hat{\vy}_{\theta}(\vX))] \\
+    &= [D_{\theta^{\head}}h_{\theta^{\head}}(\vz_{\theta}^{m + 1}(\vX))][\nabla_{\hat{\vy}}\ell(\vy, \hat{\vy}_{\theta}(\vX))].
+\end{align}
+While the derivatives \(\nabla_{\hat{\vy}}\cL\) and \(D_{\theta^{\head}}h_{\theta^{\head}}\) can be computed by hand, in practice they are automatically defined when defining the ``forward pass,'' i.e., the computation of \(h_{\theta^{\head}}\). This is the case in modern machine learning frameworks like Pytorch or Jax. While extending the automatic derivative computation to as many functions \(h_{\theta^{\head}}\) as possible is an area of active research, the great resource \cite{bright2025matrix} describes one basic approach to do it in some detail.
+
+Now to compute \(\nabla_{\theta^{m}}L(\theta)\), we have 
+\begin{align}
+    \nabla_{\theta^{m}}L(\theta)
+    &= \nabla_{\theta^{m}}\ell(\vy, \hat{\vy}_{\theta}(\vX)) \\
+    &= [D_{\theta^{m}}h_{\theta^{\head}}(\vz_{\theta}^{m + 1}(\vX))][\nabla_{\hat{\vy}}\ell(\vy, \hat{\vy}_{\theta}(\vX))] \\
+    &= [D_{\theta^{m}}\vz_{\theta}^{m + 1}(\vX)][D_{\vz^{m + 1}}h_{\theta^{\head}}(\vz_{\theta}^{m + 1}(\vX))][\nabla_{\hat{\vy}}\ell(\vy, \hat{\vy}_{\theta}(\vX))] \\
+    &= [D_{\theta^{m}}f_{\theta^{m}}^{m}(\vz_{\theta}^{m}(\vX))][D_{\vz^{m + 1}}h_{\theta^{\head}}(\vz_{\theta}^{m + 1}(\vX))][\nabla_{\hat{\vy}}\ell(\vy, \hat{\vy}_{\theta}(\vX))].
+\end{align}
+Here the derivatives \(D_{\vz}h_{\theta^{\head}}(\vz)\) and \(D_{\theta^{m}}f_{\theta^{m}}^{m}\) are also computed via auto-differentiation when programming, but can also be computed by hand. Now, we are able to calculate \(\nabla_{\theta^{m}}L(\theta)\) in an ``optimal'' way.
+
+For any index  \(i \in \{1, \dots, m - 1\}\), we can then compute the derivative as 
+\begin{align}
+    \nabla_{\theta^{i}}L(\theta)
+    &= [D_{\theta^{i}}\vz_{\theta}^{i + 1}(\vX)][\nabla_{\vz^{i + 1}}L(\theta)] \\
+    &= [D_{\theta^{i}}f_{\theta^{i}}^{i}(\vz_{\theta}^{i}(\vX))][\nabla_{\vz^{i + 1}}L(\theta)].
+\end{align}
+Thus we have computed \(\nabla_{\theta^{i}}L(\theta)\) in terms of \(\nabla_{\vz^{i + 1}}L(\theta)\). Therefore we should also compute \(\nabla_{\vz^{i}}L(\theta)\), which can be computed in the same way, i.e.,
+\begin{align}
+    \nabla_{\vz^{i}}L(\theta)
+    &= [D_{\vz^{i}}\vz_{\theta}^{i + 1}(\vX)][\nabla_{\vz^{i + 1}}L(\theta)] \\
+    &= [D_{\vz^{i}}f_{\theta^{i}}^{i}(\vz_{\theta}^{i}(\vX))][\nabla_{\vz^{i + 1}}L(\theta)],
+\end{align}
+where (finally) the derivatives \(D_{\vz^{i}}f_{\theta^{i}}^{i}(\vz^{i})\) can be computed via auto-differentiation. This sets up a backward recursion to find \(\nabla_{\vz^{i}}L(\theta)\) in terms of \(\nabla_{\vz^{i + 1}}L(\theta)\). After carrying through this recursion using the base case
+\begin{align}
+    \nabla_{\vz^{m + 1}}L(\theta)
+    &= \nabla_{\vz^{m + 1}}\ell(\vy, \hat{\vy}_{\theta}(\vX)) \\
+    &= [D_{\vz^{m + 1}}\hat{\vy}_{\theta}(\vX)][\nabla_{\hat{\vy}}\ell(\vy, \hat{\vy}_{\theta}(\vX))] \\
+    &= [D_{\vz^{m + 1}}h_{\theta^{\head}}(\vz_{\theta}^{m + 1}(\vX))][\nabla_{\hat{\vy}}\ell(\vy, \hat{\vy}_{\theta}(\vX))],
+\end{align}
+we have access to the following quantities:
+\begin{equation}
+    \nabla_{\theta^{\head}}L(\theta), \qquad \nabla_{\vz^{i}}L(\theta), \qquad \nabla_{\theta^{i}}L(\theta), \qquad \forall i \in \{1, \dots, m\},
+\end{equation}
+which are computed in the following order:
+\begin{equation}
+    \nabla_{\theta^{\head}}L(\theta) \implies \nabla_{\vz^{m + 1}}L(\theta) \implies \nabla_{\theta^{m}}L(\theta) \implies \nabla_{\vz^{m}}L(\theta) \implies \cdots \implies \nabla_{\theta^{1}}L(\theta) \implies \nabla_{\vz^{1}}L(\theta).
+\end{equation}
+To finish off the computation, we compute \(\nabla_{\theta^{\emb}}L(\theta)\), obtaining 
+\begin{align}
+    \nabla_{\theta^{\emb}}L(\theta)
+    &= [D_{\theta^{\emb}}\vz_{\theta}^{1}(\vX)][\nabla_{\vz^{1}}L(\theta)] \\
+    &= [D_{\theta^{\emb}}f_{\theta^{\emb}}^{\emb}(\vX)][\nabla_{\vz^{1}}L(\theta)].
+\end{align}
+This gives us a computationally efficient algorithm to find all gradients in the whole network.
+
+\begin{exercise}
+    Carry through the backpropagation computation for a \(L\)-layer MLP, as defined in \Cref{sub:contrastive_learning_architecture}.
+\end{exercise}
+
+\begin{exercise}
+    Carry through the backpropagation computation for a \(L\)-layer transformer, as defined in \Cref{sub:contrastive_learning_architecture}.
+\end{exercise}
+
+\DP{I don't think we want to talk about how to compute derivatives by hand here, so I changed the format of the section quite a lot. Now I'm not sure what kind of pictures to put here. @YM let me know your thoughts about this and the section overall.}
+
+% \yima{Probably rewrite this section and also straighten out notation $\x, \vec{x}, \bm{\theta}$, $\bm{w}$ etc between this section and the above one...}
+
+% The most basic class of neural networks are ``multi-layer perceptrons,'' or functions of the form \(\vec{f} \colon \R^{n} \times \Theta \to \R^{p}\), where \(\Theta\) is the so-called ``parameter space'', and have the form
+% \begin{align}
+%     \vec{f}(\vec{x}, \bm{\theta}) 
+%     &= W^{(m)}\vec{\sigma}^{(m)}(W^{(m-1)}(\cdots \vec{\sigma}^{(1)}(W^{(0)}\vec{x} + \vec{b}^{(0)}) \cdots) + \vec{b}^{(m - 1)}) + \vec{b}^{(m)} \\ 
+%     \text{where} \quad \bm{\theta}
+%     &= (W^{(0)}, \vec{b}^{(0)}, W^{(1)}, \vec{b}^{(1)}, W^{(2)}, \vec{b}^{(2)}, \dots, W^{(m)}, \vec{b}^{(m)}) \in \Theta,
+% \end{align}
+% and \(\vec{\sigma}^{(1)}, \dots, \vec{\sigma}^{(m)}\) are ``activation functions,'' which we treat as generic differentiable nonlinear functions. Here \(\bm{\theta}\) is bolded because it should not be thought of as a scalar, vector, or matrix, but rather as a collection of matrices and vectors, an object we haven't discussed so far in this class. 
+
+% More precisely, if we define the functions \((\vec{z}^{(i)})_{i = 0}^{m}\) and \((\vec{f}^{(i)})_{i = 0}^{m}\) as 
+% \begin{align}
+%     \vec{z}^{(0)}(\vec{x}, \bm{\theta})
+%     &= \vec{f}^{(0)}(\vec{x}, \bm{\theta}) = W^{(0)}\vec{x} + \vec{b}^{(0)} \\ 
+%     \vec{z}^{(i)}(\vec{x}, \bm{\theta})
+%     &= \vec{f}^{(i)}(\vec{z}^{(i - 1)}(\vec{x}, \bm{\theta}), \bm{\theta}) = W^{(i)}\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)}) + \vec{b}^{(i)}, \qquad \forall\ i \in \{1, \dots, m\},
+% \end{align}
+% then this formulation gives 
+% \begin{equation}
+%     \vec{f}(\vec{x}, \bm{\theta}) = \vec{z}^{(m)}(\vec{x}, \bm{\theta}) = \vec{f}^{(m)} \circ \cdots \circ \vec{f}^{(0)}(\vec{x}, \bm{\theta}).
+% \end{equation}
+
+% When we say that we ``train'' this neural network, we mean just that we optimize \(\bm{\theta}\) to minimize some loss function evaluated on the data. Given a (differentiable) loss function \(\ell \colon \R^{p} \times \R^{p} \to \R\) and a data point \((\vec{x}, \vec{y}) \in \R^{n} \times \R^{p}\), we evaluate the loss on this data point as \(L(\vec{f}(\vec{x}, \bm{\theta}), \vec{y})\). The true ``empirical loss'' across a batch of \(q\) data points \((\vec{x}_{i}, \vec{y}_{i})\) is 
+% \begin{equation}
+%     L(\bm{\theta}) \doteq \sum_{i = 1}^{q}L(\vec{f}(\vec{x}_{i}, \bm{\theta}), \vec{y}_{i}),
+% \end{equation}
+% and a ``training algorithm'' attempts to optimize \(\bm{\theta}\) to minimize \(L\).
 
 
-For now, we concentrate on the case where we have \(q = 1\), i.e., we have a single data point \((\vec{x}, \vec{y})\). Here we have 
-\begin{equation}
-    L(\bm{\theta}) = L(\vec{f}(\vec{x}, \bm{\theta}), \vec{y}).
-\end{equation}
-We now explore how to compute \(\nabla L(\bm{\theta})\).  In this situation, we are only differentiating with respect to \(\bm{\theta}\), so we fix \(\vec{x}\) and \(\vec{y}\), which gives the following computational graph:\footnote{Note that we did not break the graph down to matrix multiplications, vector additions, and applications of \(\vec{\sigma}^{(i)}\); we do this for clarity, because the full graph would be rather messy.}
-\begin{figure}
-    \centering
-    \begin{tikzpicture}
-        \node (f0i) [draw, circle, minimum size=1cm] {\(f_{i}^{(0)}\)};
-        \node (f01) [draw, circle, minimum size=1cm, above=of f0i] {\(f_{1}^{(0)}\)};
-        \node (f0n) [draw, circle, minimum size=1cm, below=of f0i] {\(f_{n_{0}}^{(1)}\)};
+% For now, we concentrate on the case where we have \(q = 1\), i.e., we have a single data point \((\vec{x}, \vec{y})\). Here we have 
+% \begin{equation}
+%     L(\bm{\theta}) = L(\vec{f}(\vec{x}, \bm{\theta}), \vec{y}).
+% \end{equation}
+% We now explore how to compute \(\nabla L(\bm{\theta})\).  In this situation, we are only differentiating with respect to \(\bm{\theta}\), so we fix \(\vec{x}\) and \(\vec{y}\), which gives the following computational graph:\footnote{Note that we did not break the graph down to matrix multiplications, vector additions, and applications of \(\vec{\sigma}^{(i)}\); we do this for clarity, because the full graph would be rather messy.}
+% \begin{figure}
+%     \centering
+%     \begin{tikzpicture}
+%         \node (f0i) [draw, circle, minimum size=1cm] {\(f_{i}^{(0)}\)};
+%         \node (f01) [draw, circle, minimum size=1cm, above=of f0i] {\(f_{1}^{(0)}\)};
+%         \node (f0n) [draw, circle, minimum size=1cm, below=of f0i] {\(f_{n_{0}}^{(1)}\)};
         
-        \node (f11) [draw, circle, minimum size=1cm, right=of f01] {\(f_{1}^{(1)}\)};
-        \node (f1i) [draw, circle, minimum size=1cm, right=of f0i] {\(f_{j}^{(1)}\)};
-        \node (f1n) [draw, circle, minimum size=1cm, right=of f0n] {\(f_{n_{1}}^{(1)}\)};
+%         \node (f11) [draw, circle, minimum size=1cm, right=of f01] {\(f_{1}^{(1)}\)};
+%         \node (f1i) [draw, circle, minimum size=1cm, right=of f0i] {\(f_{j}^{(1)}\)};
+%         \node (f1n) [draw, circle, minimum size=1cm, right=of f0n] {\(f_{n_{1}}^{(1)}\)};
         
-        \node (d1) [right=of f11] {\(\cdots\)};
-        \node (di) [right=of f1i] {\(\cdots\)};
-        \node (dn) [right=of f1n] {\(\cdots\)};
+%         \node (d1) [right=of f11] {\(\cdots\)};
+%         \node (di) [right=of f1i] {\(\cdots\)};
+%         \node (dn) [right=of f1n] {\(\cdots\)};
         
-        \node (fm1) [draw, circle, minimum size=1cm, right=of d1] {\(f_{i}^{(m)}\)};
-        \node (fmi) [draw, circle, minimum size=1cm, right=of di] {\(f_{k}^{(m)}\)};
-        \node (fmn) [draw, circle, minimum size=1cm, right=of dn] {\(f_{n_{m}}^{(m)}\)};
+%         \node (fm1) [draw, circle, minimum size=1cm, right=of d1] {\(f_{i}^{(m)}\)};
+%         \node (fmi) [draw, circle, minimum size=1cm, right=of di] {\(f_{k}^{(m)}\)};
+%         \node (fmn) [draw, circle, minimum size=1cm, right=of dn] {\(f_{n_{m}}^{(m)}\)};
         
-        \node (loss) [right=of fmi] {\(L(f(\vec{x}, \bm{\theta}), \vec{y})\)};
+%         \node (loss) [right=of fmi] {\(L(f(\vec{x}, \bm{\theta}), \vec{y})\)};
 
-        \node (theta0) [below=of f0n] {\((W^{(0)}, \vec{b}^{(0)})\)};
-        \node (theta1) [below=of f1n] {\((W^{(1)}, \vec{b}^{(1)})\)};
-        \node (thetam) [below=of fmn] {\((W^{(m)}, \vec{b}^{(m)})\)};
+%         \node (theta0) [below=of f0n] {\((W^{(0)}, \vec{b}^{(0)})\)};
+%         \node (theta1) [below=of f1n] {\((W^{(1)}, \vec{b}^{(1)})\)};
+%         \node (thetam) [below=of fmn] {\((W^{(m)}, \vec{b}^{(m)})\)};
 
-        \node (z0) at ($(f01) + (0, 1)$) {\(\vec{z}^{(0)}(\vec{x}, \bm{\theta})\)};
-        \node (z1) at ($(f11) + (0, 1)$) {\(\vec{z}^{(1)}(\vec{x}, \bm{\theta})\)};
-        \node (zm) at ($(fm1) + (0, 1)$) {\(\vec{z}^{(m)}(\vec{x}, \bm{\theta})\)};
+%         \node (z0) at ($(f01) + (0, 1)$) {\(\vec{z}^{(0)}(\vec{x}, \bm{\theta})\)};
+%         \node (z1) at ($(f11) + (0, 1)$) {\(\vec{z}^{(1)}(\vec{x}, \bm{\theta})\)};
+%         \node (zm) at ($(fm1) + (0, 1)$) {\(\vec{z}^{(m)}(\vec{x}, \bm{\theta})\)};
 
-        \foreach \l in {0, 1, m} {
-            \foreach \i in {1, i, n} {
-                \draw [->, color=blue, bend left] (theta\l) to (f\l\i);
-            }
-        }
+%         \foreach \l in {0, 1, m} {
+%             \foreach \i in {1, i, n} {
+%                 \draw [->, color=blue, bend left] (theta\l) to (f\l\i);
+%             }
+%         }
 
-        \foreach \i in {1, i, n} {
-            \foreach \j in {1, i, n} {
-                \draw (f0\i) -- (f1\j);
-            }
-        }
+%         \foreach \i in {1, i, n} {
+%             \foreach \j in {1, i, n} {
+%                 \draw (f0\i) -- (f1\j);
+%             }
+%         }
 
-        \foreach \i in {1, i, n} {
-            \foreach \j in {1, i, n} {
-                \draw (f1\i) -- (d\j);
-            }
-        }
+%         \foreach \i in {1, i, n} {
+%             \foreach \j in {1, i, n} {
+%                 \draw (f1\i) -- (d\j);
+%             }
+%         }
 
-        \foreach \i in {1, i, n} {
-            \foreach \j in {1, i, n} {
-                \draw (d\i) -- (fm\j);
-            }
-        }
+%         \foreach \i in {1, i, n} {
+%             \foreach \j in {1, i, n} {
+%                 \draw (d\i) -- (fm\j);
+%             }
+%         }
 
-        \foreach \i in {1, i, n} {
-            \draw (fm\i) -- (loss);
-        }
+%         \foreach \i in {1, i, n} {
+%             \draw (fm\i) -- (loss);
+%         }
 
-        \foreach \l in {0, 1, m} {
-            \node at ($(f\l1)!0.45!(f\l i)$) {\(\vdots\)};
-            \node at ($(f\l i)!0.45!(f\l n)$) {\(\vdots\)};
-        }
-    \end{tikzpicture}
-    \caption{Computational graph corresponding to the multi-layer perceptron.}
-\end{figure}
+%         \foreach \l in {0, 1, m} {
+%             \node at ($(f\l1)!0.45!(f\l i)$) {\(\vdots\)};
+%             \node at ($(f\l i)!0.45!(f\l n)$) {\(\vdots\)};
+%         }
+%     \end{tikzpicture}
+%     \caption{Computational graph corresponding to the multi-layer perceptron.}
+% \end{figure}
 
-Since we have not defined gradients with respect to matrices (yet), we will focus on computing \(\nabla_{\vec{b}^{(i)}}L(\bm{\theta})\), i.e., the gradient of the loss function \(L\) with respect to \(\vec{b}^{(i)}\), as well as \(\nabla_{\vec{z}^{(i)}}L(\bm{\theta})\), i.e., the gradient of the loss function \(L\) with respect to \(\vec{z}^{(i)}(\vec{x}, \bm{\theta})\). They may be interpreted as sub-vectors (i.e., literally subsets of the entries) of the full gradient \(\nabla L(\bm{\theta}) = \nabla_{\bm{\theta}}L(\bm{\theta})\). This subscript notation is common in more involved problems which demand derivatives with respect to multiple vector-valued variables.
+% Since we have not defined gradients with respect to matrices (yet), we will focus on computing \(\nabla_{\vec{b}^{(i)}}L(\bm{\theta})\), i.e., the gradient of the loss function \(L\) with respect to \(\vec{b}^{(i)}\), as well as \(\nabla_{\vec{z}^{(i)}}L(\bm{\theta})\), i.e., the gradient of the loss function \(L\) with respect to \(\vec{z}^{(i)}(\vec{x}, \bm{\theta})\). They may be interpreted as sub-vectors (i.e., literally subsets of the entries) of the full gradient \(\nabla L(\bm{\theta}) = \nabla_{\bm{\theta}}L(\bm{\theta})\). This subscript notation is common in more involved problems which demand derivatives with respect to multiple vector-valued variables.
 
-We first compute \(\nabla_{\vec{z}^{(m)}}L(\bm{\theta})\). We have 
-\begin{equation}
-    \nabla_{\vec{z}^{(m)}}L(\bm{\theta}) = \nabla_{\vec{z}^{(m)}}L(\vec{z}^{(m)}, \vec{y}).
-\end{equation}
-Indeed we cannot simplify this further, it being just the gradient of \(\ell\) in its first argument.
+% We first compute \(\nabla_{\vec{z}^{(m)}}L(\bm{\theta})\). We have 
+% \begin{equation}
+%     \nabla_{\vec{z}^{(m)}}L(\bm{\theta}) = \nabla_{\vec{z}^{(m)}}L(\vec{z}^{(m)}, \vec{y}).
+% \end{equation}
+% Indeed we cannot simplify this further, it being just the gradient of \(\ell\) in its first argument.
 
-Now we handle general \(i \in \{1, \dots, m\}\). By chain rule we have the recursion:
-\begin{align}
-    \nabla_{\vec{z}^{(i - 1)}}L(\bm{\theta})
-    &= [D_{\vec{z}^{(i - 1)}}L(\bm{\theta})]^{\top} \\ 
-    &= [\{D_{\vec{z}^{(i)}}L(\bm{\theta})\}\{D_{\vec{z}^{(i - 1)}}\vec{z}^{(i)}(\vec{x}, \bm{\theta})\}]^{\top} \\ 
-    &= [D_{\vec{z}^{(i - 1)}}\vec{z}^{(i)}(\vec{x}, \bm{\theta})]^{\top}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})].
-\end{align}
-Now we want to compute \(D_{\vec{z}^{(i - 1)}}\vec{z}^{(i)}\). Recall that 
-\begin{equation}
-    \vec{z}^{(i)} = W^{(i)}\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)}) + \vec{b}^{(i)}.
-\end{equation}
-For convenience, write 
-\begin{equation}
-    \vec{u}^{(i)} \doteq \vec{\sigma}^{(i)}(\vec{z}^{(i - 1)}), \qquad \text{so that} \quad \vec{z}^{(i)} = W^{(i)}\vec{u}^{(i)} + \vec{b}^{(i)}.
-\end{equation}
-Now we compute derivatives, obtaining by the chain rule:
-\begin{align}
-    D_{\vec{z}^{(i - 1)}}\vec{z}^{(i)}
-    &= [D_{\vec{u}^{(i)}}\vec{z}^{(i)}][D_{\vec{z}^{(i - 1)}}\vec{u}^{(i)}] \\
-    &= W^{(i)}\cdot D\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)}).
-\end{align}
-This gives us 
-\begin{equation}
-    D_{\vec{z}^{(i - 1)}}\vec{z}^{(i)} = W^{(i)}\cdot D\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)}),
-\end{equation}
-and so 
-\begin{equation}
-    \nabla_{\vec{z}^{(i - 1)}}L(\bm{\theta}) = [W^{(i)} \cdot D\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)})]^{\top}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})].
-\end{equation}
+% Now we handle general \(i \in \{1, \dots, m\}\). By chain rule we have the recursion:
+% \begin{align}
+%     \nabla_{\vec{z}^{(i - 1)}}L(\bm{\theta})
+%     &= [D_{\vec{z}^{(i - 1)}}L(\bm{\theta})]^{\top} \\ 
+%     &= [\{D_{\vec{z}^{(i)}}L(\bm{\theta})\}\{D_{\vec{z}^{(i - 1)}}\vec{z}^{(i)}(\vec{x}, \bm{\theta})\}]^{\top} \\ 
+%     &= [D_{\vec{z}^{(i - 1)}}\vec{z}^{(i)}(\vec{x}, \bm{\theta})]^{\top}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})].
+% \end{align}
+% Now we want to compute \(D_{\vec{z}^{(i - 1)}}\vec{z}^{(i)}\). Recall that 
+% \begin{equation}
+%     \vec{z}^{(i)} = W^{(i)}\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)}) + \vec{b}^{(i)}.
+% \end{equation}
+% For convenience, write 
+% \begin{equation}
+%     \vec{u}^{(i)} \doteq \vec{\sigma}^{(i)}(\vec{z}^{(i - 1)}), \qquad \text{so that} \quad \vec{z}^{(i)} = W^{(i)}\vec{u}^{(i)} + \vec{b}^{(i)}.
+% \end{equation}
+% Now we compute derivatives, obtaining by the chain rule:
+% \begin{align}
+%     D_{\vec{z}^{(i - 1)}}\vec{z}^{(i)}
+%     &= [D_{\vec{u}^{(i)}}\vec{z}^{(i)}][D_{\vec{z}^{(i - 1)}}\vec{u}^{(i)}] \\
+%     &= W^{(i)}\cdot D\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)}).
+% \end{align}
+% This gives us 
+% \begin{equation}
+%     D_{\vec{z}^{(i - 1)}}\vec{z}^{(i)} = W^{(i)}\cdot D\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)}),
+% \end{equation}
+% and so 
+% \begin{equation}
+%     \nabla_{\vec{z}^{(i - 1)}}L(\bm{\theta}) = [W^{(i)} \cdot D\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)})]^{\top}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})].
+% \end{equation}
 
-To see the true value of this computation, we now compute \(\nabla_{\vec{b}^{(i)}}L(\bm{\theta})\), for each \(i \in \{0, \dots, m\}\). By another application of chain rule, we obtain
-\begin{align}
-    \nabla_{\vec{b}^{(i)}}L(\bm{\theta})
-    &= [D_{\vec{b}^{(i)}}L(\bm{\theta})]^{\top} \\
-    &= [\{D_{\vec{z}^{(i)}}L(\bm{\theta})\}\{D_{\vec{b}^{(i)}}\vec{z}^{(i)}\}]^{\top} \\ 
-    &= [\{D_{\vec{z}^{(i)}}L(\bm{\theta})\}\cdot I]^{\top} \\  
-    &= [D_{\vec{z}^{(i)}}L(\bm{\theta})]^{\top} \\
-    &= \nabla_{\vec{z}^{(i)}}L(\bm{\theta}).
-\end{align}
+% To see the true value of this computation, we now compute \(\nabla_{\vec{b}^{(i)}}L(\bm{\theta})\), for each \(i \in \{0, \dots, m\}\). By another application of chain rule, we obtain
+% \begin{align}
+%     \nabla_{\vec{b}^{(i)}}L(\bm{\theta})
+%     &= [D_{\vec{b}^{(i)}}L(\bm{\theta})]^{\top} \\
+%     &= [\{D_{\vec{z}^{(i)}}L(\bm{\theta})\}\{D_{\vec{b}^{(i)}}\vec{z}^{(i)}\}]^{\top} \\ 
+%     &= [\{D_{\vec{z}^{(i)}}L(\bm{\theta})\}\cdot I]^{\top} \\  
+%     &= [D_{\vec{z}^{(i)}}L(\bm{\theta})]^{\top} \\
+%     &= \nabla_{\vec{z}^{(i)}}L(\bm{\theta}).
+% \end{align}
 
-Now to do automatic differentiation by backpropagation, your favorite machine learning framework (such as PyTorch) computes all the gradients \(\nabla_{\vec{z}^{(i)}}L(\bm{\theta})\), starting at \(i = m\) and recursing until \(i = 0\). \textit{Computing the gradients in this order saves a lot of work, since each derivative is only computed once --- this is the main idea of backpropagation}. Once these derivatives are computed, one can use them to compute \(\nabla_{\vec{b}^{(i)}}L(\bm{\theta})\). If we can also compute \(\nabla_{W^{(i)}}L(\bm{\theta})\), then we can compute \(\nabla_{\bm{\theta}}L(\bm{\theta})\), and thus will be able to optimize \(L\) via gradient-based optimization algorithms such as gradient descent, as discussed later in the class. However, this computation will have to wait until slightly later when we cover matrix calculus.
+% Now to do automatic differentiation by backpropagation, your favorite machine learning framework (such as PyTorch) computes all the gradients \(\nabla_{\vec{z}^{(i)}}L(\bm{\theta})\), starting at \(i = m\) and recursing until \(i = 0\). \textit{Computing the gradients in this order saves a lot of work, since each derivative is only computed once --- this is the main idea of backpropagation}. Once these derivatives are computed, one can use them to compute \(\nabla_{\vec{b}^{(i)}}L(\bm{\theta})\). If we can also compute \(\nabla_{W^{(i)}}L(\bm{\theta})\), then we can compute \(\nabla_{\bm{\theta}}L(\bm{\theta})\), and thus will be able to optimize \(L\) via gradient-based optimization algorithms such as gradient descent, as discussed later in the class. However, this computation will have to wait until slightly later when we cover matrix calculus.
 
-We promised in this example a way to compute \(\nabla_{\bm{\theta}}L(\bm{\theta})\), or more precisely a way to compute \(\nabla_{W^{(i)}}L(\bm{\theta})\). We now have the tools to do this using the chain rule. Recall that we have access to \(\nabla_{\vec{z}^{(i)}}L(\bm{\theta})\) by backpropagation. Then we can compute the components of \(\nabla_{W^{(i)}}L(\bm{\theta})\) by
-\begin{align}
-    \nabla_{W^{(i)}}L(\bm{\theta})]_{j, k} 
-    &= \pdv{L}{(W^{(i)})_{j, k}}(\bm{\theta}) \\
-    &= \sum_{a}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]_{a}\pdv{(\vec{z}^{(i)})_{a}}{(W^{(i)})_{j, k}} \\ 
-    &= \sum_{a}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]_{a}\cdot\begin{cases}[\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)})]_{k}, & \text{if}\ a = j\ \text{and}\ i \in \{1, \dots, m\} \\ x_{k}, & \text{if}\ a = j\ \text{and}\ i = 0 \\ 0, & \text{otherwise}\end{cases} \\ 
-    &= \begin{cases}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]_{j}[\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)})]_{k}, & \text{if}\ i \in \{1, \dots, m\} \\ [\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]_{j}[\vec{x}]_{k}, & \text{if}\ i = 0\end{cases} \\ 
-    &= \begin{cases}[\{\nabla_{\vec{z}^{(i)}}L(\bm{\theta})\}\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)})^{\top}]_{j, k}, & \text{if}\ i \in \{1, \dots, m\} \\ \{\nabla_{\vec{z}^{(i)}}L(\bm{\theta})\}\vec{x}^{\top}]_{j, k}, & \text{if}\ i = 0.\end{cases}
-\end{align}
-This gives 
-\begin{equation}
-    \nabla_{W^{(i)}}L(\bm{\theta}) = \begin{cases}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)})^{\top}, & \text{if}\ i \in \{1, \dots, m\} \\ [\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]\vec{x}^{\top}, & \text{if}\ i = 0.\end{cases}
-\end{equation}
-In combination with the expression for \(\nabla_{\vec{b}^{(i)}}\), we can efficiently compute \(\nabla_{\bm{\theta}}L(\bm{\theta})\), and are able to train our neural network via gradient-based optimization methods such as gradient descent.
+% We promised in this example a way to compute \(\nabla_{\bm{\theta}}L(\bm{\theta})\), or more precisely a way to compute \(\nabla_{W^{(i)}}L(\bm{\theta})\). We now have the tools to do this using the chain rule. Recall that we have access to \(\nabla_{\vec{z}^{(i)}}L(\bm{\theta})\) by backpropagation. Then we can compute the components of \(\nabla_{W^{(i)}}L(\bm{\theta})\) by
+% \begin{align}
+%     \nabla_{W^{(i)}}L(\bm{\theta})]_{j, k} 
+%     &= \pdv{L}{(W^{(i)})_{j, k}}(\bm{\theta}) \\
+%     &= \sum_{a}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]_{a}\pdv{(\vec{z}^{(i)})_{a}}{(W^{(i)})_{j, k}} \\ 
+%     &= \sum_{a}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]_{a}\cdot\begin{cases}[\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)})]_{k}, & \text{if}\ a = j\ \text{and}\ i \in \{1, \dots, m\} \\ x_{k}, & \text{if}\ a = j\ \text{and}\ i = 0 \\ 0, & \text{otherwise}\end{cases} \\ 
+%     &= \begin{cases}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]_{j}[\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)})]_{k}, & \text{if}\ i \in \{1, \dots, m\} \\ [\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]_{j}[\vec{x}]_{k}, & \text{if}\ i = 0\end{cases} \\ 
+%     &= \begin{cases}[\{\nabla_{\vec{z}^{(i)}}L(\bm{\theta})\}\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)})^{\top}]_{j, k}, & \text{if}\ i \in \{1, \dots, m\} \\ \{\nabla_{\vec{z}^{(i)}}L(\bm{\theta})\}\vec{x}^{\top}]_{j, k}, & \text{if}\ i = 0.\end{cases}
+% \end{align}
+% This gives 
+% \begin{equation}
+%     \nabla_{W^{(i)}}L(\bm{\theta}) = \begin{cases}[\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]\vec{\sigma}^{(i)}(\vec{z}^{(i - 1)})^{\top}, & \text{if}\ i \in \{1, \dots, m\} \\ [\nabla_{\vec{z}^{(i)}}L(\bm{\theta})]\vec{x}^{\top}, & \text{if}\ i = 0.\end{cases}
+% \end{equation}
+% In combination with the expression for \(\nabla_{\vec{b}^{(i)}}\), we can efficiently compute \(\nabla_{\bm{\theta}}L(\bm{\theta})\), and are able to train our neural network via gradient-based optimization methods such as gradient descent.
 
 
 
