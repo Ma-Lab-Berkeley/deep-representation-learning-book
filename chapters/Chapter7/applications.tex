@@ -161,7 +161,7 @@ and \(\tau > 0\) is a ``temperature'' parameter which controls the entropy of th
 
 In particular, DINO minimizes the difference between the probability vector \(\vp_{\theta, \vW, \vmu}(\vX_{g}) := h_{\vW, \vmu}(\vz_{\theta}(\vX_{g}))\) for each global view \(\vX_{g} := v_{g}(\vX)\) and the probability vector \(\vp_{\theta, \vW}(\vX_{c}) := h_{\vW, \vzero_{m}}(\vz_{\theta}(\vX_{c}))\) for each view \(\vX_{c} := v_{c}(\vX)\). Here, \(v_{c}\) can \textit{either} be a local view or a global view. We will discuss the implementation of \(f_{\theta}\) and \(f_{\theta}^{\ext}\) shortly in \Cref{sub:contrastive_learning_architecture}. Overall, DINO solves the problem
  \begin{equation}\label{eq:dino_loss}
-     \min_{\theta, \vW, \vmu}L_{\dino}(\theta, \vW, \vmu) \qquad \text{where} \qquad L_{\dino}(\theta, \vW, \vmu) := \Ex[d_{\CE}(\vp_{\theta, \vW}(\vX_{c}), \vp_{\theta, \vW, \vmu}(\vX_{g}))],
+     \min_{\theta, \vW, \vmu}\cL_{\dino}(\theta, \vW, \vmu) \qquad \text{where} \qquad \cL_{\dino}(\theta, \vW, \vmu) := \Ex[d_{\CE}(\vp_{\theta, \vW}(\vX_{c}), \vp_{\theta, \vW, \vmu}(\vX_{g}))],
 \end{equation}
 where the expectation is over data \(\vX\), global views \(v_{g}\), and other views \(v_{c}\).
 
@@ -175,9 +175,9 @@ Towards amending this state of affairs, let us discuss simplifications to the fo
 \end{equation}
 This distance-based score is even more efficient to compute than the cross-entropy score. Thus, \(d_{\ell^{2}}\) takes the place of \(d_{\CE}\) in our simplification. 
 
-Before, collapse was avoided by using tricks to update \(\vmu\) and \(\tau\). In our simplification, if we compare the features within the representation space instead of converting them to probabilities, we do not have either of these parameters and so must consider a different way to avoid collapse. To do this, we return to the fundamentals. The basic idea of avoiding collapse is that in order to make sure that all samples do not return the same exact same features, we need different samples to have different features. In other words, we would like the \textit{covariance} of the features to be \textit{large} in some sense. But from \Cref{ch:compression,ch:representation}, we already have a quantity which measures the size of the covariance matrix. Namely, we use the straightforward (population-level) \textit{Gaussian coding rate} \(R\) to ensure that the features of global views of different images, which have different global information, are well-separated and not collapsed (hence expanded). The overall modified loss \(L_{\simdino}\) becomes:
+Before, collapse was avoided by using tricks to update \(\vmu\) and \(\tau\). In our simplification, if we compare the features within the representation space instead of converting them to probabilities, we do not have either of these parameters and so must consider a different way to avoid collapse. To do this, we return to the fundamentals. The basic idea of avoiding collapse is that in order to make sure that all samples do not return the same exact same features, we need different samples to have different features. In other words, we would like the \textit{covariance} of the features to be \textit{large} in some sense. But from \Cref{ch:compression,ch:representation}, we already have a quantity which measures the size of the covariance matrix. Namely, we use the straightforward (population-level) \textit{Gaussian coding rate} \(R\) to ensure that the features of global views of different images, which have different global information, are well-separated and not collapsed (hence expanded). The overall modified loss \(\cL_{\simdino}\) becomes:
 \begin{equation}\label{eq:simdino_loss}
-    L_{\simdino}(\theta) := \Ex[d_{\ell^{2}}(\vz_{\theta}(\vX_{c}), \vz_{\theta}(\vX_{g})] - \frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{\theta}(\vX_{g}))},
+    \cL_{\simdino}(\theta) := \Ex[d_{\ell^{2}}(\vz_{\theta}(\vX_{c}), \vz_{\theta}(\vX_{g})] - \frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{\theta}(\vX_{g}))},
 \end{equation}
 where \(\eps > 0\) is fixed and the appropriate expectations are, as before, taken over data \(\vX\), global view \(v_{g}\), and other (local or global) view \(v_{c}\). The loss in \eqref{eq:simdino_loss} is the loss used for the simplified DINO (``SimDINO''). As we will see, when properly implemented, it works at least as well as the original DINO.
 
@@ -298,13 +298,13 @@ The transformer is one of the most popular neural network architectures in histo
     \label{fig:dino_pipeline}
 \end{figure}
 
-\paragraph{Optimizing DINO.} We have a loss function and an architecture, so we now discuss the optimization strategy. The optimization strategy for DINO uses \textit{two sets of weights for the same architecture}: \textit{student} weights \(\theta_{\student}\) and \textit{teacher} weights \(\theta_{\teacher}\). These correspond to two different neural networks, called the teacher network and student network, with the same architecture. The teacher network encodes all global views, while the student network encodes all ``other'' views. The goal of the loss is to distill teacher outputs into the student model. Namely, we train on the loss \(L_{\dino{}-\student\teacher}\):
+\paragraph{Optimizing DINO.} We have a loss function and an architecture, so we now discuss the optimization strategy. The optimization strategy for DINO uses \textit{two sets of weights for the same architecture}: \textit{student} weights \(\theta_{\student}\) and \textit{teacher} weights \(\theta_{\teacher}\). These correspond to two different neural networks, called the teacher network and student network, with the same architecture. The teacher network encodes all global views, while the student network encodes all ``other'' views. The goal of the loss is to distill teacher outputs into the student model. Namely, we train on the loss \(\cL_{\dino{}-\student\teacher}\):
 \begin{equation}\label{eq:dino_loss_teacherstudent}
-    L_{\dino{}-\student\teacher}(\theta_{\student}, \theta_{\teacher}, \vW_{\student}, \vW_{\teacher}, \vmu) := \Ex[d_{\CE}(\vp_{\theta_{\student}, \vW_{\student}}(\vX_{c}), \vp_{\theta_{\teacher}, \vW_{\teacher}, \vmu}(\vX_{g}))].
+    \cL_{\dino{}-\student\teacher}(\theta_{\student}, \theta_{\teacher}, \vW_{\student}, \vW_{\teacher}, \vmu) := \Ex[d_{\CE}(\vp_{\theta_{\student}, \vW_{\student}}(\vX_{c}), \vp_{\theta_{\teacher}, \vW_{\teacher}, \vmu}(\vX_{g}))].
 \end{equation}
 Now, we can fully describe the overall pipeline of DINO, depicted in \Cref{fig:dino_pipeline}.
 
-While it is easy to reason about \eqref{eq:dino_loss_teacherstudent}, it is impossible in practice to implement optimization algorithms such as gradient descent with a loss given by \(L_{\dino{}-\student\teacher}\). This is because the expectations in the loss are impossible to evaluate, much less take the gradient of. In this extremely frequent case, we approximate the expectation via finite samples. That is, at each timestep \(k\) we:
+While it is easy to reason about \eqref{eq:dino_loss_teacherstudent}, it is impossible in practice to implement optimization algorithms such as gradient descent with a loss given by \(\cL_{\dino{}-\student\teacher}\). This is because the expectations in the loss are impossible to evaluate, much less take the gradient of. In this extremely frequent case, we approximate the expectation via finite samples. That is, at each timestep \(k\) we:
 \begin{itemize}
     \item Subsample \(B\) data points from our dataset \(\{\vX_{1}^{(k)}, \dots, \vX_{B}^{(k)}\} \subset \cI\).
     \item For each data point \(\vX_{b}^{(k)}\), sample \(M_{\glo}\) global views \(v_{b, g}^{(k), i}\) and \(M_{\loc}\) local views \(v_{b, \ell}^{(k), i}\). Apply the views to \(\vX_{b}^{(k)}\) to obtain \(\vX_{b, g}^{(k), i} := v_{b, g}^{(k), i}(\vX_{b}^{(k)})\) and \(\vX_{b, \ell}^{(k), i} := v_{b, \ell}^{(k), i}(\vX_{b}^{(k)})\).
@@ -317,9 +317,9 @@ While it is easy to reason about \eqref{eq:dino_loss_teacherstudent}, it is impo
         &\vz_{\theta_{\student}}(\vX_{b, g}^{(k), i}) := (f_{\theta_{\student}}^{\ext} \circ f_{\theta_{\student}})(\vX_{b, g}^{(k), i}), \qquad \vp_{\theta_{\student}, \vW_{\student}}(\vX_{b, g}^{(k), i}) := h_{\vW_{\student}, \vzero_{m}}(\vz_{\theta_{\student}}(\vX_{b, g}^{(k), i})), \\
         &\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}) := (f_{\theta_{\teacher}}^{\ext} \circ f_{\theta_{\teacher}})(\vX_{b, g}^{(k), i}), \qquad \vp_{\theta_{\teacher}, \vW_{\teacher}, \vmu}(\vX_{b, g}^{(k), i}) := h_{\vW_{\teacher}, \vmu}(\vZ_{\theta_{\teacher}}(\vX_{b, g}^{(k), i})).
     \end{align}
-    \item Compute the \textit{surrogate, approximate loss} \(\hat{L}_{\dino-\student\teacher}^{(k)}\), defined as follows: 
+    \item Compute the \textit{surrogate, approximate loss} \(\hat{\cL}_{\dino-\student\teacher}^{(k)}\), defined as follows: 
     \begin{align}\label{eq:dino_loss_teacherstudent_empirical}
-        &\hat{L}_{\dino{}-\student\teacher}^{(k)}(\theta_{\student}, \theta_{\teacher}, \vW_{\student}, \vW_{\teacher}, \vmu) :=
+        &\hat{\cL}_{\dino{}-\student\teacher}^{(k)}(\theta_{\student}, \theta_{\teacher}, \vW_{\student}, \vW_{\teacher}, \vmu) :=
         \frac{1}{BM_{\glo}(M_{\glo} + M_{\loc} - 1)}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\\
         &\Bigg[\sum_{j = 1}^{M_{\loc}}d_{\CE}(\vp_{\theta_{\student}, \vW_{\student}}(\vX_{b, \ell}^{(k), j}), \vp_{\theta_{\teacher}, \vW_{\teacher}, \vmu}(\vX_{b, g}^{(k), i})) + \sum_{\substack{j = 1 \\ j \neq i}}^{M_{\glo}}d_{\CE}(\vp_{\theta_{\student}, \vW_{\student}}(\vX_{b, g}^{(k), j}), \vp_{\theta_{\teacher}, \vW_{\teacher}, \vmu}(\vX_{b, g}^{(k), i}))\Bigg]\nonumber
     \end{align}
@@ -327,7 +327,7 @@ While it is easy to reason about \eqref{eq:dino_loss_teacherstudent}, it is impo
     \item Update the student parameters \(\theta_{\student}\) and \(\vW_{\student}\) via an iterative gradient-based optimization algorithm, and update \(\theta_{\teacher}\), \(\vW_{\teacher}\), and \(\vmu\) via exponential moving averages with decay parameters \(\nu^{(k)}\), \(\nu^{(k)}\), and \(\rho^{(k)}\) respectively, i.e., 
     \begin{align}
         (\theta_{\student}^{(k + 1)}, \vW_{\student}^{(k + 1)})
-        &= \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}, \vW_{\student}^{(k)}; \nabla_{(\theta_{\student}, \vW_{\student})}\hat{L}_{\dino-\student\teacher}^{(k)}) \\
+        &= \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}, \vW_{\student}^{(k)}; \nabla_{(\theta_{\student}, \vW_{\student})}\hat{\cL}_{\dino-\student\teacher}^{(k)}) \\
         \theta_{\teacher}^{(k + 1)}
         &= \nu^{(k)}\theta_{\teacher}^{(k)} + (1 - \nu^{(k)})\theta_{\student}^{(k + 1)} \\
         \vW_{\teacher}^{(k + 1)}
@@ -335,7 +335,7 @@ While it is easy to reason about \eqref{eq:dino_loss_teacherstudent}, it is impo
         \vmu^{(k + 1)}
         &= \rho^{(k)}\vmu^{(k)} + (1 - \rho^{(k)})\cdot\frac{1}{BM_{\glo}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\vW^{(k)}\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}),
     \end{align}
-    For example, if the chosen optimization algorithm were stochastic gradient descent, we would have the update \(\theta_{\student}^{(k + 1)} := \theta_{\student}^{(k)} - \delta^{(k)}\nabla_{\theta_{\student}}\hat{L}_{\dino{}-\student\teacher}^{(k)}\), and so on.
+    For example, if the chosen optimization algorithm were stochastic gradient descent, we would have the update \(\theta_{\student}^{(k + 1)} := \theta_{\student}^{(k)} - \delta^{(k)}\nabla_{\theta_{\student}}\hat{\cL}_{\dino{}-\student\teacher}^{(k)}\), and so on.
 \end{itemize}
 Notice that the optimization procedure is rather irregular: although all four parameters change at each iteration, only two of them are directly updated from a gradient-based method. The other two are updated from exponential moving averages, and indeed treated as constants when computing any gradients. After training, we discard the student weights and use the teacher weights for our trained network \(f\), as this exponentially moving average has been empirically shown to stabilize the resulting model (this idea is known as Polyak averaging or iterate averaging). 
 
@@ -351,24 +351,24 @@ Using the surrogate (``empirical'') loss transforms our intractable optimization
 
 \paragraph{Optimizing SimDINO.} The simplified DINO population-level objective is very similar in spirit but much simpler in execution, i.e.,
 \begin{equation}\label{eq:simdino_loss_teacherstudent}
-    L_{\simdino-\student\teacher}(\theta_{\student}, \theta_{\teacher}) :=  \Ex\rs{d_{\ell^{2}}(\vz_{\theta_{\student}}(\vX_{c}), \vz_{\theta_{\teacher}}(\vX_{g}))} + \frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{\theta_{\student}}(\vX_{g})))}.
+    \cL_{\simdino-\student\teacher}(\theta_{\student}, \theta_{\teacher}) :=  \Ex\rs{d_{\ell^{2}}(\vz_{\theta_{\student}}(\vX_{c}), \vz_{\theta_{\teacher}}(\vX_{g}))} + \frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{\theta_{\student}}(\vX_{g})))}.
 \end{equation}
 Thus, as elaborated in \Cref{fig:simdino_pipeline}, the SimDINO pipeline is strictly simpler than the DINO pipeline. We can use a simpler version of the DINO training pipeline to optimize SimDINO. At each timestep \(k\), we:
 \begin{itemize}
     \item Subsample \(B\) data points from our dataset \(\{\vX_{1}^{(k)}, \dots, \vX_{B}^{(k)}\} \subset \cI\).
     \item For each data point \(\vX_{b}^{(k)}\), sample \(M_{\glo}\) global views \(v_{b, g}^{(k), i}\) and \(M_{\loc}\) local views \(v_{b, \ell}^{(k), i}\). Apply the views to \(\vX_{b}^{(k)}\) to obtain \(\vX_{b, g}^{(k), i} := v_{b, g}^{(k), i}(\vX_{b}^{(k)})\) and \(\vX_{b, \ell}^{(k), i} := v_{b, \ell}^{(k), i}(\vX_{b}^{(k)})\).
     \item For each \textit{local} view \(\vX_{b, \ell}^{(k), i}\) compute \(\vz_{\theta_{\student}}(\vX_{b, \ell}^{(k), i}) := (f_{\theta_{\student}}^{\ext} \circ f_{\theta_{\student}})(\vX_{b, \ell}^{(k), i})\). For each \textit{global} view \(\vX_{b, g}^{(k), i}\) compute \(\vz_{\theta_{\student}}(\vX_{b, g}^{(k), i}) := (f_{\theta_{\student}}^{\ext} \circ f_{\theta_{\student}})(\vX_{b, g}^{(k), i})\) and \(\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}) := (f_{\theta_{\teacher}}^{\ext} \circ f_{\theta_{\teacher}})(\vX_{b, g}^{(k), i})\).
-    \item Compute the \textit{surrogate, approximate loss} \(\hat{L}_{\simdino-\student\teacher}^{(k)}\), defined as follows: 
+    \item Compute the \textit{surrogate, approximate loss} \(\hat{\cL}_{\simdino-\student\teacher}^{(k)}\), defined as follows: 
     \begin{align}\label{eq:simdino_loss_teacherstudent_empirical}
-        &\hat{L}_{\simdino{}-\student\teacher}^{(k)}(\theta_{\student}, \theta_{\teacher}) :=
+        &\hat{\cL}_{\simdino{}-\student\teacher}^{(k)}(\theta_{\student}, \theta_{\teacher}) :=
         \frac{1}{BM_{\glo}(M_{\glo} + M_{\loc} - 1)}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\Bigg[\sum_{j = 1}^{M_{\loc}}d_{\ell^{2}}(\vz_{\theta_{\student}}(\vX_{b, \ell}^{(k), j}), \vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i})) \\ 
         &\qquad \qquad + \sum_{j = 1}^{M_{\glo}}d_{\ell^{2}}(\vz_{\theta_{\student}}(\vX_{b, g}^{(k), j}), \vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}))\Bigg] + \frac{\gamma}{M_{\glo}}\sum_{i = 1}^{M_{\glo}}R_{\eps}([\vz_{\theta_{\student}}(\vX_{1, g}^{(k), i}), \dots, \vz_{\theta_{\student}}(\vX_{B, g}^{(k), i})])\nonumber
     \end{align}
-    where \(R_{\eps}\) is the Gaussian coding rate estimated on finite samples, described in \Cref{ch:representation}. The gradient of \(\hat{L}_{\simdino-\student\teacher}^{(k)}\) with respect to \(\theta_{\student}\) should (again) be computed, under the assumption that \(\theta_{\teacher}\) is constant.
+    where \(R_{\eps}\) is the Gaussian coding rate estimated on finite samples, described in \Cref{ch:representation}. The gradient of \(\hat{\cL}_{\simdino-\student\teacher}^{(k)}\) with respect to \(\theta_{\student}\) should (again) be computed, under the assumption that \(\theta_{\teacher}\) is constant.
     \item Update the student parameters \(\theta_{\student}\) via an iterative gradient-based optimization algorithm, and update \(\theta_{\teacher}\) via an exponential moving average with decay parameter \(\nu^{(k)}\), i.e., 
     \begin{align}
         \theta_{\student}^{(k + 1)}
-        &= \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}; \nabla_{\theta_{\student}}\hat{L}_{\simdino-\student\teacher}^{(k)}) \\
+        &= \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}; \nabla_{\theta_{\student}}\hat{\cL}_{\simdino-\student\teacher}^{(k)}) \\
         \theta_{\teacher}^{(k + 1)}
         &= \nu^{(k)}\theta_{\teacher}^{(k)} + (1 - \nu^{(k)})\theta_{\student}^{(k + 1)}.
     \end{align}
@@ -528,7 +528,7 @@ Unlike before, our task is not just to learn a good representation of the data, 
 \end{equation}
 where \((\vW^{\head}, \vb^{\head}) \in \R^{N_{\cls} \times d} \times \R^{N_{\cls}}\) are trainable parameters in the parameter set \(\theta\), such that the map \(\vX_{\cc} \mapsto \hat{\vy}_{\theta}(\vX_{\cc}) := h_{\theta}(\vz_{\theta}(\vX_{\cc}))\) predicts a smoothed label for the view \(\vX_{\cc} = v_{\cc}(\vX)\) of the input \(\vX\). The learning problem attempts to minimize the distance between \(\hat{\vy}_{\theta}\) and \(\vy\) measured through cross-entropy:
 \begin{equation}\label{eq:classification_ce_loss}
-    \min_{\theta}\bc{L_{\CE}(\theta) := \Ex[\CE(\vy, \hat{\vy}_{\theta}(\vX_{\cc}))]}.
+    \min_{\theta}\bc{\cL_{\CE}(\theta) := \Ex[\CE(\vy, \hat{\vy}_{\theta}(\vX_{\cc}))]}.
 \end{equation}
 
 
@@ -566,11 +566,11 @@ We train our classifier using a simple end-to-end stochastic optimization proced
     \item Compute the smoothed pseudo-labels \(\hat{\vy}_{\theta}(\vX_{b, \cc}^{(k)}) := (h_{\theta} \circ f_{\theta}^{\ext} \circ f_{\theta})(\vX_{b, \cc}^{(k)})\).
     \item Form the surrogate stochastic loss 
     \begin{equation}
-        \hat{L}_{\CE}^{(k)}(\theta) := \frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}^{(k)}, \hat{\vy}_{\theta}(\vX_{b, \cc}^{(k)})).
+        \hat{\cL}_{\CE}^{(k)}(\theta) := \frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}^{(k)}, \hat{\vy}_{\theta}(\vX_{b, \cc}^{(k)})).
     \end{equation}
     \item Compute one step of an optimization algorithm on \(\theta\), giving the following iteration:
     \begin{equation}
-        \theta^{(k + 1)} := \textsc{OptUpdate}^{(k)}(\theta^{(k)}; \nabla_{\theta}\hat{L}_{\CE}^{(k)}).
+        \theta^{(k + 1)} := \textsc{OptUpdate}^{(k)}(\theta^{(k)}; \nabla_{\theta}\hat{\cL}_{\CE}^{(k)}).
     \end{equation}
 \end{itemize}
 
@@ -677,7 +677,7 @@ where $\vW^{\rm head} \in \R^{V\times d}$ is the output weight matrix.
 
 The training objective of GPT is next-word prediction (causal language modeling), which is defined as 
 \begin{align*}
-    L_{\rm GPT}\left(f ,f^{\rm head}\right) = \mathbb{E}_{\vX}\left[ \frac{1}{N - 1}\sum_{i=1}^{N-1} \CE\left(\mathbf{1}(\bm x_{i+1}), \mathrm{softmax}\left\{ (f^{\rm head} \odot f)(\bm X)_i \right\}\right) \right],
+    \cL_{\rm GPT}\left(f ,f^{\rm head}\right) = \mathbb{E}_{\vX}\left[ \frac{1}{N - 1}\sum_{i=1}^{N-1} \CE\left(\mathbf{1}(\bm x_{i+1}), \mathrm{softmax}\left\{ (f^{\rm head} \odot f)(\bm X)_i \right\}\right) \right],
 \end{align*}
 where $ (f^{\rm head} \odot f)(\bm X)_i \in \R^V$ denotes the $i$-th index of the model output (that is, the log-probability of each potential token in the vocabulary to take up the $i$-th index in the sequence $\bm X$), and $\mathbf{1}(\bm x_{i}) \in \{0,1\}^V$ represents the one-hot embedding vector of the token $\bm x_i$ in the vocabulary. Notably, the model is trained to predict the token at the $(i+1)$-th position using the $i$-th model output instead of the $(i+1)$-th output, because the latter would introduce a circular dependency. This objective trains the model to maximize the likelihood of correctly predicting the next token at each position in the sequence while minimizing the prediction error using cross-entropy loss. The model operates autoregressively, meaning that predictions at later positions depend on correctly predicting earlier ones. 
 
@@ -958,7 +958,7 @@ The dataset is kept to be the same imagery datasets as discussed in \Cref{sub:co
 
 As the name suggests, masked autoencoding involves a view \(v_{m}\) which, given an input, performs a random resized crop (cf \Cref{sub:contrastive_learning_objective}) to turn the input image into a square image of size \((C, S_{\mask}, S_{\mask})\), then \textit{masks} (i.e., sets to zero) a fixed percentage \(p_{\mask} \in [0, 1]\) of pixels in the input. For efficiency reasons\footnote{The original implementation of MAE by \citet{he2022masked} embeds the whole image, \textit{removes} the tokens that would be masked, feeds the resulting token set through the encoder, adds back learned placeholder tokens in the masked spots and adds back the appropriate positional encoding, and feeds the resulting token set through the decoder to get the autoencoding prediction. This is more efficient since the encoder has fewer tokens to go through, but conceptually is the same as the method discussed in the text, and the resulting models' performance in the masked autoencoding task and downstream evaluations is very similar.}, the masking is done patch-wise, i.e.,  after embedding the whole image, \(p_{\mask}\) percentage of \textit{patches} are set to zero. The goal of MAE is to train an encoder \(f_{\theta} \colon \cI \to \R^{d \times *}\) and a decoder \(g_{\eta} \colon \R^{d \times *} \to \cI\) which can reconstruct an input from its masking, i.e., writing \(\hat{\vX}_{\theta, \eta} := g_{\eta} \circ f_{\theta}\), we have
 \begin{equation}
-    \min_{\theta, \eta}\bc{L_{\mathrm{MAE}}(\theta, \eta) := \Ex\norm{\hat{\vX}_{\theta, \eta}(\vX_{m}) - \vX}_{F}^{2}}
+    \min_{\theta, \eta}\bc{\cL_{\mathrm{MAE}}(\theta, \eta) := \Ex\norm{\hat{\vX}_{\theta, \eta}(\vX_{m}) - \vX}_{F}^{2}}
 \end{equation}
 Essentially this means that the features \(\vZ_{\theta}(\vX_{m})\) of the view \(\vX_{m} := v_{m}(\vX)\) must contain information about the \textit{masked patches} as well as the existing patches. From the perspective of the compression-based white-box models in \Cref{ch:representation}, if a white-box autoencoder  \((f_{\theta}, g_{\eta})\) succeeds at this task, it means that the learned subspaces and dictionaries perform a \textit{redundant} encoding of the data such that it can reconstruct missing parts of the data from encoded other parts of the data. This means that information about each patch is stored in other patches. Therefore, each patch feature should contain both information about the patch and information about the statistics of the whole image. Thus, again, we expect that the representations should contain both local and global semantically relevant information, and the therefore representations of different patches with similar local and global information should be related (i.e., on the same subspace or encoded together by a dictionary).
 
@@ -1008,11 +1008,11 @@ As in \Cref{sub:image_classification_optimization}, we use a simple optimization
     \item Compute the estimated autoencoding \(\hat{\vX}_{\theta, \eta}(\vX_{b, r}^{(k)}) := (g_{\eta} \circ f_{\theta})(\vX_{b, r}^{(k)})\).
     \item Form the surrogate stochastic loss 
     \begin{equation}
-        \hat{L}_{\mathrm{MAE}}^{(k)}(\theta, \eta) := \frac{1}{B}\sum_{b = 1}^{B}\norm{\hat{\vX}_{\theta, \eta}(\vX_{b, r}^{(k)}) - \vX_{b}^{(k)}}_{F}^{2}.
+        \hat{\cL}_{\mathrm{MAE}}^{(k)}(\theta, \eta) := \frac{1}{B}\sum_{b = 1}^{B}\norm{\hat{\vX}_{\theta, \eta}(\vX_{b, r}^{(k)}) - \vX_{b}^{(k)}}_{F}^{2}.
     \end{equation}
     \item Compute one step of an optimization algorithm on \((\theta, \eta)\), giving the following iteration:
     \begin{equation}
-        (\theta^{(k + 1)}, \eta^{(k + 1)}) := \textsc{OptUpdate}^{(k)}(\theta^{(k)}, \eta^{(k)}; \nabla_{(\theta, \eta)}\hat{L}_{\mathrm{MAE}}^{(k)}).
+        (\theta^{(k + 1)}, \eta^{(k + 1)}) := \textsc{OptUpdate}^{(k)}(\theta^{(k)}, \eta^{(k)}; \nabla_{(\theta, \eta)}\hat{\cL}_{\mathrm{MAE}}^{(k)}).
     \end{equation}
 \end{itemize}
 
@@ -1114,7 +1114,7 @@ For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100
 % \end{equation}
 % The pre-training loss is 
 % \begin{equation}\label{eq:loss_cross_entropy}
-%     L_{\CE}(f, f^{\mathrm{head}}) \doteq \mathbb{E}_{\vX, \vy}\mathopen{}\left[H\big(\vy, \operatorname{softmax}\big\{(f^{\mathrm{head}} \circ f)(\vX)\big\}\big)\right].
+%     \cL_{\CE}(f, f^{\mathrm{head}}) \doteq \mathbb{E}_{\vX, \vy}\mathopen{}\left[H\big(\vy, \operatorname{softmax}\big\{(f^{\mathrm{head}} \circ f)(\vX)\big\}\big)\right].
 % \end{equation}
 % We pre-train on ImageNet-1K~\cite{deng2009imagenet}, using the Lion optimizer \cite{chen2023symbolic}. More details about the training and datasets can be found in \Cref{app:subsec-experiment-supervise-classification-details}.
 
@@ -1207,7 +1207,7 @@ For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100
 % \textit{Masked autoencoding}~\cite{He2021-lb} ``masks out'' a large percentage of randomly selected input image tokens in the input \(\vX = \mat{\vx_{1}, \dots, \vx_{N}} \in \bR^{D \times N}\) and then attempts to reconstruct the whole image, measuring success by the resulting autoencoding reconstruction loss and performance on downstream tasks. 
 % The regular masked autoencoding (MAE) loss \cite{He2021-lb} is defined as  
 % \begin{equation}\label{eq:mae_loss_unreg}
-%     L_{\mathrm{MAE}}(f, g) \doteq \mathbb{E}_{\vX, \Omega}\big[\norm{(g \circ f)(\operatorname{\texttt{Mask}}_{\Omega}(\vX)) - \vX}_{2}^{2}\big],
+%     \cL_{\mathrm{MAE}}(f, g) \doteq \mathbb{E}_{\vX, \Omega}\big[\norm{(g \circ f)(\operatorname{\texttt{Mask}}_{\Omega}(\vX)) - \vX}_{2}^{2}\big],
 % \end{equation}
 % where \(\texttt{Mask}_{\Omega}(\cdot)\) replaces all tokens in \(\vX\) whose indices are in \(\Omega\) with the same masked token. Namely, for each data point, we sample a subset \(\Omega \subseteq [N]\) of a fixed size, and set \(\vX^{\mathrm{mask}} = \mat{\vx_{1}^{\mathrm{mask}}, \dots, \vx_{N}^{\mathrm{mask}}}\), where \(\vx_{i}^{\mathrm{mask}} = \vx_{\mathrm{mask}}\) if \(i \in \Omega\) and \(\vx_{i}^{\mathrm{mask}} = \vx_{i}\) if \(i \notin \Omega\), where \(\vx_{\mathrm{mask}} \in \bR^{D}\) is a trainable mask token.
 
@@ -1217,11 +1217,11 @@ For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100
 % %namely, we add an \(\ell^{0}\) penalty on the learned representation \(\vZ = f(\vX)\) to our masked autoencoding objective. 
 % %For \(\gamma > 0\), our overall objective is given below:
 % %\begin{equation}
-% %    L_{\text{MAE}}^{0}(f, g) \doteq  \mathbb{E}_{\vX, \Omega}\big[\norm{(g \circ f)(\operatorname{\texttt{Mask}}_{\Omega}(\vX)) - \vX}_{2}^{2} + \gamma\norm{f(\operatorname{\texttt{Mask}}_{\Omega}(\vX))}_{0}\big].
+% %    \cL_{\text{MAE}}^{0}(f, g) \doteq  \mathbb{E}_{\vX, \Omega}\big[\norm{(g \circ f)(\operatorname{\texttt{Mask}}_{\Omega}(\vX)) - \vX}_{2}^{2} + \gamma\norm{f(\operatorname{\texttt{Mask}}_{\Omega}(\vX))}_{0}\big].
 % %\end{equation}
 % %In practice the \(\ell^{0}\) norm is relaxed to the \(\ell^{1}\) norm for computational purposes:
 % %\begin{equation}\label{eq:mae_loss}
-% %    L_{\text{MAE}}^{1}(f, g) \doteq \mathbb{E}_{\vX, \Omega}\big[\norm{(g \circ f)(\operatorname{\texttt{Mask}}_{\Omega}(\vX)) - \vX}_{2}^{2} + \gamma\norm{f(\operatorname{\texttt{Mask}}_{\Omega}(\vX))}_{1}\big].
+% %    \cL_{\text{MAE}}^{1}(f, g) \doteq \mathbb{E}_{\vX, \Omega}\big[\norm{(g \circ f)(\operatorname{\texttt{Mask}}_{\Omega}(\vX)) - \vX}_{2}^{2} + \gamma\norm{f(\operatorname{\texttt{Mask}}_{\Omega}(\vX))}_{1}\big].
 % %\end{equation} 
 % %% Further implementation details of this architecture are discussed in \Cref{app:experiment_clarifications,app:experiment_pseudocode}.
 % %We emphasize that the imposition of regularization to encourage the learned representations to optimize the sparse rate reduction
@@ -1241,7 +1241,7 @@ For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100
 % \end{equation}
 % where \(\bm{1}_{n}\) is the all-ones vector in \(\bR^{n}\); note that this is different to the classification setup in \Cref{subsubsec:image-classification-task}, owing to not incorporating a class token. We train using the cross-entropy loss, where \(H\) is defined in \Cref{eq:cross_entropy}:
 % \begin{equation}
-%     L_{\CE}(f, f^{\mathrm{head}}) \doteq \mathbb{E}_{\vX, \vy}\mathopen{}\left[H(\vy, \operatorname{softmax}\{(f^{\mathrm{head}} \circ f)(\vX)\})\right].
+%     \cL_{\CE}(f, f^{\mathrm{head}}) \doteq \mathbb{E}_{\vX, \vy}\mathopen{}\left[H(\vy, \operatorname{softmax}\{(f^{\mathrm{head}} \circ f)(\vX)\})\right].
 % \end{equation}
 % For full fine-tuning, we update both \(f\) and \(f^{\mathrm{head}}\). For linear probing, we update only \(f^{\mathrm{head}}\). We fine-tune CRATE{-MAE} on several commonly used downstream datasets: CIFAR10/CIFAR100 \cite{krizhevsky2009learning}, Oxford Flowers \cite{nilsback2008automated}, and Oxford-IIIT-Pets \cite{parkhi2012cats}. For fine-tuning \(f^{\mathrm{head}}\), we use the AdamW optimizer on minibatches~\cite{loshchilov2017decoupled}. For linear probing, we use a logistic regresion solver to compute \(f^{\mathrm{head}}\) in one shot using the full dataset. More details about training can be found in \Cref{app:subsec-experiment-MAE}. 
 % %\yima{Is the above fine-tuning needed before evaluating the autoencoding performance? If not, why it goes first? Second, How is the above fine-tuning related to the fine-tuning mentioned in the transfer learning evaluation paragraph after the autoencoding performance? As far as I can tell, they seem to be different. One uses a class token, one does not. EXACTLY what you did in experiments?} \DP{Regarding the conflicting thing you mentioned, I removed it, sorry for the confusion... Regarding the organization: everywhere else in the experiments section, it is most clean to discuss the pretraining and finetuning setups before any experimental results; this is the one place where they can be plausibly separated, but I keep it this way for consistency.}
@@ -1387,7 +1387,7 @@ For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100
 % \end{equation}
 % for a trainable parameter \(\vW^{\mathrm{head}} \in \bR^{C \times d}\), by minimizing the cross-entropy loss \Cref{eq:loss_cross_entropy}
 % \begin{equation}
-%     L_{\CE}(f, f^{\mathrm{head}}) \doteq \mathbb{E}_{\vX, \vy}\mathopen{}\left[H(\vy, \operatorname{softmax}\{(f^{\mathrm{head}} \circ  f)(\vX)\})\right],
+%     \cL_{\CE}(f, f^{\mathrm{head}}) \doteq \mathbb{E}_{\vX, \vy}\mathopen{}\left[H(\vy, \operatorname{softmax}\{(f^{\mathrm{head}} \circ  f)(\vX)\})\right],
 % \end{equation}
 % over \(f^{\mathrm{head}}\) (leaving $f$ fixed). We do this by using a logistic regression solver to compute \(f^{\mathrm{head}}\) in one shot using the full fine-tuning dataset. 
 
@@ -1476,7 +1476,7 @@ For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100
 % \paragraph{CRATE-BERT pre-training methodology.}
 % The training loss for CRATE-BERT is masked language modeling (masked LM)\footnote{The original BERT pre-training tasks also contain next sentence prediction, but we discard this task due to observations shown by~\cite{liu2019roberta}.}, which is defined as
 % \begin{equation}\label{eq:training-loss-bert}
-%   L_{\text{BERT}}(f, f^{\mathrm{head}}) = \mathbb{E}_{\vX, \Omega}\left[\frac{1}{\abs{\Omega}}\sum_{i\in \Omega}  H(\bm{1}(\vx_{i}), \operatorname{softmax}\{(f^{\mathrm{head}} \circ f)(\vX)_{i}\})\right],
+%   \cL_{\text{BERT}}(f, f^{\mathrm{head}}) = \mathbb{E}_{\vX, \Omega}\left[\frac{1}{\abs{\Omega}}\sum_{i\in \Omega}  H(\bm{1}(\vx_{i}), \operatorname{softmax}\{(f^{\mathrm{head}} \circ f)(\vX)_{i}\})\right],
 % \end{equation}
 % where \((f^{\mathrm{head}} \circ f)(\vX)_{i} \in \bR^{V}\) denotes the \(i\th\) index of the model output---that is, the log-probabilities of each potential token in the vocabulary to take up the \(i\th\) index in the sequence \(\vX\). Similarly $\mathbf{1}(\vx_i) \in \{0, 1\}^{V}$ represents the one-hot embedding vector of the token \(\vx_{i}\) in the vocabulary. 
 
@@ -1501,7 +1501,7 @@ For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100
 % \paragraph{CRATE-GPT pre-training methodology.}
 % The training objective of GPT is next word prediction (causal language modeling, causal LM), which is defined as
 % \begin{equation}\label{eq:training-loss-gpt}
-%   L_{\text{GPT}}(f, f^{\text{head}}) = \mathbb{E}_{\vX}\bigg[\frac{1}{\abs{\vX} -1} \sum_{i = 1}^{\abs{\vX} - 1} H(\bm{1}(\vx_{i + 1}), \operatorname{softmax}\{(f^{\mathrm{head}} \circ f)(\vX)_{i}\}) \bigg],
+%   \cL_{\text{GPT}}(f, f^{\text{head}}) = \mathbb{E}_{\vX}\bigg[\frac{1}{\abs{\vX} -1} \sum_{i = 1}^{\abs{\vX} - 1} H(\bm{1}(\vx_{i + 1}), \operatorname{softmax}\{(f^{\mathrm{head}} \circ f)(\vX)_{i}\}) \bigg],
 % \end{equation}
 % where $\abs{\vX}$ denotes the total number of tokens in the input sample $\vX$.
 % For GPT pretraining, we mainly follow the implementations in \cite{nanogpt}; in particular we set the block size as 1,024. 
