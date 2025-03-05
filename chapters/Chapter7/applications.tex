@@ -642,11 +642,17 @@ For linear probing, we use several evaluation datasets such as CIFAR10, Oxford-F
 
 \section{Text Prediction}\label{sec:ntp_text}
 
-We now study \textit{next-token prediction} for text, which is a special case of classification in which the set of classes (i.e., the ``vocabulary'') is very large. Next-token prediction is the pre-training objective for large language models (LLMs) and certain kinds of vision models (with a so-called ``visual tokenizer''). In this section, we mainly focus on generative pre-training (GPT) \cite{radford2019language} tasks for learning language representations. To explore the CRATE architecture for language tasks, we use the following datasets. For pre-training, we use OpenWebText (OWT)~\cite{Gokaslan2019OpenWeb}, an open-source reproduction of the unreleased WebText dataset used by OpenAI to train GPT2. For zero-shot evaluation, we evaluate cross-entropy validation loss on WikiText~\cite{merity2016pointer}\footnote{For WikiText2 and WikiText103~\cite{merity2016pointer}, the test splits are the same, so we merge them as a single dataset referred to as WikiText.}, LAMBADA~\cite{paperno2016lambadadatasetwordprediction}\footnote{To obtain the accuracy on LAMBADA dataset, we use greedy decoding.}, and PTB~\cite{marcus-etal-1993-building}. % In addition, we compute zero-shot accuracy on LAMBADA for predicting the final word of sentences, as well as on the Children’s Book Test (CBT)~\cite{hill2016goldilocksprinciplereadingchildrens}, where the task is to choose either common nouns or named entities from 10 possible options for an omitted word in a paragraph.
+We now study \textit{next-token prediction} for text, which is a special case of classification in which the set of classes (i.e., the ``vocabulary'') is very large. Next-token prediction is the pre-training objective for large language models (LLMs) and certain kinds of vision models (with a so-called ``visual tokenizer''). In this section, we mainly focus on generative pre-training (GPT) \cite{radford2019language} tasks for learning language representations. To explore the CRATE architecture for language tasks, we use the following datasets. For pre-training, we use OpenWebText (OWT)~\cite{Gokaslan2019OpenWeb}, an open-source reproduction of the unreleased WebText dataset used by OpenAI to train GPT2. Each sample in OWT is a web document, typically sourced from high-quality web pages, blogs, articles, or online discussions, that exhibit well-formed natural language. For zero-shot evaluation, we evaluate cross-entropy validation loss on WikiText~\cite{merity2016pointer}\footnote{For WikiText2 and WikiText103~\cite{merity2016pointer}, the test splits are the same, so we merge them as a single dataset referred to as WikiText.}, LAMBADA~\cite{paperno2016lambadadatasetwordprediction}\footnote{To obtain the accuracy on LAMBADA dataset, we use greedy decoding.}, and PTB~\cite{marcus-etal-1993-building}. Training on PTB and OWT is generally easier compared to other datasets. PTB focuses on simpler journalistic text, ideal for traditional language modeling, while OWT is diverse and informal, covering various topics but with less complexity in language structure or long-range dependencies. WikiText, with its formal structure and domain-specific content, requires a more complex understanding than OWT but remains manageable. LAMBADA is the most challenging, as it involves long-range dependencies, requiring the model to grasp broader contextual information to complete sentences accurately. 
+
+
+
+% In addition, we compute zero-shot accuracy on LAMBADA for predicting the final word of sentences, as well as on the Children’s Book Test (CBT)~\cite{hill2016goldilocksprinciplereadingchildrens}, where the task is to choose either common nouns or named entities from 10 possible options for an omitted word in a paragraph.
 
 \subsection{Task and Objective}
 
-For GPT pre-training, we apply the Byte Pair Encoding (BPE) tokenizer as the default tokenizer, with a vocabulary size $V=50257$ following the setting of GPT2 \cite{radford2019language}. Here, BPE is a subword tokenization algorithm that iteratively merges the most frequent adjacent character pairs in a corpus to create a vocabulary of subwords. Specifically, it starts with a vocabulary consisting of individual bytes and then repeatedly combines the most common pairs into new subword tokens until a predefined vocabulary size $V=50257$ is reached; see \Cref{fig:BPE}. Using the BPE tokenizer, the input is represented as a sequence of $N$ tokens $\bm X = [\bm x_1,\dots,\bm x_{N}] \in \R^{D \times N}$.  
+For GPT pre-training, we apply the Byte Pair Encoding (BPE) tokenizer as the default tokenizer to convert each document into tokens, with a vocabulary size $V=50257$ following the setting of GPT2 \cite{radford2019language}. Here, BPE is a subword tokenization algorithm that iteratively merges the most frequent adjacent character pairs in a corpus to create a vocabulary of subwords. Specifically, it starts with a vocabulary consisting of individual bytes and then repeatedly combines the most common pairs into new subword tokens until a predefined vocabulary size $V=50257$ is reached; see \Cref{fig:BPE}. Using the BPE tokenizer, the input is represented as a sequence of $N$ tokens $\bm X = [\bm x_1,\dots,\bm x_{N}] \in \R^{D \times N}$. In particular, since each sequence may have a different length, we need to standardize their size to ensure uniform input for the model. To address this issue, we apply padding, where shorter sequences are extended with a special padding token, typically represented as “[PAD]” or a token with a specific ID (e.g., 0), until they match a fixed length. Notably, the padding tokens are ignored during model computation by masking them out, ensuring they do not contribute to training the model.
+
+
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=0.45\textwidth]{figs_chap7/BPE1}\hspace{0.6in} 
@@ -673,7 +679,7 @@ The training objective of GPT is next-word prediction (causal language modeling)
 \begin{align*}
     L_{\rm GPT}\left(f ,f^{\rm head}\right) = \mathbb{E}_{\vX}\left[ \frac{1}{N - 1}\sum_{i=1}^{N-1} \CE\left(\mathbf{1}(\bm x_{i+1}), \mathrm{softmax}\left\{ (f^{\rm head} \odot f)(\bm X)_i \right\}\right) \right],
 \end{align*}
-where $ (f^{\rm head} \odot f)(\bm X)_i \in \R^V$ denotes the $i$-th index of the model output (that is, the log-probability of each potential token in the vocabulary to take up the $i$-th index in the sequence $\bm X$), and $\mathbf{1}(\bm x_{i}) \in \{0,1\}^V$ represents the one-hot embedding vector of the token $\bm x_i$ in the vocabulary. This objective trains the model to maximize the likelihood of correctly predicting the next token at each position in the sequence while minimizing the prediction error using cross-entropy loss. The model operates autoregressively, meaning that predictions at later positions depend on correctly predicting earlier ones. This setup enforces the sequential generation constraint essential for applications such as text completion and dialogue generation. 
+where $ (f^{\rm head} \odot f)(\bm X)_i \in \R^V$ denotes the $i$-th index of the model output (that is, the log-probability of each potential token in the vocabulary to take up the $i$-th index in the sequence $\bm X$), and $\mathbf{1}(\bm x_{i}) \in \{0,1\}^V$ represents the one-hot embedding vector of the token $\bm x_i$ in the vocabulary. Notably, the model is trained to predict the token at the $(i+1)$-th position using the $i$-th model output instead of the $(i+1)$-th output, because the latter would introduce a circular dependency. This objective trains the model to maximize the likelihood of correctly predicting the next token at each position in the sequence while minimizing the prediction error using cross-entropy loss. The model operates autoregressively, meaning that predictions at later positions depend on correctly predicting earlier ones. 
 
 \begin{figure}[t]
     \centering
@@ -691,13 +697,11 @@ where $ (f^{\rm head} \odot f)(\bm X)_i \in \R^V$ denotes the $i$-th index of th
         -\infty,\quad \text{if}\ i < j. \quad (\text{block attention to future tokens})
     \end{cases}
 \end{align}
-Next, the MSSA operator in the CRATE architecture with a causal mask can be expressed as: 
+We should point out that the causal mask is essential in the autoregressive setting because GPT-style models generate text sequentially---each token is predicted based only on previously seen tokens. Next, the MSSA operator in the CRATE architecture with a causal mask can be expressed as: 
 \begin{align*}
 \mathrm{CausalMask}\MSSA_{\theta}^{\ell}(\vZ) = \sum_{k=1}^K \bm U_k\bm U_k^T \bm Z\mathrm{softmax}\left( \mathrm{CausalMask} \left( \bm Z^{T}\bm U_k \bm U_k^T\bm Z\right) \right),    
 \end{align*}
-where $\bm Z$ is the output.  
-
-By incorporating this causal attention mechanism, the CRATE architecture enables efficient computation in language modeling tasks. It ensures that the model processes tokens in a sequential manner, with each token attending only to previous tokens and its own representation. This mechanism reduces the computational complexity associated with allowing future tokens to influence current predictions, making the model more efficient and well-suited for tasks like next-word prediction. Substituting this operator into the update rules in \eqref{eq:CARTE updates} results in the final CRATE architecture optimized for language tasks, preserving both the efficiency and the accuracy required for autoregressive generation. 
+where $\bm Z$ is the output.  By incorporating this causal attention mechanism, the CRATE architecture enables efficient computation in language modeling tasks. It ensures that the model processes tokens in a sequential manner, with each token attending only to previous tokens and its own representation. This mechanism reduces the computational complexity associated with allowing future tokens to influence current predictions, making the model more efficient and well-suited for tasks like next-word prediction. Substituting this operator into the update rules in \eqref{eq:CARTE updates} results in the final CRATE architecture optimized for language tasks, preserving both the efficiency and the accuracy required for autoregressive generation. 
 
 
 
@@ -707,21 +711,25 @@ For GPT pertaining, we mainly follow the implementations in the nano GPT reposit
 
 \subsection{Evaluation and Results}
 
-We evaluate CRATE-GPT models by measuring the zero-shot cross-entropy loss on different datasets. We evaluate CRATE-GPT-Base on OpenWebText (OWT) as well as other datasets as shown in \citep{radford2019language}. We compare with the official release of GPT2-Base which is pre-trained on WebText \cite{huggingface_gpt}, while CRATE-GPT-Base is pre-trained on OWT. {Meanwhile, in order to compare CRATE-GPT and the GPT2 model under a similar number of model parameters, we consider the GPT2 with a smaller model size, denoted by GPT2-Small, and apply the same training setup described in \cite{nanogpt}.} Therefore, we first fine-tune GTP2-Base on OWT before evaluating the OWT test dataset. The evaluation results on the test datasets are shown in Table~\ref{tab:gpt-eval}. We also present the pre-training loss of CRATE-GPT with respect to progressing
+We evaluate CRATE-GPT models by measuring the zero-shot cross-entropy loss on different datasets. Mathematically, the zero-shot cross-entropy loss for a sequence $\bm X = [\bm x_1,\dots,\bm x_N]$ is calculated as follows:
+\begin{align*}
+    \mathcal{L}_{\rm zero-shot} = -\sum_{i=2}^N \log \left(\mathrm{softmax}\left\{ (f^{\rm head} \odot f)(\bm X)_i \right\}\right),
+\end{align*}
+where $\mathrm{softmax}\left\{ (f^{\rm head} \odot f)(\bm X)_i \right\}$ is the model’s predicted probability for the token $\bm x_{i}$ based on the previous tokens $\bm x_{1:i-1}$. We evaluate CRATE-GPT-Base on OpenWebText (OWT) as well as other datasets as shown in \citep{radford2019language}. We compare with the official release of GPT2-Base which is pre-trained on WebText \cite{huggingface_gpt}, while CRATE-GPT-Base is pre-trained on OWT. {Meanwhile, in order to compare CRATE-GPT and the GPT2 model under a similar number of model parameters, we consider the GPT2 with a smaller model size, denoted by GPT2-Small, and apply the same training setup described in \cite{nanogpt}.} Therefore, we first fine-tune GTP2-Base on OWT before evaluating the OWT test dataset. The evaluation results on the test datasets are shown in Table~\ref{tab:gpt-eval}. We also present the pre-training loss of CRATE-GPT with respect to progressing
 pre-training steps in Figure~\ref{fig:crate-text-evals}.
 From both Table~\ref{tab:gpt-eval} and Figure~\ref{fig:crate-text-evals}, we can observe that the CRATE architecture can be applied as backbones for generative language models and achieve competitive performance compared to GPT2.  
 
 \begin{table}[!htbp]
 \def\arraystretch{1.1}
     \small
-    \caption{\small Zero-shot cross-entropy loss of the CRATE-GPT2-Base model and GPT2-Small, GPT2-Base model evaluated on the test split of the datasets (lower is better). \pt{Maybe an arrow point down instead}
+    \caption{\small Zero-shot cross-entropy loss of the CRATE-GPT2-Base model and GPT2-Small, GPT2-Base model evaluated on the test split of the datasets ($\downarrow$ lower is better). 
     }
     \centering
     \begin{tabular}{ccccccc}
     \hline
     & \#parameters & \textbf{OWT} & \textbf{LAMBADA} & \textbf{WikiText} & \textbf{PTB} & \textbf{Avg} \\
      \hline
-     GPT2-Base  & {124M} & 2.85 & 4.12 & 3.89 & 4.63 & 3.87 \\
+     GPT2-Base  & {124M} & 2.85$\downarrow$ & 4.12$\downarrow$ & 3.89$\downarrow$ & 4.63$\downarrow$ & 3.87$\downarrow$ \\
      {GPT2-Small } &  {64M} & {3.04} & {4.49} & {4.31} & {5.15} & {4.25} \\
      CRATE-GPT2-Base & {60M} & 3.37 & 4.91 & 4.61 & 5.53 & 4.61 \\
      \hline
