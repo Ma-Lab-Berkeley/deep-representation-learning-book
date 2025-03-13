@@ -1018,11 +1018,210 @@ We'll finish this section by computing the adjoint derivative for a simple layer
 
 
 
-\section{Minmax Optimization}
-As we have seen in Chapter \ref{ch:closed-loop}, the problem of learning the optimal encoder and decoder via a closed-loop transcription can be formulated as a two-player game.\footnote{This is also the case with the problem of learning a distribution via the generative adversarial network (GAN).} In such cases, we need to find stationary saddle points of a minmax problem:
+\section{Minimax Optimization}
+
+In certain cases, such as in \Cref{ch:closed-loop}, a learning problem cannot be reduced to a single optimization problem but rather represents multiple potentially opposing components of the system try to each minimize their own objective. Examples of this paradigm include distribution learning via generative adversarial networks (GAN) and closed-loop transcription (CTRL). We will denote such a system as a \textit{two-player game}, where we have two ``players'' called Player 1 and Player 2 trying to minimize their objectives \(\cL^{1}\) and \(\cL^{2}\) respectively. Player 1 picks parameters \(\theta \in \Theta\) and Player 2 picks parameters \(\eta \in \Eta\).
+
+Let us start with a very simple example: there exists functions \(u(\theta)\) and \(v(\eta)\) such that 
 \begin{equation}
-    \min_{\bm{\theta}} \max_{\bm{\eta}} f(\bm{\theta}, \bm{\eta}) = \mathbb{E}_{\x} (\ell((\bm{\theta}, \bm{\eta}, \x).
+    \cL^{1}(\theta, \eta) = u(\theta), \qquad \cL^{2}(\theta, \eta) = v(\eta).
 \end{equation}
-\yima{Any particular clean (convergence) results and (alternating minmax) algorithms that we want to feature here? Just sufficient for the reader to understand the basics so that they can implement and apply  to practical problems.}
+Then both players' objectives are independent of the other player, and the players should try to achieve their respective optima:
+\begin{equation}
+    \theta^{\star} \in \argmin_{\theta \in \Theta}u(\theta), \qquad \eta^{\star} \in \argmin_{\eta \in \Eta}v(\eta).
+\end{equation}
+The pair \((\theta^{\star}, \eta^{\star})\) is a straightforward special case of an \textit{equilibrium}: a situation where neither player will want to move, given the chance, since moving will end up making their own situation worse. However, not all games are so trivial; many have more complicated objectives and information structures.
+
+There are two types of two-player games we cover here, which correspond to different information structures:
+\begin{itemize}
+    \item Simultaneous games, where both players pick their parameters without advance knowledge of the other player's choice.
+    \item Sequential games, where one player (without loss of generality Player 1) picks their parameters before the other (i.e., Player 2), and the second player (i.e., Player 2) can use the full knowledge of the first player's (i.e., Player 1) play to make their choice.
+\end{itemize}
+To each game we associate a different notion of \textit{equilibrium}, as follows.
+\begin{itemize}
+    \item For simultaneous games the correct notion of equilibrium is the \textit{Nash equilibrium}, or \textit{saddle point}. A pair \((\theta^{\star}, \eta^{\star})\) is a \textit{Nash equilibrium} when
+    \begin{equation}
+        \theta^{\star} \in \argmin_{\theta \in \Theta}\cL^{1}(\theta, \eta^{\star}), \qquad \eta^{\star} \in \argmin_{\eta \in \Eta}\cL^{2}(\theta^{\star}, \eta).
+    \end{equation}
+    That is, either player changing their option will increase their loss.
+    \item For sequential games the correct notion of equilibrium is the \textit{minimax equilibrium}. To explain this equilibrium, note that since Player 2 can choose \(\eta\) reactively to Player 1's choice \(\theta_{1}\), Player 2 would of course choose the \(\eta\) which minimizes \(\cL^{2}(\theta_{1}, \cdot)\). But of course a rational Player 1 would realize this, and so pick a \(\theta_{1}\) such that the worst-case \(\eta\) picked by Player 2 according to this rule is not too bad. More formally, let \(\cS^{2}(\theta) := \argmin_{\eta \in \Eta}\cL^{2}(\theta, \eta)\) be the set of \(\eta\) minimizing \(\cL^{2}(\theta, \eta)\), i.e., the set of all \(\eta\) which Player 2 is liable to play given that Player 1 has played \(\theta\). Then \((\theta^{\star}, \eta^{\star})\) is a minimax equilibrium if 
+    \begin{equation}
+        \theta^{\star} \in \argmin_{\theta \in \Theta}\max_{\eta \in \cS^{2}(\theta)}\cL^{1}(\theta, \eta), \qquad \eta^{\star} \in \argmin_{\eta  \in \Eta}\cL^{2}(\theta^{\star}, \eta).
+    \end{equation}
+\end{itemize}
+In the rest of the section, we will briefly discuss some algorithmic approaches to learn equilibria. The intuition you should have is that learning an equilibrium is like letting the different parts of the system automatically figure out tradeoffs between the different objectives they want to optimize. 
+
+The algorithmic template we can consider is the following \textit{gradient descent-ascent} (GDA) method:
+\begin{align}
+    \theta_{k + 1} &= \theta_{k} - \alpha_{k}\nabla_{\theta} \cL^{1}(\theta_{k}, \eta_{k}), \\ 
+    \eta_{k + 1} &= \eta_{k} - \beta_{k}\nabla_{\eta} \cL^{2}(\theta_{k}, \eta_{k})
+\end{align}
+In words, both sides will independently try to optimize their objectives \(\cL^{i}\) at each step using the learning rates \(\alpha_{k}\) and \(\beta_{k}\), crucially not necessarily equal to each other. This is totally sensible for our model problem where \(\cL^{1}(\theta, \eta) = u(\theta)\) and \(\cL^{2}(\theta, \eta) = v(\eta)\), but may not obviously lead to critical points or saddle points otherwise. In the sequel, we will how to make GDA learn a Nash equilibrium and a minimax equilibrium.
+
+Throughout the book and in the rest of the appendices, we consider \textit{zero-sum games} where the objectives \(\cL^{1}\) and \(\cL^{2}\) are negatives of each other:
+\begin{equation}
+    \cL^{1}(\theta, \eta) = -\cL(\theta, \eta) = -\cL^{2}(\theta, \eta).
+\end{equation}
+Using this notation a Nash equilibrium becomes 
+\begin{equation}
+    \theta^{\star} \in \argmax_{\theta \in \Theta}\cL(\theta, \eta^{\star}), \qquad \eta^{\star} \in \argmin_{\eta \in \Eta}\cL(\theta^{\star}, \eta),
+\end{equation}
+and a minimax equilibrium becomes 
+\begin{equation}
+    \theta^{\star} \in \argmax_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta), \qquad \eta^{\star} \in \argmin_{\eta \in \Eta}\cL(\theta^{\star}, \eta).
+\end{equation}
+\begin{proof} \DP{Just to convince myself this is true; feel free to comment.}
+    Note that 
+    \begin{equation}
+        \cS^{2}(\theta) = \argmin_{\eta \in \Eta}\cL^{2}(\theta, \eta) = \argmin_{\eta \in \Eta}\cL(\theta, \eta),
+    \end{equation}
+    so it holds 
+    \begin{equation}
+        \min_{\eta \in \cS^{2}(\theta)}\cL(\theta, \eta) = \min_{\eta \in \argmin_{\eta^{\prime} \in \Eta}\cL(\theta, \eta^{\prime})}\cL(\theta, \eta) = \min_{\eta \in \Eta}\cL(\theta, \eta).
+    \end{equation}
+\end{proof}
+
+We end this section with a caveat: in two-player zero-sum games, if it holds that
+\begin{equation}
+    \max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta) = \min_{\eta \in \Eta}\max_{\theta \in \Theta}\cL(\theta, \eta)
+\end{equation}
+then every Nash equilibria is a minimax equilibria \textit{and vice versa}, and furthermore each Nash/minimax equilibrium has the (same) objective value \(\max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta)\).
+\begin{proof} \DP{Just to convince myself this is true; feel free to comment.}
+    Suppose that indeed 
+    \begin{equation}
+        \max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta) = \min_{\eta \in \Eta}\max_{\theta  \in \Theta}\cL(\theta, \eta).
+    \end{equation}
+
+    First suppose that \((\theta^{\star}, \eta^{\star})\) is a Nash equilibrium. We will show it is a minimax equilibrium. By definition we have 
+    \begin{equation}
+        \min_{\eta \in \Eta}\cL(\theta^{\star}, \eta) = \cL(\theta^{\star}, \eta^{\star}) = \max_{\theta \in \Theta}\cL(\theta, \eta^{\star}).
+    \end{equation}
+    It then holds for any \(\theta\) and \(\eta\) that 
+    \begin{equation}
+        \min_{\eta \in \Eta}\cL(\theta, \eta) \leq \cL(\theta, \eta^{\star}) \leq \cL(\theta^{\star}, \eta^{\star}).
+    \end{equation}
+    Therefore
+    \begin{equation}
+        \max_{\theta \in \Theta}\cL(\theta, \eta) \leq \cL(\theta^{\star}, \eta^{\star}).
+    \end{equation}
+    Completely symmetrically, 
+    \begin{equation}
+        \cL(\theta^{\star}, \eta^{\star}) \leq \cL(\theta^{\star}, \eta) \leq \max_{\theta \in \Theta}\cL(\theta^{\star}, \eta) \implies \cL(\theta^{\star}, \eta^{\star}) \leq \min_{\eta \in \Eta}\max_{\theta \in \Theta}\cL(\theta, \eta).
+    \end{equation}
+    Therefore since \(\max\min = \min\max\) we have 
+    \begin{equation}\label{eq:nash_equilibrium_minmax_maxmin}
+        \max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta) = \cL(\theta^{\star}, \eta^{\star}) = \min_{\eta \in \Eta}\max_{\theta \in \Theta}\cL(\theta, \eta).
+    \end{equation}
+    In particular, it holds that
+    \begin{equation}
+        \theta^{\star} \in \argmax_{\theta \in \Theta}\min(\eta \in \Eta)\cL(\theta, \eta).
+    \end{equation}
+    From the condition of Nash equilibrium we have \(\eta^{\star} \in \argmin_{\eta \in \Eta}\cL(\theta^{\star}, \eta)\). So \((\theta^{\star}, \eta^{\star})\) is a minimax equilibrium. Furthermore we have also proved that all Nash equilibria obey \eqref{eq:nash_equilibrium_minmax_maxmin}.
+
+    Now let \((\theta^{\star}, \eta^{\star})\) be a minimax equilibrium. We claim that it is a Nash equilibrium, which completes the proof. By the definition of minimax equilibrium,
+    \begin{equation}
+        \max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta) = \cL(\theta^{\star}, \eta^{\star}).
+    \end{equation}
+    Then by the \(\min\max = \max\min\) assumption we have
+    \begin{equation}
+        \max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta) = \cL(\theta^{\star}, \eta^{\star}) = \min_{\eta \in \Eta}\max_{\theta \in \Theta}\cL(\theta, \eta).
+    \end{equation}
+    This proves that all minimax equilibria have the desired objective value \(\cL(\theta^{\star}, \eta^{\star})\). Now we want to show that
+    \begin{equation}
+        \theta^{\star} \in \argmax_{\theta \in \Theta}\cL(\theta, \eta^{\star}), \qquad \eta^{\star} \in \argmin_{\eta \in \Eta}\cL(\theta^{\star}, \eta).
+    \end{equation}
+    Indeed the latter assertion holds by definition of the minimax equilibrium, so only the former need be proved. Namely, we will show that
+    \begin{equation}
+        \max_{\theta \in \Theta}\cL(\theta, \eta^{\star}) = \cL(\theta^{\star}, \eta^{\star}).
+    \end{equation}
+    To show this note that by definition of the \(\max\)
+    \begin{equation}
+        \cL(\theta^{\star}, \eta^{\star}) \leq \max_{\theta \in \Theta}\cL(\theta, \eta^{\star}),
+    \end{equation}
+    meanwhile we have \(\min_{\eta \in \Eta}\cL(\theta, \eta) \leq \cL(\theta, \eta^{\star})\) so
+    \begin{equation}
+        \cL(\theta^{\star}, \eta^{\star}) = \max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta) \leq \max_{\theta \in \Theta}\cL(\theta, \eta^{\star}).
+    \end{equation}
+    Therefore it holds 
+    \begin{equation}
+        \cL(\theta^{\star}, \eta^{\star}) = \max_{\theta \in \Theta}\cL(\theta, \eta^{\star}),
+    \end{equation}
+    and the proof is complete.
+\end{proof}
+Conditions under which this equality holds are given by so-called \textit{minimax theorems}; the most famous of these is a theorem of von Neumann. However, in the cases we think about, this property usually does not hold.
+
+\subsection{Learning Nash Equilibria}
+
+When is it feasible to learn Nash equilibria via GDA? Let us consider a slightly advanced version of our very basic model problem, i.e.,
+\begin{equation}
+    \cL(\theta, \eta) = -u(\theta) + v(\eta).
+\end{equation}
+Then the GDA update simplifies to
+\begin{align}
+    \theta_{k + 1}
+    &= \theta_{k} - \alpha_{k}\nabla u(\theta_{k}) \\ 
+    \eta_{k + 1}
+    &= \eta_{k} - \beta_{k} \nabla v(\eta_{k}).
+\end{align}
+This decomposes into two optimization problems, which can each be provably solved by gradient descent under certain conditions on \(u\) and \(v\) --- say, \(u\) and \(v\) are both convex. We can also implement step size scheduling and/or momentum in the gradient descent update, and achieve corresponding speedups as in the vanilla optimization setting.
+
+More often the objective \(\cL\) is not separable and more complicated. Regardless, the same idea holds in more complex situations. A common model problem, although it is still much too simple to model real problems, involves a quadratic objective:
+\begin{equation}
+    \cL(\theta, \eta) = \frac{1}{2}\theta^{\top}\vP\theta + \theta^{\top}\vQ\eta + \frac{1}{2}\eta^{\top}\vR\eta 
+\end{equation}
+where \(\vP\) is symmetric negative (semi)definite, \(\vR\) is symmetric positive (semi)definite, and \(\vQ\) is a symmetric matrix. The GDA algorithm becomes 
+\begin{align}
+    \theta_{k + 1}
+    &= \theta_{k} + \alpha_{k}(\vP\theta + \vQ\eta) \\ 
+    \eta_{k + 1}
+    &= \eta_{k} - \beta_{k}(\vR\eta + \vQ\theta).
+\end{align}
+There are even very simple cases for which GDA does not converge. For example, if we take \(\alpha_{k} = \beta_{k} = 1\) and \(\vP = -\vI\), \(\vQ = -\vI\), and \(\vR = \vI\), then it holds 
+\begin{equation}
+    \theta_{k + 1} = -\eta_{k}, \qquad \eta_{k + 1} = \theta_{k}
+\end{equation}
+which will not converge to an equilibrium. Having a decaying step-size schedule or adding momentum will help convergence to a particular pair \((\theta, \eta)\). So far there has not been much analysis of whether this \((\theta, \eta)\) is a Nash equilibrium, at least when Nash and minimax equilibria do not coincide. 
+
+
+\subsection{Learning Minimax Equilibria}
+
+Recall that the definition of a minimax equilibrium \((\theta^{\star}, \eta^{\star})\) has \(\theta^{\star} \in \argmax_{\theta}\min_{\eta}\cL(\theta, \eta)\). Thus to learn a minimax equilibrium, the basic idea and motivation is: \textit{\(\theta\) should optimize the function \(\theta \mapsto \min_{\eta}\cL(\theta, \eta)\).} So how can we take gradient updates on this function? To do this we use a result called \textit{Danskin's theorem}, which says that if the minimizing \(\eta\), say \(\eta^{\star}(\theta) \in \argmin_{\eta}\cL(\theta, \eta)\), is unique, and \(\cL\) is continuously differentiable in \(\theta\) at \((\theta, \eta^{\star}(\theta))\), then we have 
+\begin{equation}
+    \nabla_{\theta} \bs{\min_{\eta \in \Eta}\cL(\theta, \eta)} = \nabla_{\theta}\cL(\theta, \eta^{\star}(\theta)).
+\end{equation}
+Thus, in an ideal world under the above conditions\footnote{If the minimizer is not unique, it is often still possible to show that the following algorithms converge. The uniqueness condition just serves as a rigorously justified motivation in an idealistic case.}, we could run the following type of algorithm to learn a minimax equilibrium:
+\begin{align}
+    \theta_{k + 1}
+    &= \theta_{k} + \alpha_{k}\nabla_{\theta}\cL(\theta_{k}, \eta^{\star}(\theta_{k})) \\ 
+    \eta_{k + 1}
+    &= \eta_{k} - \beta_{k}\nabla_{\eta}\cL(\theta_{k}, \eta_{k}).
+\end{align}
+However, we cannot compute \(\eta^{\star}\) without yet more iterations of an optimization algorithm (such as gradient descent). Thus, in practice, we can take many (say \(T\)) iterations of \(\eta\) updates for each update of \(\theta\), i.e.,
+\begin{align}
+    \theta_{k + 1}
+    &= \theta_{k} + \alpha_{k}\nabla_{\theta}\cL(\theta_{k}, \eta_{k}) \\
+    \eta_{k + 1}
+    &= \eta_{k}^{T}; \qquad \eta_{k}^{t + 1} = \eta_{k}^{t} - \beta_{k}\nabla_{\eta} \cL(\theta_{k + 1}, \eta_{k}^{t}) \quad \forall t \in [T]; \qquad \eta_{k}^{1} = \eta_{k}.
+\end{align}
+In practice letting \(\eta\) take \(T\) steps to update once is computationally inefficient. Letting \(\eta\) equilibrate simultaneously with \(\theta\) can be approximated by the same algorithmic template as before, i.e.,
+\begin{align}
+    \theta_{k + 1}
+    &= \theta_{k} + \alpha_{k}\nabla_{\theta}\cL(\theta_{k}, \eta_{k}) \\
+    \eta_{k + 1}
+    &= \eta_{k} - \beta_{k}\nabla_{\eta}\cL(\theta_{k}, \eta_{k})
+\end{align}
+\textit{with different step size scales} (also called \textit{time scales}). Namely, we must have 
+\begin{equation}
+    \lim_{k \to \infty}\alpha_{k} = \lim_{k \to \infty}\beta_{k} = \lim_{k \to \infty}\frac{\alpha_{k}}{\beta_{k}} = 0,
+\end{equation}
+in order to establish convergence to (local) minimax optima.
+
+\DP{@YM: what figures can we put here? The pictures I can make look strikingly like the vanilla optimization problem.}
+
+% As we have seen in Chapter \ref{ch:closed-loop}, the problem of learning the optimal encoder and decoder via a closed-loop transcription can be formulated as a two-player game.\footnote{This is also the case with the problem of learning a distribution via the generative adversarial network (GAN).} In such cases, we need to find stationary saddle points of a minmax problem:
+% \begin{equation}
+%     \min_{\bm{\theta}} \max_{\bm{\eta}} f(\bm{\theta}, \bm{\eta}) = \mathbb{E}_{\x} (\ell((\bm{\theta}, \bm{\eta}, \x).
+% \end{equation}
+% \yima{Any particular clean (convergence) results and (alternating minmax) algorithms that we want to feature here? Just sufficient for the reader to understand the basics so that they can implement and apply  to practical problems.}
 
 \end{document}
