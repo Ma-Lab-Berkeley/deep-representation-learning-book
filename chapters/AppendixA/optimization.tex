@@ -165,6 +165,8 @@ In order to minimize the right-hand side, we can set \(h = 1/\beta\), which obta
 \end{equation}
 showing convergence to global optimum with exponentially decaying error. Notice that here we used a convergence rate to obtain a favorable \textit{step size} of \(h = 1/\beta\). This motif will re-occur in this section.
 
+We end this section with a caveat: learning a global optimum is (usually) impractically hard. Under certain conditions, we can ensure that the gradient descent iterates converge to a \textit{local optimum}. Also, under more relaxed conditions, we can ensure \textit{local} convergence, i.e., that the iterates converge to a (global or local) optimum if the sequence is initialized close enough to the optimum.
+
 \DP{TODO: Exercise based on convergence proof for PL condition + Lipschitz gradient.}
 
 \subsection{Preconditioned Gradient Descent for Badly-Conditioned Problems}
@@ -337,7 +339,7 @@ A stochastic gradient descent iteration with Nesterov momentum is as follows:
 \end{align}
 We do not go through a convergence proof (see Chapter 7 of \cite{garrigos2023handbook} for an example). However, Nesterov momentum handles our toy case in \Cref{fig:sgd_nonconvergence} easily (see the right-hand figure): it stops pinballing and eventually converges to the global optimum.
 
-We end with a caveat: one can show that Polyak momentum and Nesterov momentum are equivalent, for certain choices of parameter settings. Then it is also possible to show that a decaying learning rate schedule (i.e., the learning rate \(h\) depends on the iteration \(k\), and its limit is \(h_{k} \to 0\) as \(k \to \infty\)) with plain SGD (or PSGD) can mimic the effect of momentum. Namely, \cite{defazio2023optimal} shows that if the SGD algorithm lasts \(K\) iterations, the gradient norms are bounded \(\norm{\nabla \cL(\theta_{k})}_{2} \leq G\), and we define \(D := \norm{\theta_{0} - \theta^{\star}}_{2}\), then plain SGD iterates \(\theta_{k}\) satisfy the rate \(\Ex[\cL(\theta_{k}) - \cL(\theta^{\star})] \leq DG/\sqrt{K}\) --- but only so long as the learning rate \(h_{k} = (D/[G\sqrt{K}])(1 - k/K)\) decays \textit{linearly} with time. This matches learning rate schedules used in practice. Indeed such a theory of convex optimization can predict many empirical phenomena in deep networks \cite{schaipp2025surprising}, despite deep learning optimization being highly non-convex and non-smooth in the worst case.
+We end with a caveat: one can show that Polyak momentum and Nesterov momentum are equivalent, for certain choices of parameter settings. Then it is also possible to show that a decaying learning rate schedule (i.e., the learning rate \(h\) depends on the iteration \(k\), and its limit is \(h_{k} \to 0\) as \(k \to \infty\)) with plain SGD (or PSGD) can mimic the effect of momentum. Namely, \cite{defazio2023optimal} shows that if the SGD algorithm lasts \(K\) iterations, the gradient norms are bounded \(\norm{\nabla \cL(\theta_{k})}_{2} \leq G\), and we define \(D := \norm{\theta_{0} - \theta^{\star}}_{2}\), then plain SGD iterates \(\theta_{k}\) satisfy the rate \(\Ex[\cL(\theta_{k}) - \cL(\theta^{\star})] \leq DG/\sqrt{K}\) --- but only so long as the learning rate \(h_{k} = (D/[G\sqrt{K}])(1 - k/K)\) decays \textit{linearly} with time. This matches learning rate schedules used in practice. Indeed, surprisingly, such a theory of convex optimization can predict many empirical phenomena in deep networks \cite{schaipp2025surprising}, despite deep learning optimization being highly non-convex and non-smooth in the worst case. It is so far unclear why this is the case.
 
 
 \subsection{Putting Everything Together: Adam}
@@ -352,11 +354,11 @@ where (recall) \(\vv_{k}\) is chosen to be (proportional to) the steepest descen
 \end{equation}
 However, in the context of deep learning optimization, there is absolutely nothing which implies that we have to use the Euclidean norm; indeed the ``natural geometry'' of the space of parameters is not well-respected by the Euclidean norm, since small changes in the parameter space can lead to very large differences in the output space, for a particular fixed input to the network. If we were instead to use a generic norm \(\norm{\cdot}\) on the parameter space \(\R^{n}\), we would get some other quantity corresponding to the so-called \textit{dual norm}:
 \begin{equation}
-    \varphi_{k} \in \argmin_{\substack{\vv \in \R^{n} \\ \norm{\vv} = 1}}\ip{\nabla \cL(\theta_{k})}{\vv}.
+    \vv_{k} \in \argmin_{\substack{\vv \in \R^{n} \\ \norm{\vv} = 1}}\ip{\nabla \cL(\theta_{k})}{\vv}.
 \end{equation}
 For instance, if we were to use the \(\ell^{\infty}\)-norm, it is possible to show that 
 \begin{equation}
-    \varphi_{k} = -\sign(\nabla \cL(\theta_{k})) \in \argmin_{\substack{\vv \in \R^{n} \\ \norm{\vv}_{\infty} = 1}}\ip{\nabla \cL(\theta_{k})}{\vv},
+    \vv_{k} = -\sign(\nabla \cL(\theta_{k})) \in \argmin_{\substack{\vv \in \R^{n} \\ \norm{\vv}_{\infty} = 1}}\ip{\nabla \cL(\theta_{k})}{\vv},
 \end{equation}
 where \(\sign(\vx)_{i} = \sign(x_{i}) \in \{-1, 0, 1\}\). Thus if we were so-inclined, we could use the so-called \textit{sign-gradient descent}:
 \begin{equation}\label{eq:sign_gradient_descent}
@@ -391,6 +393,47 @@ Another way to view Adam, which partially explains its empirical success, is tha
 \end{equation}
 where \(\eta_{k}\) is the parameter-wise adaptively set learning rate. This scheme is called adaptive because if the gradient of a particular parameter is large up to iteration \(k\), then the learning rate for this parameter becomes smaller to compensate, and vice versa, as can be seen from the above equation.
 
+
+% \subsection{Theoretical Toolkit: Gradient Flow}
+
+% Let us suppose that the sequence of parameters \(\theta_{k}\) generated by \textit{gradient descent} with step size \(h\) were actually sampled from a differentiable function \(\theta \colon \R \to \R^{n}\), where \(\theta(kh) = \theta_{k}\). What would the laws governing this continuous-time realization look like?
+
+% To explore this, let us write out the gradient descent dynamics
+% \begin{equation}
+%     \theta_{k + 1} = \theta_{k} - h\nabla \cL(\theta_{k}).
+% \end{equation}
+% Defining \(\theta(\cdot)\) as above, i.e.,
+% \begin{equation}
+%     \theta(t) = \theta_{\floor{t/h}}, \qquad \forall t.
+% \end{equation}
+% It holds that
+% \begin{equation}
+%     \theta(t + h) = \theta_{\floor{(t + h)/h}} = \theta_{\floor{t/h} + 1} = \theta_{\floor{t/h}} - h\nabla \cL(\theta_{\floor{t/h}}) = \theta(t) - h\nabla \cL(\theta(t)).
+% \end{equation}
+% Dividing both sides by \(h\) and taking the limit \(h \to 0\), it holds 
+% \begin{equation}
+%     \dot{\theta}(t) = \lim_{h \to 0}\frac{\theta(t + h) - \theta(t)}{h} = -\cL(\theta(t)),
+% \end{equation}
+% where \(\dot{\theta}(t) = \odv{\theta}{t}(t)\) is the time-derivative of \(\theta\). The continuous-time dynamics of \(\theta\) are therefore given by the so-called \textit{gradient flow} ODE
+% \begin{equation}
+%     \dot{\theta}(t) = -\nabla \cL(\theta(t)).
+% \end{equation}
+% Notice that the continuous-time gradient flow and the discrete-time gradient descent are not necessarily equal to each other for any finite step size \(h\). Nonetheless, for sufficiently small \(h\), it is often possible to show that the approximation error between \(\theta_{\floor{t/h}}\) and \(\theta(t)\) is small.
+
+% Often, theoretical results in the literature are about the gradient flow rather than the gradient descent. There are several reasons for this, aptly summarized in the blog post \cite{bach2020effortless}. The main pro and con are:
+% \begin{itemize}
+%     \item The analysis of gradient flow is greatly simplified, as we do not need to consider step sizes, and calculus makes proving certain identities much easier compared to bounding finite sums.
+%     \item However, the analysis of gradient flow is hard to rigorously transfer to discrete-time gradient descent. Still, gradient flow is usually a good approximation to gradient descent with very small step sizes.
+% \end{itemize}
+% Notably, it is possible to devise models for Nesterov-momentum GD, Adam, and SGD; the former two are left as exercises, while the latter is out of scope of this book as it requires more sophisticated mathematical modeling than is presented in the book.
+
+% To show why gradient flow is so much nicer to analyze, we show that \(\cL\) decreases along the gradient flow even when it is nonconvex, i.e.,
+% \begin{equation}
+%     \odv*{\cL(\theta(t))}{t} = \ip{\dot{\theta}(t)}{\nabla_{\theta}\cL(\theta(t))} = -\norm{\nabla_{\theta}\cL(\theta(t))}_{2}^{2} \leq 0.
+% \end{equation}
+% Therefore, running gradient flow will make \(\cL\) not increase. If \(\cL\) is bounded below, then it is easy to show that \(\cL(\theta(t))\) will eventually converge, even if \(\theta(t)\) does not necessarily converge. It is also easy to show (proof as exercise) that if \(\theta(t)\) converges to \(\theta_{\infty}\) then \(\theta_{\infty}\) is a stationary point of \(\cL\), i.e., \(\nabla \cL(\theta_{\infty}) = \vzero\).
+
+% These are both very powerful guarantees that are not possible within the framework of gradient descent with finite nonzero step size. Thus, these results should serve as a warning: results for gradient flow can be much nicer than those possible for gradient descent.
 
 
 \section{Computing Gradients via Automatic Differentiation}
@@ -1018,13 +1061,13 @@ We'll finish this section by computing the adjoint derivative for a simple layer
 
 
 
-\section{Minimax Optimization}
+\section{Game Theory and Minimax Optimization} \label{sec:minimax}\label{sec:game_theory}
 
-In certain cases, such as in \Cref{ch:closed-loop}, a learning problem cannot be reduced to a single optimization problem but rather represents multiple potentially opposing components of the system try to each minimize their own objective. Examples of this paradigm include distribution learning via generative adversarial networks (GAN) and closed-loop transcription (CTRL). We will denote such a system as a \textit{two-player game}, where we have two ``players'' called Player 1 and Player 2 trying to minimize their objectives \(\cL^{1}\) and \(\cL^{2}\) respectively. Player 1 picks parameters \(\theta \in \Theta\) and Player 2 picks parameters \(\eta \in \Eta\).
+In certain cases, such as in \Cref{ch:closed-loop}, a learning problem cannot be reduced to a single optimization problem but rather represents multiple potentially opposing components of the system try to each minimize their own objective. Examples of this paradigm include distribution learning via generative adversarial networks (GAN) and closed-loop transcription (CTRL). We will denote such a system as a \textit{two-player game}, where we have two ``players'' (i.e., components) called Player 1 and Player 2 trying to minimize their objectives \(\cL^{1}\) and \(\cL^{2}\) respectively. Player 1 picks parameters \(\theta \in \Theta\) and Player 2 picks parameters \(\eta \in \Eta\). In this book we consider the special case of \textit{zero-sum games}, i.e., defining a common objective \(\cL\) such that \(\cL = -\cL^{1} = \cL^{2}\).
 
-Let us start with a very simple example: there exists functions \(u(\theta)\) and \(v(\eta)\) such that 
+Our first, very preliminary example is as follows. Suppose that there exists functions \(u(\theta)\) and \(v(\eta)\) such that 
 \begin{equation}
-    \cL^{1}(\theta, \eta) = u(\theta), \qquad \cL^{2}(\theta, \eta) = v(\eta).
+    \cL(\theta, \eta) = -u(\theta) + v(\eta).
 \end{equation}
 Then both players' objectives are independent of the other player, and the players should try to achieve their respective optima:
 \begin{equation}
@@ -1032,67 +1075,44 @@ Then both players' objectives are independent of the other player, and the playe
 \end{equation}
 The pair \((\theta^{\star}, \eta^{\star})\) is a straightforward special case of an \textit{equilibrium}: a situation where neither player will want to move, given the chance, since moving will end up making their own situation worse. However, not all games are so trivial; many have more complicated objectives and information structures.
 
-There are two types of two-player games that people normally consider. They correspond to different information structures:
-\begin{itemize}
-    \item Simultaneous games, where both players pick their parameters without advance knowledge of the other player's choice.
-    \item Sequential games, where one player (without loss of generality Player 1) picks their parameters before the other (i.e., Player 2), and the second player (i.e., Player 2) can use the full knowledge of the first player's (i.e., Player 1) play to make their choice. \yima{Is this the Stackelberg model?}
-\end{itemize}
-To each game we associate a different notion of \textit{equilibrium}, as follows.
-\begin{itemize}
-    \item For simultaneous games the correct notion of equilibrium is the \textit{Nash equilibrium}, or \textit{saddle point}. A pair \((\theta^{\star}, \eta^{\star})\) is a \textit{Nash equilibrium} when
-    \begin{equation}
-        \theta^{\star} \in \argmin_{\theta \in \Theta}\cL^{1}(\theta, \eta^{\star}), \qquad \eta^{\star} \in \argmin_{\eta \in \Eta}\cL^{2}(\theta^{\star}, \eta).
-    \end{equation}
-    That is, either player changing their option will increase their loss.
-    \item For sequential games the correct notion of equilibrium is the \textit{minimax equilibrium}. To explain this equilibrium, note that since Player 2 can choose \(\eta\) reactively to Player 1's choice \(\theta_{1}\), Player 2 would of course choose the \(\eta\) which minimizes \(\cL^{2}(\theta_{1}, \cdot)\). But of course a rational Player 1 would realize this, and so pick a \(\theta_{1}\) such that the worst-case \(\eta\) picked by Player 2 according to this rule is not too bad. More formally, let \(\cS^{2}(\theta) := \argmin_{\eta \in \Eta}\cL^{2}(\theta, \eta)\) be the set of \(\eta\) minimizing \(\cL^{2}(\theta, \eta)\), i.e., the set of all \(\eta\) which Player 2 is liable to play given that Player 1 has played \(\theta\). Then \((\theta^{\star}, \eta^{\star})\) is a minimax equilibrium if 
-    \begin{equation}
-        \theta^{\star} \in \argmin_{\theta \in \Theta}\max_{\eta \in \cS^{2}(\theta)}\cL^{1}(\theta, \eta), \qquad \eta^{\star} \in \argmin_{\eta  \in \Eta}\cL^{2}(\theta^{\star}, \eta).
-    \end{equation}
-\end{itemize}
-In the rest of the section, we will briefly discuss some algorithmic approaches to learn equilibria. The intuition you should have is that learning an equilibrium is like letting the different parts of the system automatically figure out tradeoffs between the different objectives they want to optimize. 
-
-The algorithmic template we can consider is the following \textit{gradient descent-ascent} (GDA) method:
-\begin{align}
-    \theta_{k + 1} &= \theta_{k} - \alpha_{k}\nabla_{\theta} \cL^{1}(\theta_{k}, \eta_{k}), \\ 
-    \eta_{k + 1} &= \eta_{k} - \beta_{k}\nabla_{\eta} \cL^{2}(\theta_{k}, \eta_{k})
-\end{align}
-In words, both sides will independently try to optimize their objectives \(\cL^{i}\) at each step using the learning rates \(\alpha_{k}\) and \(\beta_{k}\), crucially not necessarily equal to each other. This is totally sensible for our model problem where \(\cL^{1}(\theta, \eta) = u(\theta)\) and \(\cL^{2}(\theta, \eta) = v(\eta)\), but may not obviously lead to critical points or saddle points otherwise. In the sequel, we will how to make GDA learn a Nash equilibrium and a minimax equilibrium. \yima{I am not sure where this is done for Nash equilibrium? In Section A.3.1? It only discusses a special case and the message is mostly pessimistic and vague about any guarantee at all... }
-
-Throughout the book and in the rest of the appendices, we consider \textit{zero-sum games} where the objectives \(\cL^{1}\) and \(\cL^{2}\) are negatives of each other:
+In this book, the relevant game-theoretic formalism is a Stackelberg game (variously called sequential game). In this formalism, one player (without loss of generality Player 1, and also described as a \textit{leader}) picks their parameters before the other (i.e., Player 2, also described as a \textit{follower}), and the follower can use the full knowledge of the leader's choice to make their own choice. The correct notion of equilibrium for a Stackelberg game is a \textit{Stackelberg equilibrium}. To explain this equilibrium, note that since Player 2 (i.e., the follower) can choose \(\eta\) reactively to the choice \(\theta_{1}\) made by Player 1 (i.e., the leader), Player 2 would of course choose the \(\eta\) which minimizes \(\cL(\theta_{1}, \cdot)\). But of course a rational Player 1 would realize this, and so pick a \(\theta_{1}\) such that the worst-case \(\eta\) picked by Player 2 according to this rule is not too bad. More formally, let \(\cS(\theta) := \argmin_{\eta \in \Eta}\cL(\theta, \eta)\) be the set of \(\eta\) minimizing \(\cL(\theta, \eta)\), i.e., the set of all \(\eta\) which Player 2 is liable to play given that Player 1 has played \(\theta\). Then \((\theta^{\star}, \eta^{\star})\) is a Stackelberg equilibrium if 
 \begin{equation}
-    \cL^{1}(\theta, \eta) = -\cL(\theta, \eta) = -\cL^{2}(\theta, \eta).
+    \theta^{\star} \in \argmax_{\theta \in \Theta}\min_{\eta \in \cS(\theta)}\cL(\theta, \eta), \qquad \eta^{\star} \in \argmin_{\eta  \in \Eta}\cL(\theta^{\star}, \eta).
 \end{equation}
-Using this notation a Nash equilibrium becomes 
+Actually (proof as exercise), one can show that in the context of two-player zero-sum Stackelberg games, \((\theta^{\star}, \eta^{\star})\) is a Stackelberg equilibrium if and only if
 \begin{equation}
-    \theta^{\star} \in \argmax_{\theta \in \Theta}\cL(\theta, \eta^{\star}), \qquad \eta^{\star} \in \argmin_{\eta \in \Eta}\cL(\theta^{\star}, \eta),
+    \theta^{\star} \in \argmax_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta), \qquad \eta^{\star} \in \argmin_{\eta  \in \Eta}\cL(\theta^{\star}, \eta),
 \end{equation}
-and a minimax equilibrium becomes 
-\begin{equation}
-    \theta^{\star} \in \argmax_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta), \qquad \eta^{\star} \in \argmin_{\eta \in \Eta}\cL(\theta^{\star}, \eta).
-\end{equation}
+(note that the notation \(\cS(\theta)\) is not used nor needed). 
 \begin{proof} \DP{Just to convince myself this is true; feel free to comment.}
     Note that 
     \begin{equation}
-        \cS^{2}(\theta) = \argmin_{\eta \in \Eta}\cL^{2}(\theta, \eta) = \argmin_{\eta \in \Eta}\cL(\theta, \eta),
+        \cS(\theta) = \argmin_{\eta \in \Eta}\cL(\theta, \eta),
     \end{equation}
     so it holds 
     \begin{equation}
-        \min_{\eta \in \cS^{2}(\theta)}\cL(\theta, \eta) = \min_{\eta \in \argmin_{\eta^{\prime} \in \Eta}\cL(\theta, \eta^{\prime})}\cL(\theta, \eta) = \min_{\eta \in \Eta}\cL(\theta, \eta).
+        \min_{\eta \in \cS(\theta)}\cL(\theta, \eta) = \min_{\eta \in \argmin_{\eta^{\prime} \in \Eta}\cL(\theta, \eta^{\prime})}\cL(\theta, \eta) = \min_{\eta \in \Eta}\cL(\theta, \eta).
     \end{equation}
 \end{proof}
+
+In the rest of the section, we will briefly discuss some algorithmic approaches to learn Stackelberg equilibria. The intuition you should have is that learning an equilibrium is like letting the different parts of the system automatically figure out tradeoffs between the different objectives they want to optimize. 
 
 We end this section with a caveat: in two-player zero-sum games, if it holds that
 \begin{equation}
     \max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta) = \min_{\eta \in \Eta}\max_{\theta \in \Theta}\cL(\theta, \eta)
 \end{equation}
-then every Nash equilibria is a minimax equilibria \textit{and vice versa}, and furthermore each Nash/minimax equilibrium has the (same) objective value \(\max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta)\).
+then every Stackelberg equilibrium is a saddle point,\footnote{Famously called a \textit{Nash equilibrium}.} i.e., 
+\begin{equation}
+    \theta^{\star} \in \argmax_{\theta \in \Theta}\cL(\theta, \eta^{\star}), \qquad \eta^{\star} \in \argmin_{\eta \in \Eta}\cL(\theta^{\star}, \eta),
+\end{equation}
+\textit{and vice versa}, and furthermore each Stackelberg equilibrium has the (same) objective value \(\max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta)\).
 \begin{proof} \DP{Just to convince myself this is true; feel free to comment.}
     Suppose that indeed 
     \begin{equation}
         \max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta) = \min_{\eta \in \Eta}\max_{\theta  \in \Theta}\cL(\theta, \eta).
     \end{equation}
 
-    First suppose that \((\theta^{\star}, \eta^{\star})\) is a Nash equilibrium. We will show it is a minimax equilibrium. By definition we have 
+    First suppose that \((\theta^{\star}, \eta^{\star})\) is a saddle point. We will show it is a Stackelberg equilibrium. By definition we have 
     \begin{equation}
         \min_{\eta \in \Eta}\cL(\theta^{\star}, \eta) = \cL(\theta^{\star}, \eta^{\star}) = \max_{\theta \in \Theta}\cL(\theta, \eta^{\star}).
     \end{equation}
@@ -1114,11 +1134,11 @@ then every Nash equilibria is a minimax equilibria \textit{and vice versa}, and 
     \end{equation}
     In particular, it holds that
     \begin{equation}
-        \theta^{\star} \in \argmax_{\theta \in \Theta}\min(\eta \in \Eta)\cL(\theta, \eta).
+        \theta^{\star} \in \argmax_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta).
     \end{equation}
-    From the condition of Nash equilibrium we have \(\eta^{\star} \in \argmin_{\eta \in \Eta}\cL(\theta^{\star}, \eta)\). So \((\theta^{\star}, \eta^{\star})\) is a minimax equilibrium. Furthermore we have also proved that all Nash equilibria obey \eqref{eq:nash_equilibrium_minmax_maxmin}.
+    From the saddle point condition we have \(\eta^{\star} \in \argmin_{\eta \in \Eta}\cL(\theta^{\star}, \eta)\). So \((\theta^{\star}, \eta^{\star})\) is a Stackelberg equilibrium. Furthermore we have also proved that all saddle points obey \eqref{eq:nash_equilibrium_minmax_maxmin}.
 
-    Now let \((\theta^{\star}, \eta^{\star})\) be a minimax equilibrium. We claim that it is a Nash equilibrium, which completes the proof. By the definition of minimax equilibrium,
+    Now let \((\theta^{\star}, \eta^{\star})\) be a Stackelberg equilibrium. We claim that it is a saddle point, which completes the proof. By the definition of minimax equilibrium,
     \begin{equation}
         \max_{\theta \in \Theta}\min_{\eta \in \Eta}\cL(\theta, \eta) = \cL(\theta^{\star}, \eta^{\star}).
     \end{equation}
@@ -1148,83 +1168,179 @@ then every Nash equilibria is a minimax equilibria \textit{and vice versa}, and 
     \end{equation}
     and the proof is complete.
 \end{proof}
-Conditions under which this equality holds are given by so-called \textit{minimax theorems}; the most famous of these is a theorem of von Neumann. However, in the cases we think about, this property usually does not hold.
+Conditions under which the \(\min\max = \max\min\) equality holds are given by so-called \textit{minimax theorems}; the most famous of these is a theorem of von Neumann. However, in the cases we think about, this property usually does not hold.
 
-\subsection{Learning Nash Equilibria}
+\subsection{Learning Stackelberg Equilibria}
 
-When is it feasible to learn Nash equilibria via GDA? Let us consider a slightly advanced version of our very basic model problem, i.e.,
+How can we learn Stackelberg equilibria via GDA? In general this is clearly impossible, since learning Stackelberg equilibria via GDA is obviously at least as hard as computing a global minimizer of a loss function (say by setting the shared objective \(\cL(\theta, \eta)\) to only be a function of \(\eta\)). As such, we can achieve two types of convergence guarantees:
+\begin{itemize}
+    \item When \(\cL\) is (strongly) concave in the first argument \(\theta\) and (strongly) convex in the second argument \(\eta\) (as well as having Lipschitz gradients in both arguments), we can achieve exponentially fast convergence to a Stackelberg equilibrium.
+    \item When \(\cL\) is not concave or convex in either argument, we can achieve \textit{local convergence guarantees}: namely, if we initialize the parameter values near a (local) Stackelberg equilibrium and the optimization geometry is good then we can learn that equilibrium efficiently. 
+\end{itemize}
+
+The former situation is exactly analogous to the case of single-player optimization, where we proved that gradient descent converges exponentially fast for strongly convex objectives which have Lipschitz gradient. The latter situation is also analogous to the case of single-player optimization, although we did not cover it in depth due to technical difficulty; indeed there exist local convergence guarantees for nonconvex objectives which have locally nice geometry.
+
+The algorithm in these two cases is the same algorithm, called Gradient Descent-Ascent (GDA). To motivate GDA, suppose we are trying to learn \(\theta^{\star}\). We could do gradient ascent on the function \(\theta \mapsto \min_{\eta \in \Eta}\cL(\theta, \eta)\). But then we would need to take the derivative in \(\theta\) of this function. To see how to do this, suppose that \(\cL\) is strongly convex in \(\eta\) so that there is one minimizer \(\eta^{\star}(\theta)\) of \(\cL(\theta, \cdot)\). Then, \textit{Danskin's theorem} says that
 \begin{equation}
-    \cL(\theta, \eta) = -u(\theta) + v(\eta).
+    \nabla_{\theta}\bs{\min_{\eta \in \Eta}\cL(\theta, \eta)} = \nabla_{\theta}\cL(\theta, \texttt{stop\_grad}(\eta^{\star}(\theta))),
 \end{equation}
-\yima{Why is this an advanced version? I am not so sure what are the main purpose of introducing these two special cases here.}
-Then the GDA update simplifies to
+where the gradient is \textit{only with respect to the first argument} (i.e., not a total derivative which would require computing the Jacobian of \(\eta^{\star}(\theta)\) with respect to \(\theta\)), indicated by the stop-gradient operator.\footnote{In the case that \(\cL\) is not strongly convex in \(\eta\) but rather just convex, Danskin's theorem can be stated in terms of subdifferentials. If \(\cL\) is not convex at all in \(\eta\), then this derivative may not be well-defined, but one can obtain (local) convergence guarantees for the resulting algorithm anyways. Hence we use Danskin's theorem as a motivation and not a justification for our algorithms. Danskin's thoerems can be generalized into more relaxed circumstances by the so-called \textit{envelope theorems}.}
+In order to take the derivative in \(\theta\), we need to set up a \textit{secondary process} to also optimize \(\eta\) to obtain an approximation for \(\eta^{\star}(\theta)\). We can do this through the following algorithmic template:
+\begin{align}
+    &\eta_{k + 1} = \eta_{k + 1}^{T + 1}; \qquad \eta_{k + 1}^{t + 1} = \eta_{k + 1}^{t} - h \nabla_{\eta} \cL(\theta_{k}, \eta_{k + 1}^{t}), \quad \forall t \in [T]; \qquad \eta_{k + 1}^{1} = \eta_{k} \\
+    &\theta_{k + 1} = \theta_{k} + h \nabla_{\theta}\cL(\theta_{k}, \eta_{k + 1}).
+\end{align}
+That is, we take \(T\) steps of gradient descent to update \(\eta_{k}\) (hopefully to the minimizer of \(\cL(\theta_{k}, \cdot)\)), and then take a gradient ascent step to update \(\theta_{k}\). As a bonus, on top of estimating \(\theta_{K} \approx \argmax_{\theta}\min_{\eta}\cL(\theta, \eta)\), we also learn an \(\eta_{K} \approx \argmin_{\eta}\cL(\theta_{K}, \eta)\) --- this is an approximate Stackelberg equilibrium.
+
+This method is often not done in practice, as it requires \(T + 1\) total gradient descent iterations to update \(\theta\) once. Instead, we use the so-called \textit{(simultaneous) Gradient Descent-Ascent} (GDA) iteration
 \begin{align}
     \theta_{k + 1}
-    &= \theta_{k} - \alpha_{k}\nabla u(\theta_{k}) \\ 
+    &= \theta_{k} + h\nabla_{\theta}\cL(\theta_{k}, \eta_{k}) \\ 
     \eta_{k + 1}
-    &= \eta_{k} - \beta_{k} \nabla v(\eta_{k}).
+    &= \eta_{k} - Th\nabla_{\eta}\cL(\theta_{k}, \eta_{k}),
 \end{align}
-This decomposes into two optimization problems, which can each be provably solved by gradient descent under certain conditions on \(u\) and \(v\) --- say, \(u\) and \(v\) are both convex. We can also implement step size scheduling and/or momentum in the gradient descent update, and achieve corresponding speedups as in the vanilla optimization setting.
+which can be implemented efficiently via a single gradient step on \((\theta, \eta)\). The crucial idea here is, to make our method close to the inefficient iteration above, we use an \(\eta\) update which is \(T\) times faster than the \(\theta\) update (these can be seen as nearly the same by taking a linearization of the dynamics).
 
-More often the objective \(\cL\) is not separable and more complicated. Regardless, the same idea holds in more complex situations. A common model problem, although it is still much too simple to model real problems, involves a quadratic objective:
+It is crucial to pick \(T\) sensibly. How can we do that? In the sequel, we discuss two configurations of \(T\) which lead to convergence of GDA to a Stackelberg equilibrium under different assumptions.
+
+\subsubsection{Convergence of One-Timescale GDA to Stackelberg Equilibrium}
+
+If \(T = 1\) (i.e., named \textit{one-timescale} because both \(\theta\) and \(\eta\) updates are of the same scale), then the GDA algorithm becomes 
 \begin{equation}
-    \cL(\theta, \eta) = \frac{1}{2}\theta^{\top}\vP\theta + \theta^{\top}\vQ\eta + \frac{1}{2}\eta^{\top}\vR\eta 
+    \theta_{k + 1} = \theta_{k} + h\nabla_{\theta}\cL(\theta_{k}, \eta_{k}), \qquad \eta_{k + 1} = \eta_{k} - h\nabla_{\eta}\cL(\theta_{k}, \eta_{k}).
 \end{equation}
-where \(\vP\) is symmetric negative (semi)definite, \(\vR\) is symmetric positive (semi)definite, and \(\vQ\) is a symmetric matrix. The GDA algorithm becomes 
+If \(\cL\) has Lipschitz gradients in \(\theta\) and \(\eta\), and is strongly concave in \(\theta\) and strongly convex in \(\eta\), and is coercive (i.e.,\(\lim_{\norm{\theta}_{2}, \norm{\eta}_{2} \to \infty}\cL(\theta, \eta) = \infty\)), then all saddle points are Stackelberg equilibria and vice versa. The work \cite{zamani2024convergence} shows that GDA (again, with \(T = 1\)) with sufficiently small step size \(h\) converges to a saddle point (hence Stackelberg equilibrium) exponentially fast if one exists, analogously to gradient descent for strongly convex functions with Lipschitz gradient.\footnote{We do not provide the step size or exponential base since they are complicated functions of the strong convexity/concavity/Lipschitz constant of the gradient. Of course, the paper \cite{zamani2024convergence} provides the precise parameter values.} To our knowledge, this flavor of results constitute the only known rigorous justification for single-timescale GDA.
+
+\subsubsection{Local Convergence of Two-Timescale GDA to Stackelberg Equilibrium}
+
+Strong convexity/concavity is a \textit{global} property, and none of the games we look into in this book have objectives which are globally strongly concave/strongly convex. In this case, the best we can hope for is \textit{local} convergence to Stackelberg equilibria: if the parameters are initialized close to a Stackelberg equilibrium, then GDA can converge onto it, given an appropriate step size \(h\) and timescale \(T\). 
+
+In fact, our results also hold for a version of the \textit{local} Stackelberg equilibrium called the \textit{differential Stackelberg equilibrium}, which was introduced in \cite{fiez2019convergence} (though we use the precise definition in \cite{li2022convergence}), and which we define as follows. A point \((\theta^{\star}, \eta^{\star})\) is a differential Stackelberg equilibrium if:
+\begin{itemize}
+    \item \(\nabla_{\eta}\cL(\theta^{\star}, \eta^{\star}) = \vzero\);
+    \item \(\nabla_{\eta}^{2}\cL(\theta^{\star}, \eta^{\star})\) is symmetric positive definite;
+    \item \(\nabla_{\theta}\cL(\theta^{\star}, \eta^{\star}) = \vzero\);
+    \item \((\nabla_{\theta}^{2}\cL + [\odv*{\nabla_{\eta}\cL}{\theta}][\nabla_{\eta}^{2}\cL]^{-1}[\odv*{\nabla_{\theta}\cL}{\eta}])(\theta^{\star}, \eta^{\star})\) is symmetric negative definite.
+\end{itemize}
+Notice that the last condition asks for the (total) Hessian
+\begin{equation}
+    \nabla^{2} \cL(\theta, \eta) = \mat{\nabla_{\theta}^{2}\cL(\theta, \eta) & \odv*{\nabla_{\theta}^{2}\cL(\theta, \eta)}{\eta} \\ \odv*{\nabla_{\eta\theta}^{2}\cL(\theta, \eta)}{\theta} & \nabla_{\eta}^{2}\cL(\theta)}
+\end{equation}
+or, equivalently, its Schur complement to be negative definite. If we look at the computation of \(\nabla_{\theta}[\min_{\eta \in \Eta}\cL(\theta, \eta)]\) furnished by Danskin's theorem, the last two criteria are actually constraints on the gradient and Hessian of the function \(\theta \mapsto \min_{\eta \in \Eta}\cL(\theta, \eta)\), ensuring that the gradient is \(0\) and the Hessian is negative semidefinite. This intuition tells us that we can expect that each Stackelberg equilibrium is a differential Stackelberg equilibrium; \cite{fiez2020implicit} confirms this rigorously (up to some technical conditions).
+
+Analogously to the notion of strict local optimum in single-player optimization (where we require \(\nabla^{2}\cL(\theta^{\star})\) to be positive semidefinite), the definition of differential Stackelberg equilibrium \textit{implies that \(\cL(\theta, \cdot)\) is locally (strictly) convex in a neighborhood of the equilibrium, and that \(\min_{\eta \in \Eta}\cL(\cdot, \eta)\) is locally (strictly) concave in the same region}.
+
+In this context, we present the result from \cite{li2022convergence}. Let \((\theta^{\star}, \eta^{\star})\) be a differential Stackelberg equilibrium. Suppose that \(\cL\) has Lipschitz gradients, i.e.,
+\begin{equation}
+    \max\rc{\norm{\nabla_{\theta}^{2}\cL(\theta^{\star}, \eta^{\star})}_{2}, \norm*{\nabla_{\eta}^{2}\cL(\theta^{\star}, \eta^{\star})}_{2},  \norm*{\odv*{\nabla_{\theta}\cL(\theta^{\star}, \eta^{\star})}{\eta}}_{2}} \leq \beta.
+\end{equation}
+Further define the local strong convexity/concavity parameters of \(\cL(\theta, \cdot)\) and \(\min_{\eta}\cL(\cdot, \eta)\) respectively as
+\begin{equation}
+    \mu_{\eta} = \lambda_{\min}(\nabla_{\eta}^{2}\cL(\theta^{\star}, \eta^{\star})), \qquad \mu_{\theta} = \min\rc{\beta, -\bp{\nabla_{\theta}^{2}\cL + \rs{\odv*{\nabla_{\eta}\cL}{\theta}}\rs{\nabla_{\eta}^{2}\cL}^{-1}\rs{\odv*{\nabla_{\theta}\cL}{\eta}}}(\theta^{\star}, \eta^{\star})}.
+\end{equation}
+Then define the local condition numbers as 
+\begin{equation}
+    \kappa_{\eta} = L/\mu_{\eta}, \qquad \kappa_{\theta} = L/\mu_{\theta}.
+\end{equation}
+The paper \cite{li2022convergence} says that if we take step size \(h = \frac{1}{4\beta T}\) and take \(T \geq 2\kappa\), so that the algorithm is 
 \begin{align}
     \theta_{k + 1}
-    &= \theta_{k} + \alpha_{k}(\vP\theta + \vQ\eta) \\ 
+    &= \theta_{k} + \frac{1}{4\beta T}\nabla_{\theta} \cL(\theta_{k}, \eta_{k}), \\
     \eta_{k + 1}
-    &= \eta_{k} - \beta_{k}(\vR\eta + \vQ\theta).
+    &= \eta_{k} - \frac{1}{4\beta}\nabla_{\eta} \cL(\theta_{k}, \eta_{k}),
 \end{align}
-There are even very simple cases for which GDA does not converge. For example, if we take \(\alpha_{k} = \beta_{k} = 1\) and \(\vP = -\vI\), \(\vQ = -\vI\), and \(\vR = \vI\), then it holds 
+the total Hessian \(\nabla^{2}\cL(\theta^{\star}, \eta^{\star})\) is diagonalizable, and we initialize \((\theta_{0}, \eta_{0})\) close enough to \((\theta^{\star}, \eta^{\star})\), then there are positive constants \(c_{0}, c_{1} > 0\) such that 
 \begin{equation}
-    \theta_{k + 1} = -\eta_{k}, \qquad \eta_{k + 1} = \theta_{k}
+    \norm{(\theta_{k}, \eta_{k}) - (\theta^{\star}, \eta^{\star})}_{2} \leq c_{0}\bp{1 - \frac{c_{1}}{T\kappa_{\theta}}}^{k}\norm{(\theta_{0}, \eta_{0}) - (\theta^{\star}, \eta^{\star})}_{2},
 \end{equation}
-which will not converge to an equilibrium. Having a decaying step-size schedule or adding momentum will help convergence to a particular pair \((\theta, \eta)\). So far there has not been much analysis of whether this \((\theta, \eta)\) is a Nash equilibrium, at least when Nash and minimax equilibria do not coincide. 
-\yima{Any result at all that ensure the GDA produces the Nash equilibria, without too contrived conditions?}
+implying exponential convergence to the differential Stackelberg equilibrium.
+
+\subsection{Practical Considerations when Learning Stackelberg Equilibria}
+
+In practice, we do not know how to initialize parameters close to a (differential) Stackelberg equilibrium. Due to symmetries within the objective, including those induced by overparameterization of the neural networks being trained, one can (heuristically) expect that most initializations are close to a Stackelberg equilibrium. Also, we do not know how to compute the step size \(h\) or the timescale \(T\), since they are dependent on properties of the loss \(\cL\) at the equilibrium. In practice, there are some common approaches:
+\begin{itemize}
+    \item Take \(T = 1\) (equal step-sizes), and use updates for \(\theta\) and \(\eta\) that are derived from a learning-rate-adaptive optimizer like Adam (as opposed to vanilla GD). Here, you \textit{hope} (but do not \textit{know}) that the optimizer can adjust the learning rates to learn a good equilibrium.
+    \item Take \(T\) to be some constant like \(T = 10^{6}\) which implies that \(\eta\) equilibrates \(10^{6}\) times as fast as \(\theta\). Here you can also use Adam-style updates, and hope that it fixes the time scale.
+    \item Let \(T\) depend on the iteration \(k\), and let \(T_{k} \to \infty\) as \(k \to \infty\). This schedule was studied (also in the case of noise) by Borkar in \cite{borkar1997stochastic}.
+\end{itemize}
+For example, you can use this while training CTRL-style models (see \Cref{ch:closed-loop}), where the encoder is Player \(1\) and the decoder is Player \(2\). Some theory about CTRL is given in \Cref{thm:ctrl_theory}.
 
 
-\subsection{Learning Minimax Equilibria}
+% \subsection{Learning Nash Equilibria}
 
-Recall that the definition of a minimax equilibrium \((\theta^{\star}, \eta^{\star})\) has \(\theta^{\star} \in \argmax_{\theta}\min_{\eta}\cL(\theta, \eta)\). Thus to learn a minimax equilibrium, the basic idea and motivation is: \textit{\(\theta\) should optimize the function \(\theta \mapsto \min_{\eta}\cL(\theta, \eta)\).} So how can we take gradient updates on this function? To do this we use a result called \textit{Danskin's theorem}, which says that if the minimizing \(\eta\), say \(\eta^{\star}(\theta) \in \argmin_{\eta}\cL(\theta, \eta)\), is unique, and \(\cL\) is continuously differentiable in \(\theta\) at \((\theta, \eta^{\star}(\theta))\), then we have 
-\begin{equation}
-    \nabla_{\theta} \bs{\min_{\eta \in \Eta}\cL(\theta, \eta)} = \nabla_{\theta}\cL(\theta, \eta^{\star}(\theta)).
-\end{equation}
-Thus, in an ideal world under the above conditions\footnote{If the minimizer is not unique, it is often still possible to show that the following algorithms converge. The uniqueness condition just serves as a rigorously justified motivation in an idealistic case.}, we could run the following type of algorithm to learn a minimax equilibrium:
-\begin{align}
-    \theta_{k + 1}
-    &= \theta_{k} + \alpha_{k}\nabla_{\theta}\cL(\theta_{k}, \eta^{\star}(\theta_{k})) \\ 
-    \eta_{k + 1}
-    &= \eta_{k} - \beta_{k}\nabla_{\eta}\cL(\theta_{k}, \eta_{k}).
-\end{align}
-\yima{Is the above gradient against $\theta$ a total derivative against both $\theta_k$'s?}
+% When is it feasible to learn Nash equilibria via GDA? Let us consider a slightly advanced version of our very basic model problem, i.e.,
+% \begin{equation}
+%     \cL(\theta, \eta) = -u(\theta) + v(\eta).
+% \end{equation}
+% \yima{Why is this an advanced version? I am not so sure what are the main purpose of introducing these two special cases here.}
+% Then the GDA update simplifies to
+% \begin{align}
+%     \theta_{k + 1}
+%     &= \theta_{k} - \alpha_{k}\nabla u(\theta_{k}) \\ 
+%     \eta_{k + 1}
+%     &= \eta_{k} - \beta_{k} \nabla v(\eta_{k}).
+% \end{align}
+% This decomposes into two optimization problems, which can each be provably solved by gradient descent under certain conditions on \(u\) and \(v\) --- say, \(u\) and \(v\) are both convex. We can also implement step size scheduling and/or momentum in the gradient descent update, and achieve corresponding speedups as in the vanilla optimization setting.
 
-However, we cannot compute \(\eta^{\star}\) without yet more iterations of an optimization algorithm (such as gradient descent). Thus, in practice, we can take many (say \(T\)) iterations of \(\eta\) updates for each update of \(\theta\), i.e.,
-\begin{align}
-    \theta_{k + 1}
-    &= \theta_{k} + \alpha_{k}\nabla_{\theta}\cL(\theta_{k}, \eta_{k}) \\
-    \eta_{k + 1}
-    &= \eta_{k}^{T}; \qquad \eta_{k}^{t + 1} = \eta_{k}^{t} - \beta_{k}\nabla_{\eta} \cL(\theta_{k + 1}, \eta_{k}^{t}) \quad \forall t \in [T]; \qquad \eta_{k}^{1} = \eta_{k}.
-\end{align}
-\yima{Even if $\eta_k$ is accurate, the gradient against $\theta$ is only a partial derivative against the first $\theta_k$? That is different from the total derivative we want... Maybe some clarification is needed? Precisely under what conditions can convergence of algorithms of this type be established?}
+% More often the objective \(\cL\) is not separable and more complicated. Regardless, the same idea holds in more complex situations. A common model problem, although it is still much too simple to model real problems, involves a quadratic objective:
+% \begin{equation}
+%     \cL(\theta, \eta) = \frac{1}{2}\theta^{\top}\vP\theta + \theta^{\top}\vQ\eta + \frac{1}{2}\eta^{\top}\vR\eta 
+% \end{equation}
+% where \(\vP\) is symmetric negative (semi)definite, \(\vR\) is symmetric positive (semi)definite, and \(\vQ\) is a symmetric matrix. The GDA algorithm becomes 
+% \begin{align}
+%     \theta_{k + 1}
+%     &= \theta_{k} + \alpha_{k}(\vP\theta + \vQ\eta) \\ 
+%     \eta_{k + 1}
+%     &= \eta_{k} - \beta_{k}(\vR\eta + \vQ\theta).
+% \end{align}
+% There are even very simple cases for which GDA does not converge. For example, if we take \(\alpha_{k} = \beta_{k} = 1\) and \(\vP = -\vI\), \(\vQ = -\vI\), and \(\vR = \vI\), then it holds 
+% \begin{equation}
+%     \theta_{k + 1} = -\eta_{k}, \qquad \eta_{k + 1} = \theta_{k}
+% \end{equation}
+% which will not converge to an equilibrium. Having a decaying step-size schedule or adding momentum will help convergence to a particular pair \((\theta, \eta)\). So far there has not been much analysis of whether this \((\theta, \eta)\) is a Nash equilibrium, at least when Nash and minimax equilibria do not coincide. 
+% \yima{Any result at all that ensure the GDA produces the Nash equilibria, without too contrived conditions?}
 
-In practice, letting \(\eta\) take \(T\) steps to update once is computationally inefficient. Letting \(\eta\) equilibrate simultaneously with \(\theta\) can be approximated by the same algorithmic template as before, i.e.,
-\begin{align}
-    \theta_{k + 1}
-    &= \theta_{k} + \alpha_{k}\nabla_{\theta}\cL(\theta_{k}, \eta_{k}) \\
-    \eta_{k + 1}
-    &= \eta_{k} - \beta_{k}\nabla_{\eta}\cL(\theta_{k}, \eta_{k})
-\end{align}
-\textit{with different step size scales} (also called \textit{time scales}). Namely, we must have 
-\begin{equation}
-    \lim_{k \to \infty}\alpha_{k} = \lim_{k \to \infty}\beta_{k} = \lim_{k \to \infty}\frac{\alpha_{k}}{\beta_{k}} = 0,
-\end{equation}
-in order to establish convergence to (local) minimax optima. \yima{Any reference on when this works? under what conditions, if not too complicated or contrived?}
 
-\DP{@YM: what figures can we put here? The pictures I can make look strikingly like the vanilla optimization problem.}
+% \subsection{Learning Minimax Equilibria}
 
-\yima{In general, it is probably a good idea to point out which games or algorithms are more relevant to the problems interested in Chapter \ref{ch:closed-loop}... and establish some connnections.}
+% Recall that the definition of a minimax equilibrium \((\theta^{\star}, \eta^{\star})\) has \(\theta^{\star} \in \argmax_{\theta}\min_{\eta}\cL(\theta, \eta)\). Thus to learn a minimax equilibrium, the basic idea and motivation is: \textit{\(\theta\) should optimize the function \(\theta \mapsto \min_{\eta}\cL(\theta, \eta)\).} So how can we take gradient updates on this function? To do this we use a result called \textit{Danskin's theorem}, which says that if the minimizing \(\eta\), say \(\eta^{\star}(\theta) \in \argmin_{\eta}\cL(\theta, \eta)\), is unique, and \(\cL\) is continuously differentiable in \(\theta\) at \((\theta, \eta^{\star}(\theta))\), then we have 
+% \begin{equation}
+%     \nabla_{\theta} \bs{\min_{\eta \in \Eta}\cL(\theta, \eta)} = \nabla_{\theta}\cL(\theta, \eta^{\star}(\theta)).
+% \end{equation}
+% Thus, in an ideal world under the above conditions\footnote{If the minimizer is not unique, it is often still possible to show that the following algorithms converge. The uniqueness condition just serves as a rigorously justified motivation in an idealistic case.}, we could run the following type of algorithm to learn a minimax equilibrium:
+% \begin{align}
+%     \theta_{k + 1}
+%     &= \theta_{k} + \alpha_{k}\nabla_{\theta}\cL(\theta_{k}, \eta^{\star}(\theta_{k})) \\ 
+%     \eta_{k + 1}
+%     &= \eta_{k} - \beta_{k}\nabla_{\eta}\cL(\theta_{k}, \eta_{k}).
+% \end{align}
+% \yima{Is the above gradient against $\theta$ a total derivative against both $\theta_k$'s?}
+
+% However, we cannot compute \(\eta^{\star}\) without yet more iterations of an optimization algorithm (such as gradient descent). Thus, in practice, we can take many (say \(T\)) iterations of \(\eta\) updates for each update of \(\theta\), i.e.,
+% \begin{align}
+%     \theta_{k + 1}
+%     &= \theta_{k} + \alpha_{k}\nabla_{\theta}\cL(\theta_{k}, \eta_{k}) \\
+%     \eta_{k + 1}
+%     &= \eta_{k}^{T}; \qquad \eta_{k}^{t + 1} = \eta_{k}^{t} - \beta_{k}\nabla_{\eta} \cL(\theta_{k + 1}, \eta_{k}^{t}) \quad \forall t \in [T]; \qquad \eta_{k}^{1} = \eta_{k}.
+% \end{align}
+% \yima{Even if $\eta_k$ is accurate, the gradient against $\theta$ is only a partial derivative against the first $\theta_k$? That is different from the total derivative we want... Maybe some clarification is needed? Precisely under what conditions can convergence of algorithms of this type be established?}
+
+% In practice, letting \(\eta\) take \(T\) steps to update once is computationally inefficient. Letting \(\eta\) equilibrate simultaneously with \(\theta\) can be approximated by the same algorithmic template as before, i.e.,
+% \begin{align}
+%     \theta_{k + 1}
+%     &= \theta_{k} + \alpha_{k}\nabla_{\theta}\cL(\theta_{k}, \eta_{k}) \\
+%     \eta_{k + 1}
+%     &= \eta_{k} - \beta_{k}\nabla_{\eta}\cL(\theta_{k}, \eta_{k})
+% \end{align}
+% \textit{with different step size scales} (also called \textit{time scales}). Namely, we must have 
+% \begin{equation}
+%     \lim_{k \to \infty}\alpha_{k} = \lim_{k \to \infty}\beta_{k} = \lim_{k \to \infty}\frac{\alpha_{k}}{\beta_{k}} = 0,
+% \end{equation}
+% in order to establish convergence to (local) minimax optima. \yima{Any reference on when this works? under what conditions, if not too complicated or contrived?}
+
+% \DP{@YM: what figures can we put here? The pictures I can make look strikingly like the vanilla optimization problem.}
+
+% \yima{In general, it is probably a good idea to point out which games or algorithms are more relevant to the problems interested in Chapter \ref{ch:closed-loop}... and establish some connnections.}
 
 
 % As we have seen in Chapter \ref{ch:closed-loop}, the problem of learning the optimal encoder and decoder via a closed-loop transcription can be formulated as a two-player game.\footnote{This is also the case with the problem of learning a distribution via the generative adversarial network (GAN).} In such cases, we need to find stationary saddle points of a minmax problem:
