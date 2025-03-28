@@ -235,7 +235,7 @@ precisely coincides with $\vU_o$ when the dimension of the representation is
 sufficiently large. In this case, we obtain sample-wise consistency
 for free, since this guarantees that $\vU_o\vU_o^\top \vx = \vx$.
 Notice that in the case of PCA, the rate reduction term in
-\eqref{eqn:autoencode-objective} becomes void as the regularization
+\eqref{eqn:autoencode-objective-ch5} becomes void as the regularization
 on the representation $\Z$ sought is explicit: It spans the entire
 subspace of lower dimension\footnote{One may view $\Delta R = 0$ in this case.}.
 
@@ -1256,6 +1256,7 @@ sufficient part of $\X$, $\X_v$, is observed, it fully determines
 $\X$ hence the missing part $\X_m$. In other words, the distribution
 $p(\X \mid \X_v)$ is a generalized function -- the delta function.
 
+\subsection{Conditional Sampling with Measurement Matching}
 To generalize the above (image) completion problems, we may consider
 that a random vector $\vx$ is partially observed through a more
 general observation function:
@@ -1277,6 +1278,7 @@ generate samples $\x$ such that:
 \begin{equation}
 \x \sim   p(\x\mid \y).
 \end{equation}
+This problem is also known as the \href{https://arxiv.org/pdf/2209.14687}{Diffusion Posterior Sampling for General Noisy Inverse Problem}. 
 
 In Chapter
 \ref{ch:compression}, we have seen a natural and effective way to establish a
@@ -1285,20 +1287,27 @@ denoising process, which essentially establishes an autoencoding
 between a normal (Gaussian) distribution $p(\x_T) =
 \mathcal{N}(\mathbf{0}, \boldsymbol{I})$ and the distribution of the
 data $p(\x_0)$. Hence,  one can sample the data distribution by sampling the
-Gaussian distribution and solving the reverse (denoising) SDE:
+Gaussian distribution and solving the reverse (denoising) SDE:\yima{We did not quite use the SDE or DE notation in Chapter \ref{ch:compression}when discussing the denoising process. Reconcile please?} 
 \begin{equation}
-\odif\vx_t = - \nabla_{\vx_t} \log p_t(\vx_t) \odif t + \odif\vw_t.
+\odif\vx_t = - \nabla_{\vx_t} \log p_t(\vx_t) \odif t + \odif\vw_t,
 \end{equation}
+or via the deterministic differential equation:
+\begin{eqnarray}
+\odif\vx_t  &=& - \frac{1}{2} {\nabla_{\vx_t}
+\log p(\vx_t)}\odif t.
+\end{eqnarray}
 However, because such an autoencoding is only
 between two distributions, it is difficult to control the resulting
 sample $\vx_0$ by sampling $\vx_T$. As a result, most follow-up works for
 diffusion-/denoising-based generation tried to control the sampling
 process when certain conditions were given for the desired samples.
+
 \yima{Below we follow the survey paper on conditional sampling:
 \href{https://arxiv.org/pdf/2410.00083}{A Survey on Diffusion Models
 for Inverse Problems}.}
-
-From the Bayesian rule, we have:
+Now let us consider how to sample from the conditional distribution $p(\x\mid \y)$ given a measurement $\y = h(\x) + \vw$. From the Bayesian rule
+\
+we have:
 \begin{equation}
 \log p(\vx \mid \vy) = \log p(\vy \mid \vx) + \log p(\vx) - \log p(\vy).
 \label{eqn:Bayesian}
@@ -1318,6 +1327,26 @@ the observed $\vy$.
 
 \yima{Maybe give some representative examples for the measurement
 matching term where it has explicit formulae.}
+\begin{example}[Joint Gaussian Distribution]
+To build intuition, it is helpful to consider the important special case where
+$(\vx, \vy)$ are jointly Gaussian. Then $\vx$ and $\vy$ are necessarily
+(marginally) Gaussian, and moreover a standard calculation
+(\Cref{exercise:conditional_gaussian}) shows that
+\begin{equation}
+  \vx \mid \vy \sim
+\end{equation}
+\end{example}
+
+\begin{example}[Linear Measurements]
+Suppose the observation is linear:
+\begin{equation}
+    \y = h(\x) + \vw = \vA \vx + \vw.
+\end{equation}
+Then we have
+\begin{equation}
+   \nabla_{\vx} \log p(\vy \mid \vx) \propto \frac{1}{\sigma^2} \vA^\top(\y - \vA \x).  
+\end{equation}
+\end{example}
 
 Now if we want to learn the condition distribution $p(\vx\mid \vy)$
 via the diffusion and denoising process $\vx_t$ and then sample from
@@ -1327,37 +1356,53 @@ it, we have we have:
 \mid \vx_t)} + {\nabla_{\vx_t} \log p(\vx_t)}.
 \label{eqn:score-xt}
 \end{equation}
-Therefore, the associated SDE for the conditional denoising is given by:
-\begin{eqnarray}
-d\vx_t &=& - \nabla_{\vx_t} \log p_t(\vx_t \mid \vy) dt + d\vw_t\\
-&=& - \big({\nabla_{\vx_t} \log p(\vy \mid \vx_t)} -  {\nabla_{\vx_t}
-\log p(\vx_t)}\big)dt  + d\vw_t.
-\end{eqnarray}
 
-Below we give some vignettes about solving several typical
+\begin{remark}
+Consider the condition-guided denoising as a continuous process, the associated stochastic differential equation (SDE) for the conditional denoising is given by:
+\begin{eqnarray}
+\odif\vx_t &=& - \nabla_{\vx_t} \log p_t(\vx_t \mid \vy) \odif t + \odif\vw_t\\
+&=& - \big({\nabla_{\vx_t} \log p(\vy \mid \vx_t)} -  {\nabla_{\vx_t}
+\log p(\vx_t)}\big)\odif t  + \odif \vw_t.
+\end{eqnarray}
+The associated (equivalent) deterministic differential equation (DE) is
+\begin{eqnarray}
+\odif\vx_t 
+&=& - \frac{1}{2}\big({\nabla_{\vx_t} \log p(\vy \mid \vx_t)} -  {\nabla_{\vx_t}
+\log p(\vx_t)}\big)\odif t.
+\end{eqnarray}
+\end{remark}
+
+In Chapter \ref{ch:compression}, we have shown how the score matching term ${\nabla_{\vx_t}
+\log p(\vx_t)}$ can be estimated and computed, when the diffusion process is Gaussian. Hence, we only need to find out how to compute the measurement matching term: $\nabla_{\vx_t} \log p(\vy \mid \vx_t)$. 
+
+
+
+\subsection{Applications for Conditional Generation}
+Below we give some vignettes for solving several typical
 conditional sampling problems with the diffusion/denoising method,
 including the previous image-completion problem. For different
 applications, in practice, the measurement-matching term could be
-introduced into the (iterative denoising) deep architecture with
+introduced into the (iterative denoising) deep architecture by 
 different means.
 
-\subsection{Image Completion}
-The work of
-\cite{wei2023diffusion} has shown how to use diffusion/denoising
-models to learn such a conditional autoencoder for image completion
+\subsubsection{Image Completion}
+\yima{I believe Jong Chul Ye has some work \href{https://arxiv.org/pdf/2209.14687}{Diffusion Posterior Sampling for General Noisy Inverse Problem} along the same line of thought which is more principled, following the above measurement-matching approach... We could feature that work here. Also, we should mention that the work of \cite{wei2023diffusion} has shown how to use transformer-like architecture to realize diffusion/denoising
+models for image completion
 (\href{https://weichen582.github.io/diffmae.html}{Diffusion Models as
-Masked Autoencoders}).
+Masked Autoencoders}). However, the realization of conditional sampling is somewhat heuristic.}
 
-\subsection{Conditional Pose Prediction}
+\subsubsection{Conditional Pose Prediction}
 Another good example of denosing/diffusion based conditional sampling
 is Brent's recent work on body gesture estimation conditioned on the
 head pose (\href{https://egoallo.github.io}{Estimating Body and Hand
-Motion in an Ego-sensed World}).
+Motion in an Ego-sensed World}).\yima{Brent Yi better straighten out his work on pose estimation in the above context of conditional sampling... }
 
-\subsection{Conditional Image Generation}
+\subsubsection{Conditional Image Generation}
 \label{sec:conditioned-decoding}
-\sdb{Align Visual Data with Texts, ControlNet, ... DALLE type
-architecture for text-conditioned image generation?}
+\sdb{Align Visual Data with Texts, ControlNet, ... discuss dhariwal and nichol
+(classifier aware guidance), then mention DALLE type architecture for
+text-conditioned image generation?} \yima{Actually the original work ``\href{https://arxiv.org/abs/2105.05233}{Diffusion Models Beat GANs on Image Synthesis}'', by Prafulla Dhariwal and Alex Nichol, proposed to compute the two matching functions proposed above. The follow-up work ``Classifer-Free Diffusion Guidance''  by
+Jonathan Ho and Tim Salimans tried to simplify this by training the two matching functions together with one network with different condition inputs. We should feature those works here. However, we can mention that the large-scale realization DALLE, with a learned joint image-text binding by CLIP, adopts a somewhat heuristic way to realize the conditioning. So were many other follow-up works such as the ControlNet etc. ...}
 
 \section{Summary and Notes}
 Scalability of the masked autoencoding (MAE) or the masked
@@ -1377,5 +1422,13 @@ kernel \cite{Buchanan2021-sj,Martens2021-cx}, but these studies have not given
 significant insight into the trainability benefits of deeper networks in middle
 and late stages of training (but see \cite{Yang2021-gw} for the root of a line
 of research attempting to address this).
+
+\section{Exercises}
+
+
+\begin{exercise}\label{exercise:conditional_gaussian}
+
+\end{exercise}
+
 
 \end{document}
