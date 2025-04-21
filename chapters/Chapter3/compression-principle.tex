@@ -178,6 +178,11 @@ The solution to this problem, when optimizing \(\bar{\vx}(t, \cdot)\) over all p
 \begin{equation}\label{eq:optimal_denoiser}
 	\bar{\vx}^{\ast}(t, \vxi) := \Ex[\vx \mid \vx_{t} = \vxi].
 \end{equation}
+
+\begin{exercise}
+    Please show that \eqref{eq:optimal_denoiser} is the optimal solution of Problem \eqref{eq:denoising_loss}. 
+\end{exercise}
+
 This expression justifies the notation \(\bar{\vx}\), which is meant to compute a conditional expectation (i.e., conditional mean or conditional average). In short, it attempts to remove the noise from the noisy input, outputting the best possible guess (in expectation and w.r.t.~the \(\ell^{2}\)-distance) of the (de-noised) original random variable.
 
 \begin{example}[Denoising Gaussian Noise from a Mixture of Gaussians]\label{example:denoising_gaussian_mixture}
@@ -203,11 +208,11 @@ This expression justifies the notation \(\bar{\vx}\), which is meant to compute 
 	\begin{equation}
 		\mat{\vx \\ \vx_{t}} = \mat{\vmu_{y} \\ \vmu_{y}} + \mat{\vSigma_{y}^{1/2} & \vzero \\ \vSigma_{y}^{1/2} & t\vI}\mat{\vu \\ \vg}.
 	\end{equation}
-	This shows that \(\vx\) and \(\vx_{t}\) are jointly Gaussian (conditioned on \(\vy\)) as claimed. Thus we can write
+	This shows that \(\vx\) and \(\vx_{t}\) are jointly Gaussian (conditioned on \(y\)) as claimed. Thus we can write
 	\begin{equation}
 		\mat{\vx \\ \vx_{t}} \sim \dNorm\rp{\mat{\vmu_{y} \\ \vmu_{y}}, \mat{\vSigma_{y} & \vSigma_{y} \\ \vSigma_{y} & \vSigma_{y} + t^{2}\vI}}.
 	\end{equation}
-	Thus the conditional expectation of \(\vx\) given \(\vx_{t}\) (i.e., the Bayes optimal denoiser conditioned on \(\vy\)) is famously
+	Thus the conditional expectation of \(\vx\) given \(\vx_{t}\) (i.e., the Bayes optimal denoiser conditioned on \(y\)) is famously
 	\begin{equation}
 		\Ex[\vx \mid \vx_{t}, y] = \vmu_{y} + \vSigma_{y}(\vSigma_{y} + t^{2}\vI)^{-1}(\vx_{t} - \vmu_{y}).
 	\end{equation}
@@ -250,13 +255,9 @@ This expression justifies the notation \(\bar{\vx}\), which is meant to compute 
 	\end{equation}
 
 	This is the geometric interpretation of the denoiser of a \textit{single} Gaussian. The overall denoiser of the Gaussian mixture model \eqref{eq:gmm_bayes_optimal_denoiser} uses \(K\) such denoisers, weighting their output by the posterior probabilities \(\Pr[y = k \mid \vx_{t}]\). If the means of the Gaussians are well-separated, these posterior probabilities are very close to \(0\) or \(1\) near each mean or cluster. In this regime, the overall denoiser \eqref{eq:gmm_bayes_optimal_denoiser} has the same geometric interpretation as the above single Gaussian denoiser.
+
+    At first glance, such a contraction mapping (\eqref{eq:contraction}) may appear similar to power iterations (see \Cref{subsec:power iterations}).  However, the two are fundamentally different. Power iteration implements a contraction mapping towards a subspace --- namely the subspace spanned by the first principal component. In contrast, the iterates in \eqref{eq:contraction} converge to the mean \(\vmu\) of the underlying distribution, which is a single point.  
 \end{example}
-
-% \yima{Can this special case be connected to how PCA is computed via power iteration in Chapter 2? }
-
-\begin{remark}
-\textbf{Difference between the denoiser interpretation and power iterations.} At the first glance, the iterates process in \eqref{eq:contraction} may appear similar to power iterations (see \Cref{subsec:power iterations}).  However, the two are fundamentally different. Power iteration is designed to find the leading principal component of a data matrix. In contrast, the iterates in \eqref{eq:contraction} converge to the mean \(\vmu\) of the underlying distribution, rather than the principle components.  
-\end{remark}
 
 \begin{figure}
 	\centering 
@@ -345,7 +346,7 @@ The solution to this optimization problem, implemented via gradient descent or a
 What is a good architecture for this neural network \(\bar{\vx}_{\theta^{\ast}}(t, \cdot)\)? To answer this question, we will examine the ubiquitous case of a \textit{Gaussian mixture model},  whose denoiser we computed in \Cref{example:denoising_gaussian_mixture}. This model is relevant because it can approximate many types of distributions: in particular, given a distribution for \(\vx\), there is a Gaussian mixture model that can approximate it arbitrarily well. So optimizing among the class of denoisers for Gaussian mixture models can give us something close to the optimal denoiser for the real data distribution. 
 
 In our case, we assume that \(\vx\) is low-dimensional, which loosely translates into the requirement that \(\vx\) is \textit{approximately} distributed according to a \textit{mixture of low-rank Gaussians}. Formally, we write 
-\begin{equation}\label{eq:MoG}
+\begin{equation}\label{eq:MoG1}
 	\vx \sim \frac{1}{K}\sum_{k = 1}^{K}\dNorm(\vzero, \vU_{k}\vU_{k}^{\top})
 \end{equation}
 where \(\vU_{k} \in \O(D, P) \subseteq \R^{D \times P}\) is an orthogonal matrix. Then the optimal denoiser under \eqref{eq:additive_gaussian_noise_model} is (from \Cref{example:denoising_gaussian_mixture})
@@ -354,9 +355,9 @@ where \(\vU_{k} \in \O(D, P) \subseteq \R^{D \times P}\) is an orthogonal matrix
 \end{equation}
 Notice that within the computation \(\phi\) and outside of it, we compute the inverse \((\vU_{k}\vU_{k}^{\top} + t^{2}\vI)^{-1}\). This is a low-rank perturbation of the full-rank matrix \(t^{2}\vI\), and thus ripe for simplification via the \textit{Sherman-Morrison-Woodbury identity}, i.e., for matrices \(\vA, \vC, \vU, \vV\) such that \(\vA\) and \(\vC\) are invertible,
 \begin{equation}\label{eq:sherman_morrison_woodbury}
-	(\vA + \vU\vC\vV)^{-1} = \vA^{-1} - \vA^{-1}\vU(\vC^{-1} + \vV\vA^{-1}\vU)^{-1}\vV\vA^{-}.
+	(\vA + \vU\vC\vV)^{-1} = \vA^{-1} - \vA^{-1}\vU(\vC^{-1} + \vV\vA^{-1}\vU)^{-1}\vV\vA^{-1}.
 \end{equation}
-We apply this identity with \(\vA = t^{2}\vI\), \(\vU = \vU_{k}\), \(\vV = \vU_{k}^{\top}\), and \(\vC = \vI\), obtaining
+We prove this identity in \Cref{exercise:sherman_morrison_woodbury_identity}. For now we apply this identity with \(\vA = t^{2}\vI\), \(\vU = \vU_{k}\), \(\vV = \vU_{k}^{\top}\), and \(\vC = \vI\), obtaining
 \begin{align}
 	(\vU_{k}\vU_{k}^{\top} + t^{2}\vI)^{-1} 
 	&= \frac{1}{t^{2}}\vI - \frac{1}{t^{4}}\vU_{k}\bp{\vI + \frac{1}{t^{2}}\vU_{k}^{\top}\vU_{k}}^{-1}\vU_{k}^{\top} \\
@@ -386,7 +387,7 @@ Putting these together, we have
 i.e., a projection of \(\vx_{t}\) onto each of \(K\) subspaces, weighted by a soft-max operation of a quadratic function of \(\vx_{t}\). This functional form is similar to an \textit{attention mechanism} in a transformer architecture! As we will see in \Cref{ch:representation}, this is no coincidence at all; the deep link between denoising and lossy compression (to be covered in \Cref{sec:lossy_compression}) makes transformer denoisers so effective in practice. And so overall, our Gaussian mixture model theory motivates the use of transformer-like neural networks for denoising.
 
 \begin{remark}
-{\bf Connections between denoising a distribution and probabilistic PCA.} Here, we would like to connect denoising a low-dimensional distribution to probabilistic PCA (see \Cref{subsec:probabilistic PCA} for more details about probabilistic PCA). Suppose that we consider $K=1$ in \eqref{eq:MoG}, i.e., $\vx \sim   \dNorm(\vzero, \vU\vU^{\top})$, where \(\vU \in \O(D, P) \subseteq \R^{D \times P}\) is an orthogonal matrix. According to \eqref{eq:gmm_lowrank_denoiser}, the  Bayes optimal denoiser is 
+{\bf Connections between denoising a distribution and probabilistic PCA.} Here, we would like to connect denoising a low-dimensional distribution to probabilistic PCA (see \Cref{subsec:probabilistic PCA} for more details about probabilistic PCA). Suppose that we consider $K=1$ in \eqref{eq:MoG1}, i.e., $\vx \sim   \dNorm(\vzero, \vU\vU^{\top})$, where \(\vU \in \O(D, P) \subseteq \R^{D \times P}\) is an orthogonal matrix. According to \eqref{eq:gmm_lowrank_denoiser}, the  Bayes optimal denoiser is 
 \begin{align*}
     \bar{\vx}^{\ast}(t, \vx_{t}) = \frac{1}{1 + t^{2}} \vU\vU^\top\vx_t. 
 \end{align*}
@@ -459,7 +460,7 @@ with, again, \(\hat{\vx}_{t_{L}} \sim \dNorm(\vzero, t_{L}^{2}\vI)\).
 \begin{equation}\label{eq:gen_additive_gaussian_noise_model}
 	\vx_{t} := \alpha_{t}\vx + \sigma_{t}\vg, \qquad \forall t \in [0, T].
 \end{equation}
-The previous setup has \(\alpha_{t} = 1\) and \(\sigma_{t} = t\), and this is called the \textit{variance-exploding (VE) process}. A popular choice which decreases the contribution of \(\vx\), as we described originally, has \(T = 1\) (so that \(t \in [0, 1]\)), \(\alpha_{t} = \sqrt{1 - t^{2}}\) and \(\sigma_{t} = t\) (and \(T = 1\)); this is the \textit{variance-preserving (VP) process}. Note that under the VP process, \(\vx_{1} \sim \dNorm(\vzero, \vI)\) exactly, so we can just sample from this standard distribution and iteratively denoise. As a result, the VP process is much easier to analyze theoretically and more stable empirically.\footnote{Why use the whole \(\alpha, \sigma\) setup? As we will see in Exercise \DP{TODO}, it encapsulates and unifies many proposed processes, including the recently popular so-called \textit{flow matching} process. Despite this, the VE and VP processes are still the most popular empirically and theoretically (so far), and so we will consider them in this Section.} 
+The previous setup has \(\alpha_{t} = 1\) and \(\sigma_{t} = t\), and this is called the \textit{variance-exploding (VE) process}. A popular choice which decreases the contribution of \(\vx\), as we described originally, has \(T = 1\) (so that \(t \in [0, 1]\)), \(\alpha_{t} = \sqrt{1 - t^{2}}\) and \(\sigma_{t} = t\); this is the \textit{variance-preserving (VP) process}. Note that under the VP process, \(\vx_{1} \sim \dNorm(\vzero, \vI)\) exactly, so we can just sample from this standard distribution and iteratively denoise. As a result, the VP process is much easier to analyze theoretically and more stable empirically.\footnote{Why use the whole \(\alpha, \sigma\) setup? As we will see in \Cref{exercise:implement_denoising_processes}, it encapsulates and unifies many proposed processes, including the recently popular so-called \textit{flow matching} process. Despite this, the VE and VP processes are still the most popular empirically and theoretically (so far), and so we will consider them in this Section.} 
 
 With this more general setup, Tweedie's formula \eqref{eq:tweedie} becomes 
 \begin{equation}\label{eq:gen_tweedie}
@@ -2122,11 +2123,44 @@ We defer the proof to \cite{wang2024global}.  Together, the above two theorems s
 %\href{http://people.eecs.berkeley.edu/~yima/psfile/MICL_SJIS.pdf}{supervised classification} from the perspective of (lossy) compression.
 
 \section{Summary and Notes}
+
+The history of denoising and diffusion for sampling has a rich history. The first work which is clearly about a diffusion model is probably \cite{Sohl-Dickstein2015}, but before this there are many works about denoising as a computational and statistical problem. The most relevant of these is probably \cite{hyvarinen05a}, which explicitly uses the score function to denoise (as well as perform independent component analysis). The most popular follow-ups are basically co-occurring: \cite{ho2020denoising,song2019}. Since then, thousands of papers have built on diffusion models; we will revisit this topic in \Cref{ch:autoencoding}.
+
+Many of these works use a different stochastic process than the simple linear combination \eqref{eq:gen_additive_gaussian_noise_model}. In fact, all works listed above emphasize the need to add \textit{independent} Gaussian noise at the beginning of each step of the forward process. Theoretically-minded work actually uses Brownian motion or stochastic differential equations to formulate the forward process \cite{song2020score}. However, since linear combinations of Gaussians still result in Gaussians, the \textit{marginal distributions} of such processes still take the form of \eqref{eq:gen_additive_gaussian_noise_model}. Most of our discussion requires only that the marginal distributions are what they are, and hence our overly simplistic model is actually quite enough for almost everything. In fact, the only time where marginal distributions are not enough is when we derive an expression for \(\Ex[\vx_{s} \mid \vx_{t}]\) in terms of \(\Ex[\vx \mid \vx_{t}]\). Different (noising) processes give different such expressions, which can be used for sampling (and of course there are other ways to derive efficient samplers, such as in \cite{song2020score}). The process in \eqref{eq:gen_additive_gaussian_noise_model} is a bona fide stochastic process, however, whose ``natural'' denoising iteration takes the form of the popular DDIM algorithm \cite{song2020denoising}. (Even this equivalence is not trivial; we cite \cite{de2025distributional} as a justification.) 
+
  {Lossy coding does more than just quantization. It allows us to avoid a pathological solution by simply using the empirical distribution as the optimal solution that minimizes entropy. }
 
  {From the achievable (entropy) to an implementable coding scheme. That is, in addition to a computable or achievable encoding scheme, there should also exist an implementable decoding scheme. Lossy quantification becomes necessary for real-valued data.} \pw{Add some references on computational and sampling efficiency of diffusion models and discuss these results.}
 
 \section{Exercises and Extensions}
+
+\begin{exercise}\label{exercise:sherman_morrison_woodbury_identity}
+    Show the Sherman-Morrison-Woodbury identity, i.e., for matrices \(\vA\), \(\vC\), \(\vU\), \(\vV\) such that \(\vA\), \(\vC\), and \(\vA + \vU\vC\vV\) are invertible,
+    \begin{equation}
+        (\vA + \vU\vC\vV)^{-1} = \vA^{-1} - \vA^{-1}\vU(\vC^{-1} + \vV\vA^{-1}\vU)^{-1}\vV\vA^{-1}
+    \end{equation}
+\end{exercise}
+
+\begin{exercise}\label{exercise:generalizing_results_to_different_noise_models}
+    Rederive the following, assuming \(\vx_{t}\) follows the generalized noise model \eqref{eq:gen_additive_gaussian_noise_model}.
+    \begin{itemize}
+        \item Tweedie's formula: \eqref{eq:gen_tweedie}.
+        \item The DDIM iteration: \eqref{eq:gen_denoising_iteration}.
+        \item The Bayes optimal denoiser for a Gaussian mixture model: \eqref{eq:gen_gmm_bayes_optimal_denoiser}.
+    \end{itemize}
+\end{exercise}
+
+\begin{exercise}\label{exercise:implement_denoising_processes}
+\begin{enumerate}
+    \item Implement the formulae derived in \Cref{exercise:generalizing_results_to_different_noise_models}, building a sampler for Gaussian mixtures.
+    \item Reproduce \Cref{fig:ve_forward_denoising} and \Cref{fig:vp_gmm_denoising}.
+    \item We now introduce a separate process called \textit{Flow Matching (FM)}, as follows:
+    \begin{equation}
+        \alpha_{t} = 1 - t, \qquad \sigma_{t} = t.
+    \end{equation}
+    Implement this process using the same framework, and test it for sampling in high dimensions. Which process seems to give better or more stable results?
+\end{enumerate}
+\end{exercise}
 
 \begin{exercise}
 	Please show the following properties of the  $\log\det(\cdot)$ function.
