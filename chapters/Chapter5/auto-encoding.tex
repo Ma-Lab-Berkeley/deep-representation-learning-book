@@ -1213,7 +1213,8 @@ But let us examine the image completion task studied in the previous
 section: Given the
 visual part of an image $\X_v = \mathcal{P}_{\Omega}(\X)$, we try to
 estimate the masked part $\X_m = \mathcal{P}_{\Omega^c}(\X)$. Let
-\[p(\X_m \mid \X_v)\] be the conditional distribution of $\X_m$ given
+\[p_{\X_m \mid \X_v}\]
+be the conditional distribution of $\X_m$ given
 $\X_v$. It is easy to show that the optimal solution to the  MAE
 formulation \eqref{eq:mae_loss} is given by the conditional expectation:
 \begin{equation}
@@ -1225,20 +1226,20 @@ explains why some of the recovered patches in \Cref{fig:mae_autoencoding-small}
 are a little blurry.
 
 For many practical purposes, we would like to learn (a representation
-of) the conditional distribution $p(\X_m \mid \X_v)$, or equivalently
-$p(\X \mid \X_v)$,
+of) the conditional distribution $p_{\X_m \mid \X_v}$, or equivalently
+$p_{\X \mid \X_v}$,
 and then sample this distribution directly. Notice that, when the
 distribution of $\X$ is low-dimensional, it is possible that if a
 sufficient part of $\X$, $\X_v$, is observed, it fully determines
 $\X$ hence the missing part $\X_m$. In other words, the distribution
-$p(\X \mid \X_v)$ is a generalized function---if $\vX$ is fully determined by
+$p_{\X \mid \X_v}$ is a generalized function---if $\vX$ is fully determined by
 $\vX_v$ it is the delta function, and more generally one of its exotic cousins.
 
 \subsection{Conditional Sampling with Measurement Matching}
 To generalize the above (image) completion problems, we may consider
-that a random vector $\vx$ is partially observed through a more
+that a random vector $\vx \sim p$ is partially observed through a more
 general observation function:
-\begin{equation}
+\begin{equation}\label{eq:measurement-matching-observation}
 \vy = h(\vx) + \vw,
 \end{equation}
 where $\vw$ usually stands for some random measurement noise, say of
@@ -1249,55 +1250,403 @@ autoencoding than to pure matrix completion, where we always have access to
 a corresponding clean sample $\vx$ for every observation $\vy$ we
 receive.\footnote{In some more specialized applications, in particular in
 scientific imaging, it is of interest to be able to learn to generate samples
-from the posterior $p(\x \mid \y)$ without access to any clean/ground-truth
+from the posterior $p_{\x \mid \y}$ without access to any clean/ground-truth
 samples of $\x$. We give a brief overview of methods for this setting in the
 end-of-chapter notes.}
 
-In practice, there are typically two situations:
-one is that the observation function $h(\cdot)$ is explicitly known,
-and the other is when $h(\cdot)$ is not known but only samples of the
-joint distribution $p(\vx, \vy)$ are given.
-Two representative subclasses of these settings worth keeping in mind are:
-\begin{enumerate}
-  \item \textbf{Known $h$: Inverse Problems.} Like image/matrix completion, we
-    are often faced with a setting where $\vy$ denotes a degraded or corrupted
-    observation of the input $\vx$. For example, in various scientific or
-    medical imaging problems, the measured data $\vy$ may be a compressed or
-    otherwise corrupted observation of the underlying data $\vx$; however, by
-    virtue of mathematical modeling and our design of the measurement system, we
-    know $h$, and can use this knowledge to help reconstruct or sample $\vx$.
-  \item \textbf{Paired Samples $(\vx, \vy)$: Controllable Generation.} In more
-    general applications such as computer vision or natural language processing,
-    it is common for data $\vx$ to have known \textit{attributes} that we want
-    to use for conditional sampling of the data distribution. Below, we will
-    study detailed vignettes from vision, where $\vy$ represents a text caption
-    for an image or the pose of a 3D rigid body.
-    \sdb{Revisit... more like model-based vs.\ model-free... (eg the pose case
-    is more like the 1st)}
-\end{enumerate}
-The attentive reader may ask why we need to study the first class of scenarios,
-given that it is a special case of the latter. We will see later, both in theory
-and in practice, that exploiting knowledge of $h$ can lead to superior
-performance.
+Like image/matrix completion, we
+are often faced with a setting where $\vy$ denotes a degraded or otherwise
+``lossy''
+observation of the input $\vx$. This can manifest in quite different
+forms. For example, in various scientific or
+medical imaging problems, the measured data $\vy$ may be a compressed and
+corrupted observation of the underlying data $\vx$; whereas in 3D vision tasks,
+$\vy$ may represent an image captured by a camera of a physical object with an
+unknown (low-dimensional) pose $\vx$ \sdb{TODO: verify}.
+Generally, by virtue of mathematical modeling (and, in some cases, co-design
+of the measurement system), we know $h$ and can evaluate it on any input, and
+we can exploit this knowledge to help reconstruct and sample $\vx$.
 
-A common goal between these two situations is that we want the learned representation of the data
-to facilitate us to sample the condition distribution $p(\vx\mid
-\vy)$ effectively and efficiently. More precisely, we want to
-generate samples $\x$ such that:
-\begin{equation}
-\x \sim   p(\x\mid \y).
+\begin{figure}[t]
+  \centering
+  \begin{subfigure}{0.45\textwidth}
+    \vspace{0.75cm}
+    \centering
+    \begin{tikzcd}[column sep=1.5cm]
+      \vx \arrow[r, "h(\vx) + \vw"] & \vy \arrow[r, "p_{\vx \mid \vy}"]
+      & \posteriorsample \arrow[r, "\posteriorsample + t\vg"] & \posteriorsample_t
+    \end{tikzcd}
+    \vspace{0.75cm}
+    \caption{}
+    \label{fig:left}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.45\textwidth}
+    \centering
+    \begin{tikzcd}[column sep=1.5cm, row sep=0.5cm]
+    & \vy \\
+    \vx \arrow[ur, "h(\vx) + \vw"] \arrow[dr, "\vx + t\vg"] & \\
+    & \vx_t
+    \end{tikzcd}
+    \caption{}
+    \label{fig:right}
+  \end{subfigure}
+  \caption{Statistical dependency diagrams for the conditional sampling process.
+  \textbf{Left:} In a direct (conceptual) application of the diffusion-denoising scheme
+  we have developed in \Cref{ch:compression} to conditional sampling, we use
+  samples from the posterior $p_{\vx \mid \vy}$ to train denoisers directly on
+  the posterior at different noise levels, then use them to generate new
+  samples. In practice, however, we do not normally have direct samples from the
+  posterior, but rather paired samples $(\vx, \vy)$ from the joint.
+  \textbf{Right:} It turns out that it suffices to have only noisy observations
+  of $\vx$ to realize the denoisers corresponding to $p_{\posteriorsample_t \mid
+  \posteriorsample}$: this follows from conditional independence of $\vx_t$ and
+  $\vy$ given $\vx$. It implies that $p_{\posteriorsample_t} = p_{\vx_t \mid
+  \vy}$, which gives a score function for denoising that consists of the
+  unconditional score function, plus a correction term that enforces measurement
+  consistency.}
+  \label{fig:posterior-sampling-cds}
+\end{figure}
+
+
+At a technical level, we want the learned representation of the data
+to facilitate us to sample the conditional distribution $p_{\vx\mid
+\vy}$, also known as the posterior, effectively and efficiently. More precisely,
+we want to generate samples $\hat{\x}$ such that:
+\begin{equation}\label{eq:goal-sample-posterior}
+  \hat{\x} \sim   p_{\vx \mid \y}.
 \end{equation}
 Recall that in \Cref{sub:compression_denoising}, we have developed a natural and
 effective way to produce \textit{unconditional} samples of the data distribution
-$p(\x)$. The ingredients are the denoisers $\bar{\x}^\ast(t, \vx_t) = \bE[ \x \mid
+$p$. The ingredients are the denoisers $\bar{\x}^\ast(t, \vx_t) = \bE[ \x \mid
 \vx_t ]$, or their learned approximations $\bar{\x}_{\theta}(t, \vx_t)$, for different levels of noisy observations $\x_t = \x + t \vg$, for
-Gaussian noise $\vg \sim \sN(\mathbf{0}, \vI)$ and $t \in
+Gaussian noise $\vg \sim \cN(\mathbf{0}, \vI)$ and $t \in
 [0, T]$, and a choice of times $0 = t_1 < \hdots < t_{L} = T$ at which to
 perform the iterative denoising, starting from $\hat{\vx}_{t_L} \sim
-\sN(\mathbf{0}, T^2 \vI)$ (recall \Cref{eq:denoising-iteration-basic}).\footnote{Recall from our discussion in \Cref{sub:sampling_denoising}
+\cN(\mathbf{0}, T^2 \vI)$ (recall \Cref{eq:denoising-iteration-basic}).\footnote{Recall from our discussion in \Cref{sub:sampling_denoising}
 that a few small improvements to this basic iterative denoising scheme are
 sufficient to bring competitive practical performance. For clarity as we develop
 conditional sampling, we will focus here on the simplest instantiation.}
+We could directly apply this scheme to generate samples from the posterior
+$p_{\vx \mid \vy}$ \textit{if} we had access to a dataset of samples
+$\posteriorsample \sim p_{\vx \mid \y}$ for each $\vy$, by generating noisy observations
+$\posteriorsample_t$ and training denoisers to approximate $\bE[
+  \posteriorsample \mid \posteriorsample_t, \vy ]$, the mean of the posterior under
+the noisy observation (see \Cref{fig:posterior-sampling-cds}(a)).
+However, performing this resampling given only paired samples $(\vx, \vy)$ from the
+joint distribution (say by binning the samples over values of $\vy$) requires
+prohibitively many samples for high-dimensional data, and alternate approaches
+explicitly or implicitly rely on density estimation, which similarly suffers from the
+curse of dimensionality.
+Fortunately, it turns out that this is not necessary.
+Consider the alternate statistical dependency diagram in
+\Cref{fig:posterior-sampling-cds}(b), which corresponds to the random variables
+in the usual denoising-diffusion process, together with the measurement $\vy$. 
+Because our assumed observation model \eqref{eq:measurement-matching-observation}
+implies that $\vx_t$ and $\vy$ are independent conditioned on $\vx$, we have
+\begin{align*}
+  p_{\posteriorsample_t}
+  &= \int
+  \underbrace{p_{\posteriorsample_t \mid \posteriorsample=\vx'}}_{=
+  \cN(\vx', t^2 \vI)}
+  \cdot \underbrace{p_{\posteriorsample \mid \vy}}_{= p_{\vx\mid \vy}}(\vx')
+  \odif \vx'
+  \\
+  &=
+  \int p_{\vx_t \mid \vx=\vx', \vy} \cdot p_{\vx \mid \vy}(\vx') \odif \vx'
+  \\
+  &=
+  \int p_{\vx_t, \vx \mid \vy}(\cdot, \vx') \odif \vx'
+  \\
+  &= p_{\vx_t \mid \vy}.
+\end{align*}
+Above, the first line recognizes an equivalence between the distributions
+arising in \Cref{fig:posterior-sampling-cds}(a, b); the second line applies this
+together with conditional independence of $\vx_t$ and $\vy$ given $\vx$; the
+third line uses the definition of conditional probability; and the final line
+marginalizes over $\vx$.
+Thus, the denoisers from the conceptual posterior sampling process are equal to
+$\bE[\vx \mid \vx_t, \vy]$, which we can learn solely from paired samples $(\vx,
+\vy)$,
+% and the posterior with respect to $\vx_t$ and $\vy$ can be expressed using
+% Bayes' rule as
+% \begin{equation}
+%   p(\vx \mid \vx_t, \vy) = \frac{p(\vx_t \mid \vx) p(\vx \mid \vy)}{p(\vx_t \mid
+%   \vy)},
+% \end{equation}
+% where we used that $\vx_t$ is an independent Gaussian conditional on $\vx$.
+and by Tweedie's formula (\Cref{thm:tweedie}), we can express these denoisers in
+terms of the score function of $p_{\vx_t \mid \vy}$, which, by Bayes' rule,
+satisfies
+\begin{equation}
+  p_{\vx_t \mid \vy} = \frac{p_{\vy \mid \vx_t} p_{\vx_t}}{p_{\vy}}.
+\end{equation}
+Recall that the density of $\vx_t$ is 
+given by $p_t = \varphi_{t} \ast p$, where $\varphi_{t}$ denotes the standard
+Gaussian density with zero mean and covariance $t^2 \vI$ and $\ast$ denotes
+convolution. This is nothing but the \textit{unconditional score function}
+obtained from the standard diffusion training that we developed in
+\Cref{sub:compression_denoising}!
+The conditional score function then satisfies
+\begin{equation}
+  \nabla_{\vx_t} \log p_{\vx_t \mid \vy}
+  =
+  \underbrace{\nabla_{\vx_t} \log p_t}_{\text{score matching}}
+  +
+  \underbrace{\nabla_{\vx_t} \log p_{\vy \mid \vx_t}}_{\text{measurement matching}},
+\end{equation}
+giving (by Tweedie's formula) our proposed denoisers as \sdb{TODO: can we
+disambiguiate notation better of random variables vs.\ observations...}
+\begin{align*}
+  \bE[ \vx \mid \vx_t, \vy]
+  &=
+  \vx_t + t^2 \nabla_{\vx_t}\log p_t(\vx_t) + t^2 \nabla_{\vx_t}\log p_{\vy \mid
+  \vx_t}(\vy)
+  \\
+  &=
+  \bE[\vx \mid \vx_t] + t^2 \nabla_{\vx_t}\log p_{\vy \mid \vx_t}(\vy).
+  \labelthis \label{eq:posterior-sampling-denoiser-decomposition}
+\end{align*}
+The resulting operators are interpretable as a \textit{corrected} version of the
+unconditional denoiser for the noisy observation, where the correction term (the
+so-called ``measurement matching'' term) enforces consistency with the
+observations $\vy$. The reader should take care to note to which argument the
+gradient operators are applying in the above score functions in order to fully
+grasp the meaning of this operator.
+
+The key remaining issue in making this procedure computational is to prescribe
+how to compute the measurement matching correction, since in general we do not
+have a closed-form
+expression for the conditional density $p_{\vy \mid \vx_t}$ except for when $t
+= 0$. Before taking up this problem, we discuss an illustrative concrete example
+of the entire process, continuing from those we have developed in
+\Cref{sub:compression_denoising}.
+
+\begin{example}
+  Consider the case where the data distribution is Gaussian with mean $\vmu \in
+  \bR^D$ and
+  covariance $\vSigma \in \bR^{D \times D}$, i.e., $\vx \sim \cN(\vmu, \vSigma)$.
+  Moreover, in the measurement model \eqref{eq:measurement-matching-observation},
+  suppose we obtain linear measurements of $\vx$ with independent Gaussian
+  noise, where $\vA \in \bR^{d \times D}$ and $\vy = \vA \vx + \sigma \vw$
+  with $\vw \sim \cN(\Zero, \vI)$ independent of $\vx$.
+  Then $\vx =_{d} \vSigma^{1/2} \vg + \vmu$, where $\vg \sim \cN(\Zero, \vI)$ is
+  independent of $\vw$ and $\vSigma^{1/2}$ is the unique positive square root of
+  the covariance matrix $\vSigma$, and
+  after some algebra, we can then write
+  \begin{equation*}
+    \begin{bmatrix}
+      \vx \\
+      \vy
+    \end{bmatrix}
+    =_{d}
+    \begin{bmatrix}
+      \vSigma^{1/2} & \Zero \\
+      \vA \vSigma^{1/2} & \sigma \vI
+    \end{bmatrix}
+    \begin{bmatrix}
+      \vg \\
+      \vw
+    \end{bmatrix}
+    +
+    \begin{bmatrix}
+      \vmu \\
+      \vA\vmu
+    \end{bmatrix}.
+  \end{equation*}
+  By independence, we have that $(\vg, \vw)$ is jointly Gaussian, which means that
+  $(\vx, \vy)$ is also jointly Gaussian, as the affine image of a jointly Gaussian
+  vector.
+  Its covariance matrix is given by
+  \begin{equation*}
+    \begin{bmatrix}
+      \vSigma^{1/2} & \Zero \\
+      \vA \vSigma^{1/2} & \sigma \vI
+    \end{bmatrix}
+    \begin{bmatrix}
+      \vSigma^{1/2} & \Zero \\
+      \vA \vSigma^{1/2} & \sigma \vI
+    \end{bmatrix}^\top
+    =
+    \begin{bmatrix}
+      \vSigma & \vSigma \vA^\top \\
+      \vA \vSigma & \vA \vSigma \vA^\top + \sigma^2 \vI
+    \end{bmatrix}.
+  \end{equation*}
+  Now, we apply the fact that conditioning a random vector with joint Gaussian
+  distribution on a subset of coordinates is again a Gaussian distribution
+  (\Cref{exercise:conditional_gaussian}).
+  By this, we obtain that
+  \begin{equation}
+    p_{\x \mid \y} = \cN\left(
+    \underbrace{%
+      \vmu + \vSigma\vA^\top \left(\vA\vSigma\vA^\top + \sigma^2 \vI\right)^{-1} 
+      (\vy - \vA\vmu)}_{\vmu_{\vx \mid \vy}},
+      \underbrace{%
+      \vSigma - \vSigma \vA^\top \left(\vA\vSigma\vA^\top + \sigma^2
+      \vI\right)^{-1} \vA \vSigma}_{\vSigma_{\vx\mid \vy}}
+    \right).
+  \end{equation}
+  By the equivalence we have derived above, we get by another application of
+  \Cref{exercise:conditional_gaussian}
+  \begin{equation}
+    \bE[ \vx \mid \vy, \vx_t ]
+    =
+    \vmu_{\vx\mid \vy} + \vSigma_{\vx\mid\vy}\left(
+    \vSigma_{\vx\mid \vy} + t^2 \vI 
+    \right)^{-1}\left(
+    \vx_t - \vmu_{\vx\mid \vy}
+    \right).
+  \end{equation}
+  The functional form of this denoiser is quite simple, but it carries an
+  unwieldy dependence on the problem data $\vmu$, $\vSigma$, $\vA$, and
+  $\sigma^2$.
+  We can gain further insight into its behavior by comparing it with
+  \Cref{eq:posterior-sampling-denoiser-decomposition}.
+  We have as usual
+  \begin{equation}
+    \bE[\vx \mid \vx_t]
+    = \vmu + \vSigma\left(\vSigma + t^2 \vI\right)^{-1} (\vx_t - \vmu),
+  \end{equation}
+  which is rather simple---suggesting that the measurement matching term is
+  rather complicated. To confirm this, we can calculate the likelihood $p_{\vy
+  \mid \vx_t}$ directly using the following expression for the joint
+  distribution of $(\vx_t, \vy)$:
+  \begin{equation}
+    \begin{bmatrix}
+      \vx \\
+      \vx_t \\
+      \vy
+    \end{bmatrix}
+    =_{d}
+    \begin{bmatrix}
+      \vSigma^{1/2} & \Zero & \Zero \\
+      \vSigma^{1/2} & t\vI & \Zero \\
+      \vA \vSigma^{1/2} & \Zero & \sigma \vI
+    \end{bmatrix}
+    \begin{bmatrix}
+      \vg \\
+      \vg' \\
+      \vw
+    \end{bmatrix}
+    +
+    \begin{bmatrix}
+      \vmu \\
+      \vmu \\
+      \vA\vmu
+    \end{bmatrix},
+  \end{equation}
+  where $\vg' \sim \cN(\Zero, \vI)$ independent of the other Gaussians.
+  This is again a jointly Gaussian distribution; restricting to only the final
+  two rows, we have the covariance
+  \begin{equation*}
+    \begin{bmatrix}
+      \vSigma^{1/2} & t\vI & \Zero \\
+      \vA \vSigma^{1/2} & \Zero & \sigma \vI
+    \end{bmatrix}
+    \begin{bmatrix}
+      \vSigma^{1/2} & t\vI & \Zero \\
+      \vA \vSigma^{1/2} & \Zero & \sigma \vI
+    \end{bmatrix}^\top
+    =
+    \begin{bmatrix}
+      \vSigma + t^2\vI & \vSigma\vA^\top \\
+      \vA\vSigma & \vA\vSigma\vA^\top + \sigma^2 \vI
+    \end{bmatrix}.
+  \end{equation*}
+  Another application of \Cref{exercise:conditional_gaussian} then gives us
+  \begin{equation}
+    p_{\y \mid \vx_t} = \cN\left(
+    \underbrace{%
+      \vA\vmu + \vA\vSigma\left( \vSigma + t^2 \vI \right)^{-1}
+      \left(
+        \vx_t - \vmu
+      \right)
+      }_{\vmu_{\vy \mid \vx_t}},
+      \underbrace{%
+        \vA\vSigma\vA^\top + \sigma^2 \vI - \vA\vSigma \left( \vSigma
+        + t^2 \vI\right)^{-1} \vSigma \vA^\top
+      }_{\vSigma_{\vy\mid \vx_t}}
+    \right).
+  \end{equation}
+  So, by the chain rule,
+  \begin{equation}
+    \nabla_{\vx_t} \log p_{\vy \mid \vx_t}(\vy')
+    =
+    (\vSigma+t^2 \vI)^{-1}\vSigma\vA^\top\vSigma_{\vy \mid \vx_t}^{-1}\left( \vy' - \vmu_{\vy \mid \vx_t} \right).
+  \end{equation}
+  Now notice that $\vmu_{\vy \mid \vx_t} = \vA \bE[\vx \mid \vx_t]$,
+
+
+
+  % On the other hand, the second (more tractable) scheme in
+  % \Cref{fig:posterior-sampling-cds}, which involves generating $\vx_t$ by adding
+  % noise to $\vx$ and then conditioning on $\vy$ after, produces a different
+  % joint distribution
+  % \begin{equation}
+  %   \begin{bmatrix}
+  %     \vx \\
+  %     \vx_t \\
+  %     \vy
+  %   \end{bmatrix}
+  %   =_{d}
+  %   \begin{bmatrix}
+  %     \vSigma^{1/2} & \Zero & \Zero \\
+  %     \vSigma^{1/2} & t\vI & \Zero \\
+  %     \vA \vSigma^{1/2} & \Zero & \sigma \vI
+  %   \end{bmatrix}
+  %   \begin{bmatrix}
+  %     \vg \\
+  %     \vg' \\
+  %     \vw
+  %   \end{bmatrix}
+  %   +
+  %   \begin{bmatrix}
+  %     \vmu \\
+  %     \vmu \\
+  %     \vA\vmu
+  %   \end{bmatrix},
+  % \end{equation}
+  % where $\vg' \sim \cN(\Zero, \vI)$ independent of the other Gaussians.
+  % This is again a jointly Gaussian distribution, with covariance
+  % \begin{equation*}
+  %   \begin{bmatrix}
+  %     \vSigma^{1/2} & \Zero & \Zero \\
+  %     \vSigma^{1/2} & t\vI & \Zero \\
+  %     \vA \vSigma^{1/2} & \Zero & \sigma \vI
+  %   \end{bmatrix}
+  %   \begin{bmatrix}
+  %     \vSigma^{1/2} & \Zero & \Zero \\
+  %     \vSigma^{1/2} & t\vI & \Zero \\
+  %     \vA \vSigma^{1/2} & \Zero & \sigma \vI
+  %   \end{bmatrix}^\top
+  %   =
+  %   \begin{bmatrix}
+  %     \vSigma & \vSigma & \vSigma\vA^\top \\
+  %     \vSigma & \vSigma + t^2\vI & \vSigma\vA^\top \\
+  %     \vA \vSigma & \vA\vSigma & \vA\vSigma\vA^\top + \sigma^2 \vI
+  %   \end{bmatrix}.
+  % \end{equation*}
+  % Using \Cref{exercise:conditional_gaussian} once again, we derive the posterior
+  % as
+  % \begin{equation}
+  %   p_{\vx \mid \vy, \vx_t}
+  %   =
+  %   \cN\left(
+  %     ...
+  %   \right)
+  % \end{equation}
+
+
+
+
+
+
+
+
+\end{example}
+
+
 
 This problem is also known as the \href{https://arxiv.org/pdf/2209.14687}{Diffusion Posterior Sampling for General Noisy Inverse Problem}. 
 In Chapter
@@ -1396,6 +1745,46 @@ In Chapter \ref{ch:compression}, we have shown how the score matching term ${\na
 \log p(\vx_t)}$ can be estimated and computed, when the diffusion process is Gaussian. Hence, we only need to find out how to compute the measurement matching term: $\nabla_{\vx_t} \log p(\vy \mid \vx_t)$. 
 
 
+\subsection{Conditional Sampling of General Paired Data}
+
+In practice, there are typically two situations:
+one is that the observation function $h(\cdot)$ is explicitly known,
+and the other is when $h(\cdot)$ is not known but only samples of the
+joint distribution $p(\vx, \vy)$ are given.
+Two representative subclasses of these settings worth keeping in mind are:
+\begin{enumerate}
+  \item \textbf{Known $h$: Analytically-Structured Observations.} 
+    Like image/matrix completion, we
+    are often faced with a setting where $\vy$ denotes a degraded or otherwise
+    ``lossy''
+    observation of the input $\vx$. This can manifest in quite different
+    forms. For example, in various scientific or
+    medical imaging problems, the measured data $\vy$ may be a compressed and
+    corrupted observation of the underlying data $\vx$; whereas in 3D vision tasks,
+    $\vy$ may represent an image captured by a camera of a physical object with an
+    unknown (low-dimensional) pose $\vx$ \sdb{TODO: verify}.
+    Generally, by virtue of mathematical modeling (and, in some cases, co-design
+    of the measurement system), we know $h$, and can exploit this knowledge to help
+    reconstruct or sample $\vx$.
+  \item \textbf{Paired Samples $(\vx, \vy)$: Controllable Generation.} In more
+    general applications such as computer vision or natural language processing
+    on internet-scale datasets,
+    it is common for data $\vx$, say images or texts, to have known
+    \textit{attributes} that we want to use for controllable sampling of the
+    data distribution. In these cases,
+    the analytical relationship between the data $\vx$ and its attributes $\vy$
+    is intractable to model, but we may still proceed by exploiting the
+    statistical relationship between the paired samples $(\vx, \vy)$.
+    We will illustrate this setting with detailed vignettes from vision,
+    where, for example, $\vy$ represents a text caption or a segmentation mask
+    for an image $\vx$.
+\end{enumerate}
+The attentive reader may ask why we need to study the first class of scenarios,
+given that it is technically a special case of the latter. We will see later,
+both in theory and in practice, that exploiting knowledge of $h$ can lead to
+superior performance.
+
+
 
 \subsection{Applications for Conditional Generation}
 Below we give some vignettes for solving several typical
@@ -1448,9 +1837,6 @@ Ambient Diffusion.}
 \section{Exercises and Extensions}
 
 
-\begin{exercise}\label{exercise:conditional_gaussian}
-
-\end{exercise}
 
 
 \end{document}
