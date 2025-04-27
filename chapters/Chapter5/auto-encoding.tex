@@ -1649,8 +1649,9 @@ of the entire process, continuing from those we have developed in
 
 
 This problem is also known as the \href{https://arxiv.org/pdf/2209.14687}{Diffusion Posterior Sampling for General Noisy Inverse Problem}. 
-In Chapter
-\ref{ch:compression}, we have seen a natural and effective way to establish a
+
+
+In Chapter \ref{ch:compression}, we have seen a natural and effective way to establish a
 distribution-wise consistent autoencoding via the diffusion and
 denoising process, which essentially establishes an autoencoding
 between a normal (Gaussian) distribution $p(\x_T) =
@@ -1707,9 +1708,11 @@ $(\vx, \vy)$ are jointly Gaussian. Then $\vx$ and $\vy$ are necessarily
 \end{example}
 
 \begin{example}[Linear Measurements]
+\label{eg:linear-measurement}
 Suppose the observation is linear:
 \begin{equation}
-    \y = h(\x) + \vw = \vA \vx + \vw.
+    \y = h(\x) + \vw = \vA \vx + \vw, \quad \vw \sim \mathcal{N}(\mathbf{0}, \sigma^2
+\boldsymbol{I}).
 \end{equation}
 Then we have
 \begin{equation}
@@ -1717,7 +1720,7 @@ Then we have
 \end{equation}
 \end{example}
 
-Now if we want to learn the condition distribution $p(\vx\mid \vy)$
+Now if we want to learn and sample the condition distribution $p(\vx\mid \vy)$
 via the diffusion and denoising process $\vx_t$ and then sample from
 it, we have we have:
 \begin{equation}
@@ -1730,20 +1733,27 @@ it, we have we have:
 Consider the condition-guided denoising as a continuous process, the associated stochastic differential equation (SDE) for the conditional denoising is given by:
 \begin{eqnarray}
 \odif\vx_t &=& - \nabla_{\vx_t} \log p_t(\vx_t \mid \vy) \odif t + \odif\vw_t\\
-&=& - \big({\nabla_{\vx_t} \log p(\vy \mid \vx_t)} -  {\nabla_{\vx_t}
+&=& - \big({\nabla_{\vx_t} \log p(\vy \mid \vx_t)} +  {\nabla_{\vx_t}
 \log p(\vx_t)}\big)\odif t  + \odif \vw_t.
 \end{eqnarray}
 The associated (equivalent) deterministic differential equation (DE) is
 \begin{eqnarray}
 \odif\vx_t 
-&=& - \frac{1}{2}\big({\nabla_{\vx_t} \log p(\vy \mid \vx_t)} -  {\nabla_{\vx_t}
+&=& - \frac{1}{2}\big({\nabla_{\vx_t} \log p(\vy \mid \vx_t)} + {\nabla_{\vx_t}
 \log p(\vx_t)}\big)\odif t.
 \end{eqnarray}
 \end{remark}
 
+\paragraph{Compute measurement matching.}
 In Chapter \ref{ch:compression}, we have shown how the score matching term ${\nabla_{\vx_t}
 \log p(\vx_t)}$ can be estimated and computed, when the diffusion process is Gaussian. Hence, we only need to find out how to compute the measurement matching term: $\nabla_{\vx_t} \log p(\vy \mid \vx_t)$. 
 
+Notice that in general, we only know the relationship between $\y$ and $\x$. By the construction of the diffusion process $\x_t$, we also know $\y$ is conditionally independent of $\x_t$, given $\x$. Hence we have:
+\begin{eqnarray}
+    p(\y \mid \x_t) &=& \int p(\y\mid \x, \x_t) p(\x\mid \x_t) \odif \x\\
+    &=& \int p(\y\mid \x) p(\x\mid \x_t) \odif \x.
+\end{eqnarray}
+Notice that the last equality is taking the expectation of $p(\y \mid \x)$, as a function of $\x$, with respect to the distribution $\x \sim p(\x \mid \x_t)$. 
 
 \subsection{Conditional Sampling of General Paired Data}
 
@@ -1785,6 +1795,20 @@ both in theory and in practice, that exploiting knowledge of $h$ can lead to
 superior performance.
 
 
+\sdb{The following added by Yi.}
+Under natural conditions, we may approximate the above expectation of a function of $\x$ as a function of its expectation $\bar{\x}(\x_t) = \int \x p(\x\mid \x_t) \odif \x$. Therefore, we have:
+\begin{eqnarray}
+    p(\y \mid \x_t)\approx  p(\y \mid \hat{\x}(\x_t)).
+\end{eqnarray}
+We then can approximately compute the measurement matching term: $\nabla_{\vx_t} \log p(\vy \mid \vx_t)$ as
+\begin{equation}
+   \nabla_{\vx_t} \log p(\vy \mid \vx_t) \approx \nabla_{\hat{\vx}} \log p(\vy \mid \hat{\x}) \nabla_{\vx_t} \hat{\x}(\x_t).
+\end{equation}
+Notice that the second derivative $\nabla_{\vx_t} \hat{\x}(\x_t)$ can be computed via backpropagation if the expectation $\hat{\x}(\x_t)$ is computed via a forward deep network, as did in Chapter \ref{ch:compression}. The first derivative $\nabla_{\hat{\vx}} \log p(\vy \mid \hat{\x})$ can be easily computed if an explicit measurement model is given, as in Example \ref{eg:linear-measurement}. If not, the conditional probability $p(\y\mid \x)$ is usually modeled by a deep network, say a classification network. Then the derivative can be evaluated via backpropagation through this network, again. 
+
+\paragraph{Iterative sampling via score matching and measurement matching.} 
+We now work the above conceptual derivation into the iterative denoising and sampling process for a practical algorithm that produces a sample based on the conditional distribution $\x \sim p(\x\mid \y)$.
+\sdb{End added by Yi.}
 
 \subsection{Applications for Conditional Generation}
 Below we give some vignettes for solving several typical
