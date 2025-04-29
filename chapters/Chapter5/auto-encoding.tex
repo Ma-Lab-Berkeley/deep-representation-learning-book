@@ -339,7 +339,7 @@ succeed in learning consistent autoencoders}.
   \label{fig:idealized_interpolation}
 \end{figure}
 
-\subsection{Nonlinear PCA}
+\subsection{Nonlinear PCA}\label{sub:nonlinear-pca}
 Of course, one should expect that things will no longer be so simple
 when we deal with more complex distributions whose underlying
 low-dimensional structure could be nonlinear.
@@ -1503,7 +1503,7 @@ of the entire process, continuing from those we have developed in
   By the equivalence we have derived above, we get by another application of
   \Cref{exercise:conditional_gaussian}
   \begin{equation}\label{eq:conditional-posterior-denoiser-gaussian-case}
-    \bE[ \vx \mid \vy=\vnu, \vx_t=\vxi ]
+    \bE[ \vx \mid \vx_t=\vxi, \vy=\vnu ]
     =
     \vmu_{\vx\mid \vy}(\vnu) + \vSigma_{\vx\mid\vy}\left(
     \vSigma_{\vx\mid \vy} + t^2 \vI 
@@ -1766,7 +1766,7 @@ of the entire process, continuing from those we have developed in
   \Cref{fig:conditional_sampling_computational_gaussian}), and the 
   convenient approximation to this denoiser made with the decomposition
   \eqref{eq:posterior-sampling-denoiser-decomposition}, the posterior denoiser
-  \Cref{eq:posterior-denoiser-gaussian-case}, and the measurement
+  \eqref{eq:posterior-denoiser-gaussian-case}, and the measurement
   matching approximation
   \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
   (bottom row of \Cref{fig:conditional_sampling_computational_gaussian}).
@@ -1846,23 +1846,96 @@ of the entire process, continuing from those we have developed in
 \end{example}
 
 \Cref{example:denoising-conditional-gaussian} suggests a convenient
-approximation for the measurement matching term \Cref{eq:}---we can use ...
+approximation for the measurement matching term
+\eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx},
+which can be made beyond the Gaussian setting of the example. To
+motivate this approximation in greater generality, notice that
+by conditional independence of $\vy$ and $\vx_t$ given $\vx$, we can write
+\begin{equation}
+  p_{\vy \mid \vx_t}(\vnu \mid \vxi)
+  =
+  \int p_{\vy \mid \vx}(\vnu \mid \vxi') p_{\vx \mid \vx_t}(\vxi' \mid \vxi)
+  \odif  \vxi'.
+\end{equation}
+Formally, when the posterior $p_{\vx\mid \vx_t}$ is a delta function centered at
+its mean $\bE[\vx \mid \vx_t=\vxi]$, the approximation
+\eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx} is
+exact. More generally, when the posterior $p_{\vx \mid \vx_t}$ is highly
+concentrated around its mean, the approximation
+\eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx} is
+accurate. This holds, for example, for sufficiently small $t$, which we saw
+explicitly in the Gaussian setting of
+\Cref{example:denoising-conditional-gaussian}.
 Although the numerical simulation in
 \Cref{fig:conditional_sampling_computational_gaussian} suggests that this
-approximation is not without its caveats in practice, it has proved to be
-a reliable baseline in practice, after being proposed by Chung et al.\ \cite{},
-and there are even principled and generalizable approaches to improve it by
+approximation is not without its caveats in certain regimes, it has proved to be
+a reliable baseline in practice, after being proposed by Chung et al.\ as
+``Diffusion Posterior Sampling'' (DPS) \cite{chung2023diffusion}.
+In addition, there are even principled and generalizable approaches to improve it by
 incorporating better estimates of the posterior variance (which turn out to be
 exact in the Gaussian setting of \Cref{example:denoising-conditional-gaussian}),
-which we discuss further in the end-of-chapter summary. We will therefore
-proceed in developing it further. \sdb{working here}
+which we discuss further in the end-of-chapter summary. 
+
+Thus, with the DPS approximation, we arrive at the following approximation for
+the conditional posterior denoisers $\bE[\vx \mid \vy, \vx_t]$, via
+\Cref{eq:posterior-sampling-denoiser-decomposition}:
+\begin{equation}
+  \bE[ \vx \mid \vx_t=\vxi, \vy=\vnu]
+  \approx
+  \bE[\vx \mid \vx_t=\vxi] 
+  + t^2 \nabla_{\vxi} \log p_{\vy \mid \vx}(\vnu \mid \bE[\vx \mid \vx_t = \vxi]).
+  \label{eq:posterior-sampling-denoiser-decomposition-dps}
+\end{equation}
+And, for a neural network or other model $\bar{\vx}_{\theta}(t, \vxi)$ 
+trained as in \Cref{sub:compression_denoising} to approximate the denoisers
+$\bE[\vx \mid \vx_t = \vxi]$ for each $t \in [0, T]$, we arrive at the learned
+conditional posterior denoisers
+\begin{equation}
+  \bar{\vx}_{\theta}(t, \vxi, \vnu) 
+  = \bar{\vx}_{\theta}(t, \vxi)
+  + t^2 \nabla_{\vxi} \log p_{\vy \mid \vx}(\vnu \mid \bar{\vx}_{\theta}(t,
+  \vxi)).
+  \label{eq:posterior-sampling-denoiser-learned-dps}
+\end{equation}
+Note that the approximation
+\eqref{eq:posterior-sampling-denoiser-decomposition-dps} is  valid for arbitrary
+forward models $h$ in the
+observation model \eqref{eq:measurement-matching-observation}, including
+nonlinear $h$, and even to
+arbitrary noise models for which a clean expression for the likelihood $p_{\vy
+\mid \vx}$ is known. Indeed, in the case of Gaussian noise, we have
+\begin{equation}
+  p_{\vy \mid \vx}(\vnu \mid \vxi)
+  \propto
+  \exp\left(
+    -\frac{1}{2\sigma^2} \norm*{ h(\vxi) - \vnu }_2^2
+  \right).
+\end{equation}
+Hence, evaluating the righthand side of
+\eqref{eq:posterior-sampling-denoiser-learned-dps}
+requires only
+\begin{enumerate}
+  \item A pretrained denoiser $\bar{\vx}_{\theta}(t, \vxi)$ for the data distribution $p$
+    (of $\vx)$, learned as in \Cref{sub:compression_denoising} via
+    \Cref{alg:learning_denoiser};
+  \item Forward and backward pass access to the forward model $h$ for the
+    measurements \eqref{eq:measurement-matching-observation};
+  \item A forward and backward pass through $\bar{\vx}_{\theta}(t, \vxi)$, which can be evaluated
+    efficiently using (say) backpropagation.
+\end{enumerate}
+
+Combining this scheme with the basic implementation of unconditional sampling we
+developed in \Cref{sub:compression_denoising}, namely around
+\Cref{eq:denoising-iteration-basic}, we obtain a practical algorithm for
+conditional sampling of the posterior $p_{\vx \mid \vy}$ given measurements
+following \eqref{eq:measurement-matching-observation}, written up for
+convenience in \Cref{alg:} for the case of Gaussian noise with known standard
+deviation $\sigma$. \sdb{TODO: More realistic numerical example, eg MRI?}
 
 
+\sdb{The following is Yi's notes.}
 
-\sdb{the following is old}
 This problem is also known as the \href{https://arxiv.org/pdf/2209.14687}{Diffusion Posterior Sampling for General Noisy Inverse Problem}. 
-
-
 \yima{Below we follow the survey paper on conditional sampling:
 \href{https://arxiv.org/pdf/2410.00083}{A Survey on Diffusion Models
 for Inverse Problems}.}
@@ -1920,7 +1993,6 @@ it, we have we have:
 \label{eqn:score-xt}
 \end{equation}
 
-\sdb{The following added by Yi.}
 \paragraph{Compute measurement matching.}
 In Chapter \ref{ch:compression}, we have shown how the score matching term ${\nabla_{\vx_t}
 \log p(\vx_t)}$ can be estimated and computed, when the diffusion process is Gaussian. Hence, we only need to find out how to compute the measurement matching term: $\nabla_{\vx_t} \log p(\vy \mid \vx_t)$. 
@@ -1944,7 +2016,6 @@ Notice that the second derivative $\nabla_{\vx_t} \hat{\x}(\x_t)$ can be compute
 
 \paragraph{Iterative sampling via score matching and measurement matching.} 
 We now work the above conceptual derivation into the iterative denoising and sampling process for a practical algorithm that produces a sample based on the conditional distribution $\x \sim p(\x\mid \y)$.
-\sdb{End added by Yi.}
 
 \subsection{Conditional Sampling of General Paired Data}
 
@@ -2020,11 +2091,25 @@ autoencoding via diffusion (MAD).
 
 Potentially a better diffusion or conditional diffusion  with a CRATE backbone?
 
-Referenced at end of \S 5.2: depth vs.\ width in neural networks. The issue of
-depth separations (expressivity) has been studied at great length: examples
-\cite{Telgarsky2016-sn,Bresler2020-xy,Venturi2021-qc}. Ease of training deeper
-networks has not received as satisfying of an answer from the perspective of
-theory. ResNets \cite{he2016deep} represent the pioneering empirical work of
+
+\paragraph{Shallow vs.\ deep neural networks, for autoencoding and more.}
+In \Cref{sub:nonlinear-pca}, we discussed Cybenko's universal approximation
+theorem and how it states that in principle, a neural network with a single
+hidden layer (and suitable elementwise nonlinearities) is sufficient to
+approximate any suitably regular target function. Of course, in practice, the
+major architectural reason for the dominance of neural networks in practice has
+been the refinement of techniques for training \textit{deeper} neural networks.
+Why is depth necessary?
+From a fundamental point of view, the issue of depth separations, which
+construct settings where a deeper neural network can approximate a given class
+of target functions with exponentially-superior efficiency relative to a shallow
+network,
+has been studied at great length in the theoretical literature:
+examples include \cite{Telgarsky2016-sn,Bresler2020-xy,Venturi2021-qc}. 
+The ease of training deeper
+networks in practice has not received as satisfying of an answer from the
+perspective of theory. 
+ResNets \cite{he2016deep} represent the pioneering empirical work of
 making deeper networks more easily trainable, used in nearly all modern
 architectures in some form. Theoretical studies have focused heavily on
 trainability of very deep networks, quantified via the initial neural tangent
@@ -2033,8 +2118,74 @@ significant insight into the trainability benefits of deeper networks in middle
 and late stages of training (but see \cite{Yang2021-gw} for the root of a line
 of research attempting to address this).
 
-\sdb{Short discussion of access to clean samples or not: SURE and noise2noise,
-Ambient Diffusion.}
+\paragraph{Measurement matching without clean samples.} In our development of
+conditional sampling, we considered measurement matching under an observation
+model \eqref{eq:measurement-matching-observation}, where we assume that we have
+paired data $(\vx, \vy)$---i.e., ground truth for each observation $\vy$.
+In many practically-relevant inverse problems, this is not the case: one of the
+most fundamental examples is in the context of compressed sensing, which we
+recalled in \Cref{ch:classic}, where we need to reconstruct $\vx$ from $\vy$
+using prior knowledge about $\vx$ (i.e., sparsity).
+In the setting of denoising-diffusion, we have access to an implicit prior for
+$\vx$ via the learned denoisers $\bar{\vx}_{\theta}(t, \vxi)$. Can we still perform 
+conditional sampling without access to ground truth samples $\vx$?
+
+For intuition as to why this might be possible, we recall a classical example
+from statistics known as Stein's unbiased risk estimator (SURE).
+Under an observation model $\vx_t = \vx + t \vg$ with $\vg \sim \cN(\Zero,
+\vI)$ and $t>0$, it turns out that for any weakly differentiable $f : \bR^D \to \bR^D$,
+\begin{equation}\label{eq:sure-risk}
+  \bE_{\vg}\left[
+    \norm*{\vx - f(\vx + t \vg)}_2^2
+    \right]
+  =
+  \bE_{\vg}\left[
+    \norm*{\vx+t\vg - f(\vx + t \vg)}_2^2
+    + 2t^2 \nabla \cdot f(\vx + t\vg)
+    \right]
+  - t^2 D,
+\end{equation}
+where $\nabla \cdot$ denotes the divergence operator:
+\begin{equation*}
+	\nabla \cdot f = \sum_{i=1}^D \partial_i f_i.
+\end{equation*}
+The $\vx$-dependent part of the RHS of \Cref{eq:sure-risk} is called Stein's unbiased risk
+estimator (SURE). If we take expectations over $\vx$ in \Cref{eq:sure-risk},
+note that the RHS can be written as an expectation with respect to $\vx_t$---in
+particular, the mean-squared error of \textit{any denoiser $f$} can be estimated
+\textit{solely from noisy samples}!
+This remarkable fact, in refined forms, constitutes the basis for many practical
+techniques for performing image restoration, denoising-diffusion, etc.\ using
+only noisy data: notable examples include the ``noise2noise'' paradigm
+\cite{pmlr-v80-lehtinen18a}
+and Ambient Diffusion \cite{daras2023ambient}.
+
+As a fun aside, we point out that \Cref{eq:sure-risk} leads to an alternate
+proof of Tweedie's formula (\Cref{thm:tweedie}). At a high level, one takes
+expectations over $\vx$ and expresses the main part of the RHS of
+\Cref{eq:sure-risk} equivalently, via integration by parts, as
+\begin{equation}
+  \bE_{\vx_t}\left[
+    \norm*{\vx_t - f(\vx_t)}_2^2
+    + 2t^2 \nabla \cdot f(\vx_t)
+    \right]
+  =
+  \bE_{\vx_t}\left[
+    \norm*{\vx_t - f(\vx_t)}_2^2
+    \right]
+  - 2t^2 \int
+  \ip*{\nabla p_{\vx_t}(\vxi)}{f(\vxi)}
+  \odif \vxi.
+\end{equation}
+This is a quadratic function of $f$, and formally taking derivatives gives
+that the optimal $f$ satisfies Tweedie's formula (\Cref{thm:tweedie}). This
+argument can be made rigorous using basic ideas from the calculus of variations.
+
+
+\paragraph{More about measurement matching and diffusion models for inverse
+problems.} 
+
+asdf
 
 \sdb{Short discussion of the moment matching improvement to DPS for fixing the
 collapse issue. Short discussion of other approaches to solving inverse problems
