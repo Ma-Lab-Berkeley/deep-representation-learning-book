@@ -1981,6 +1981,10 @@ $t_{\ell} = T\ell / L$, as for \Cref{eq:denoising-iteration-basic} in
 \Cref{alg:iterative_denoising_conditional} should be initialized with
 $\cN(\Zero, t_L^2 \vI)$ given these choices).
 
+\sdb{TODO: Need a small fix in the previous, because we used Tweedie for simple
+$\vx_t = \vx + t \vg$, but the algorithm for general DDIM needs to use it for
+$\vx_t = \alpha_t \vx + \sigma_t \vg$...}
+
 \sdb{TODO: More realistic numerical example, eg MRI?}
 
 
@@ -2070,43 +2074,85 @@ We now work the above conceptual derivation into the iterative denoising and sam
 
 \subsection{Conditional Sampling of General Paired Data}\label{sub:cfg}
 
-\sdb{the following is wip... turn this into a CFG section}
-In practice, there are typically two situations:
-one is that the observation function $h(\spcdot)$ is explicitly known,
-and the other is when $h(\spcdot)$ is not known but only samples of the
-joint distribution $p(\vx, \vy)$ are given.
-Two representative subclasses of these settings worth keeping in mind are:
-\begin{enumerate}
-  \item \textbf{Known $h$: Analytically-Structured Observations.} 
-    Like image/matrix completion, we
-    are often faced with a setting where $\vy$ denotes a degraded or otherwise
-    ``lossy''
-    observation of the input $\vx$. This can manifest in quite different
-    forms. For example, in various scientific or
-    medical imaging problems, the measured data $\vy$ may be a compressed and
-    corrupted observation of the underlying data $\vx$; whereas in 3D vision tasks,
-    $\vy$ may represent an image captured by a camera of a physical object with an
-    unknown (low-dimensional) pose $\vx$ \sdb{TODO: verify}.
-    Generally, by virtue of mathematical modeling (and, in some cases, co-design
-    of the measurement system), we know $h$, and can exploit this knowledge to help
-    reconstruct or sample $\vx$.
-  \item \textbf{Paired Samples $(\vx, \vy)$: Controllable Generation.} In more
-    general applications such as computer vision or natural language processing
-    on internet-scale datasets,
-    it is common for data $\vx$, say images or texts, to have known
-    \textit{attributes} that we want to use for controllable sampling of the
-    data distribution. In these cases,
-    the analytical relationship between the data $\vx$ and its attributes $\vy$
-    is intractable to model, but we may still proceed by exploiting the
-    statistical relationship between the paired samples $(\vx, \vy)$.
-    We will illustrate this setting with detailed vignettes from vision,
-    where, for example, $\vy$ represents a text caption or a segmentation mask
-    for an image $\vx$.
-\end{enumerate}
-The attentive reader may ask why we need to study the first class of scenarios,
-given that it is technically a special case of the latter. We will see later,
-both in theory and in practice, that exploiting knowledge of $h$ can lead to
-superior performance.
+In the previous section, we have seen how to use the denoising-diffusion
+paradigm for conditional sampling from the posterior $p_{\vx \mid \vy}$ given
+\textit{model-based} measurements $\vy = h(\vx) + \vw$
+(\Cref{eq:measurement-matching-observation}), culminating in the
+DPS algorithm \Cref{alg:iterative_denoising_conditional}. This is a powerful
+framework, but there are many practical applications, especially in computer
+vision and natural language processing, where an explicit generative model $h$
+for the measurements/observations $\vy$ is not available due to the
+intractability of analytical modeling. The most natural instance of this is
+a classification problem, where $\vy$ represents the class label for
+high-dimensional data $\vx$ (for example, a $224 \times 224$ RGB image from the
+ImageNet dataset). In this section, we will present techniques for extending
+conditional sampling to this setting.
+
+Thus, we now assume only that we have access to samples from the joint
+distribution of $(\vx, \vy)$:
+\begin{equation}
+  (\vx, \vy) \sim p_{\vx, \vy}.
+\end{equation}
+Our goal remains to produce conditional samples $\hat{\vx}$ from the posterior,
+given realizations $\vnu$ of $\vy$:
+\begin{equation}
+  \hat{\vx} \sim p_{\vx \mid \vy}(\spcdot \mid \vnu).
+\end{equation}
+As in the previous section, we will repeatedly use the notation $\vxi$ to denote
+realizations of $\vx$.
+To proceed, we note that our development of conditional sampling under
+measurements \eqref{eq:measurement-matching-observation} did not explicitly use
+the forward model $h$ except for in making the DPS approximation
+\eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}.
+In particular, we always have the conditional posterior denoiser decomposition
+\eqref{eq:posterior-sampling-denoiser-decomposition} by virtue of Bayes' rule
+and conditional independence of $\vy$ and $\vx_t$ given $\vx$, and thus we can
+still write given only paired data $(\vx, \vy) \sim p_{\vx, \vy}$
+\begin{equation*}
+  \bE[ \vx \mid \vx_t=\vxi, \vy=\vnu]
+  =
+  \bE[\vx \mid \vx_t=\vxi] + t^2 \nabla_{\vxi}\log p_{\vy \mid \vx_t}(\vnu\mid
+  \vxi).
+\end{equation*}
+
+\sdb{Working here. Classifier guidance and CFG.}
+
+% In practice, there are typically two situations:
+% one is that the observation function $h(\spcdot)$ is explicitly known,
+% and the other is when $h(\spcdot)$ is not known but only samples of the
+% joint distribution $p(\vx, \vy)$ are given.
+% Two representative subclasses of these settings worth keeping in mind are:
+% \begin{enumerate}
+%   \item \textbf{Known $h$: Analytically-Structured Observations.} 
+%     Like image/matrix completion, we
+%     are often faced with a setting where $\vy$ denotes a degraded or otherwise
+%     ``lossy''
+%     observation of the input $\vx$. This can manifest in quite different
+%     forms. For example, in various scientific or
+%     medical imaging problems, the measured data $\vy$ may be a compressed and
+%     corrupted observation of the underlying data $\vx$; whereas in 3D vision tasks,
+%     $\vy$ may represent an image captured by a camera of a physical object with an
+%     unknown (low-dimensional) pose $\vx$ \sdb{TODO: verify}.
+%     Generally, by virtue of mathematical modeling (and, in some cases, co-design
+%     of the measurement system), we know $h$, and can exploit this knowledge to help
+%     reconstruct or sample $\vx$.
+%   \item \textbf{Paired Samples $(\vx, \vy)$: Controllable Generation.} In more
+%     general applications such as computer vision or natural language processing
+%     on internet-scale datasets,
+%     it is common for data $\vx$, say images or texts, to have known
+%     \textit{attributes} that we want to use for controllable sampling of the
+%     data distribution. In these cases,
+%     the analytical relationship between the data $\vx$ and its attributes $\vy$
+%     is intractable to model, but we may still proceed by exploiting the
+%     statistical relationship between the paired samples $(\vx, \vy)$.
+%     We will illustrate this setting with detailed vignettes from vision,
+%     where, for example, $\vy$ represents a text caption or a segmentation mask
+%     for an image $\vx$.
+% \end{enumerate}
+% The attentive reader may ask why we need to study the first class of scenarios,
+% given that it is technically a special case of the latter. We will see later,
+% both in theory and in practice, that exploiting knowledge of $h$ can lead to
+% superior performance.
 
 
 
