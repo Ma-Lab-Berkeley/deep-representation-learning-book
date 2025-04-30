@@ -1925,13 +1925,63 @@ requires only
     efficiently using (say) backpropagation.
 \end{enumerate}
 
+\begin{algorithm}
+  \caption{Conditional sampling under measurements
+  \eqref{eq:measurement-matching-observation}, with an unconditional denoiser and DPS.}
+	\begin{algorithmic}[1]
+		\Require{An ordered list of timesteps \(0 \leq t_{0} < \cdots < t_{L} \leq T\) to use for sampling.}
+    \Require{An unconditional denoiser \(\bar{\vx}_{\theta} \colon
+    \{t_{\ell}\}_{\ell = 1}^{L} \times \R^{D} \to \R^{D}\) for $p_{\vx}$.}
+    \Require{Forward model $h : \bR^D \to \bR^d$ and measurement noise variance
+    $\sigma^2 > 0$ (\Cref{eq:measurement-matching-observation}).}
+    \Require{Measurement $\vnu \sim \vy$ to condition on.}
+		\Require{Scale and noise level functions \(\alpha, \sigma \colon \{t_{\ell}\}_{\ell = 0}^{L} \to \R_{\geq 0}\).}
+    \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{\vy \mid \vx}\).}
+    \Function{DDIMSamplerConditionalDPS}{$\bar{\vx}_{\theta}, \vnu, h, \sigma^2,
+    (t_{\ell})_{\ell = 0}^{L}$}
+		\State{Initialize \(\tilde{\vx}_{t_{L}} \sim\) approximate distribution of \(\vx_{t_{L}}\)} \Comment{VP \(\implies \dNorm(\vzero, \vI)\), VE \(\implies \dNorm(\vzero, t_{L}^{2}\vI)\).}
+		\For{\(\ell = L, L - 1, \dots, 1\)}
+		% \State{Compute
+		% 	\begin{equation*}
+  %       \nabla_{\vxi}\left[ -\frac{1}{2\sigma^2} \norm*{h(
+  %       \bar{\vx}_{\theta}(t_{\ell}, \vxi)
+  %       ) - \vnu}_2^2 \right]\biggl|_{\vxi = \hat{\vx}_{t_{\ell}}}\biggr.
+		% 	\end{equation*}
+		% }
+		\State{Compute
+			\begin{equation*}
+				\hat{\vx}_{t_{\ell - 1}} := \frac{\sigma_{t_{\ell
+        - 1}}}{\sigma_{t_{\ell}}}\hat{\vx}_{t_{\ell}} + \bp{\alpha_{t_{\ell
+        - 1}} - \frac{\sigma_{t_{\ell
+        - 1}}}{\sigma_{t_{\ell}}}\alpha_{t_{\ell}}}\left(
+        \bar{\vx}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}})
+        - \frac{t_{\ell}^2}{2\sigma^2}
+        \nabla_{\vxi}\left[ \norm*{h( \bar{\vx}_{\theta}(t_{\ell}, \vxi)
+        ) - \vnu}_2^2 \right]\biggl|_{\vxi = \hat{\vx}_{t_{\ell}}}\biggr.
+        \right)
+			\end{equation*}
+		}
+		\EndFor
+		\State{\Return{\(\hat{\vx}_{t_{0}}\)}}
+		\EndFunction
+	\end{algorithmic}
+	\label{alg:iterative_denoising_conditional}
+\end{algorithm}
+
 Combining this scheme with the basic implementation of unconditional sampling we
 developed in \Cref{sub:compression_denoising}, namely around
 \Cref{eq:denoising-iteration-basic}, we obtain a practical algorithm for
 conditional sampling of the posterior $p_{\vx \mid \vy}$ given measurements
 following \eqref{eq:measurement-matching-observation}, written up for
-convenience in \Cref{alg:} for the case of Gaussian noise with known standard
-deviation $\sigma$. \sdb{TODO: More realistic numerical example, eg MRI?}
+convenience in \Cref{alg:iterative_denoising_conditional} for the case of
+Gaussian noise with known standard deviation $\sigma$. In our discussion above,
+we have made the simplifying choices $\alpha_t = 1$, $\sigma_t = t$, and
+$t_{\ell} = T\ell / L$, as for \Cref{eq:denoising-iteration-basic} in
+\Cref{sub:compression_denoising} (and so
+\Cref{alg:iterative_denoising_conditional} should be initialized with
+$\cN(\Zero, t_L^2 \vI)$ given these choices).
+
+\sdb{TODO: More realistic numerical example, eg MRI?}
 
 
 \sdb{The following is Yi's notes.}
