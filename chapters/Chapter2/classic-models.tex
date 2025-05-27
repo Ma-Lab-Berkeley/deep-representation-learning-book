@@ -29,9 +29,9 @@ $~$\hfill -- David Hilbert
 
 Therefore, our central task is to learn a distribution that has low intrinsic dimension in a high-dimensional space. In the remainder of this section, we discuss several \textit{classical} methods to perform this task for several somewhat {\em idealistic} models for the distribution, namely models that are geometrically linear or statistically independent. While these models and methods are important and useful in their own right, we discuss them here as they motivate, inspire, and serve as a predecessor or analogue to more modern methods for more general distributions that involve deep (representation) learning.
 
-Our main approach can be summarized as:
+Our main approach (and general problem formulation) can be summarized as:
 \begin{tcolorbox}\centering
-    \textit{Given one or several (noisy or incomplete) observations of a ground truth sample from the data distribution, obtain an estimate of this sample.}
+    \textbf{Problem:} \textit{Given one or several (noisy or incomplete) observations of a ground truth sample from the data distribution, obtain an estimate of this sample.}
 \end{tcolorbox}
 This approach underpins several classical methods for data processing, which we discuss in this chapter.
 \begin{itemize}
@@ -91,89 +91,123 @@ our data space, we assume that our data belong to a low-dimensional subspace of 
     \label{fig:faces-digits}
 \end{figure}
 
-\paragraph{Problem Formulation.}
-To write this in mathematical notation, we represent a subspace \(\cS \subseteq \R^{D}\) of dimension \(d\)  by an orthonormal matrix \(\vU \in \O(D, d) \subseteq \R^{D \times d}\) such that the columns of \(\vU\) span \(\cS\). Then, we say that our data \(\{\vx_{i}\}_{i = 1}^{N} \subseteq \R^{D}\) have (approximate) low-rank structure if there exists an orthonormal matrix \(\vU_{o} \in \O(D, d)\), vectors \(\{\vz_{o, i}\}_{i = 1}^{N} \subseteq \R^{d}\), and \textit{small} vectors \(\{\veps_{i}\}_{i = 1}^{N} \subseteq \R^{D}\) such that 
+\paragraph{Problem formulation.}
+To write this in mathematical notation, we represent a subspace \(\cS \subseteq \R^{D}\) of dimension \(d\)  by an orthonormal matrix \(\vU \in \O(D, d) \subseteq \R^{D \times d}\) such that the columns of \(\vU\) span \(\cS\). Then, we say that our data \(\{\vx_{i}\}_{i = 1}^{N} \subseteq \R^{D}\) have (approximate) low-rank structure if there exists an orthonormal matrix \(\vU \in \O(D, d)\), vectors \(\{\vz_{i}\}_{i = 1}^{N} \subseteq \R^{d}\), and \textit{small} vectors \(\{\veps_{i}\}_{i = 1}^{N} \subseteq \R^{D}\) such that 
 \begin{equation}\label{eq:pca_dgp}
-    \vx_{i} = \vU_{o}\vz_{o, i} + \veps_{i}, \quad \forall i \in [N].
+    \vx_{i} = \vU\vz_{i} + \veps_{i}, \quad \forall i \in [N].
 \end{equation}
-Here \(\veps_{i}\) are disturbances that prevent the data from being perfectly low rank; their presence in our model allows us to quantify the degree to which our analysis remains relevant in the presence of deviations from our model. Thus, to process all we can from this data, it amounts to recovering \(\vU_{o}\), also called the \textit{principal components}. Fortunately, this is a computationally tractable task named {\bf Principal Component Analysis}, and we discuss now how to solve it.
+Here \(\veps_{i}\) are disturbances that prevent the data from being perfectly low rank; their presence in our model allows us to quantify the degree to which our analysis remains relevant in the presence of deviations from our model. The true supporting subspace is \(\cS := \Range(\vU)\). To process all we can from this data, we need to recover \(\cS\); to do this it is sufficient to recover \(\vU\), also called the \textit{principal components}. Fortunately, this is a computationally tractable task named {\bf Principal Component Analysis}, and we discuss now how to solve it.
 
 Given data \(\{\vx_{i}\}_{i = 1}^{N}\) distributed as in \eqref{eq:pca_dgp}, we
-aim to recover the model \(\vU_{o}\). A natural approach is to find the subspace
-\(\vU_{\star}\) and latent vectors \(\{\vz_{\star, i}\}_{i = 1}^{N}\) which
-yield the best approximation \(\vx_{i} \approx \vU_{\star}\vz_{\star, i}\). Namely, we aim to solve the problem 
+aim to recover the model \(\vU\). A natural approach is to find the subspace
+\(\vU^{\ast}\) and latent vectors \(\{\vz_{i}^{\ast}\}_{i = 1}^{N}\) which
+yield the best approximation \(\vx_{i} \approx \vU^{\ast}\vz_{i}^{\ast}\). Namely, we aim to solve the problem 
 \begin{equation}\label{eq:pca_sparse_recovery_problem}
-    \min_{\vU, \{\vz_{i}\}_{i = 1}^{N}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vz_{i}}_{2}^{2},
+    \min_{\tilde{\vU}, \{\tilde{\vz}_{i}\}_{i = 1}^{N}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \tilde{\vU}\tilde{\vz}_{i}}_{2}^{2},
 \end{equation}
-where $\vU$ is constrained to be an orthonormal matrix, as above. We will omit
+where $\tilde{\vU}$ is constrained to be an orthonormal matrix, as above. We will omit
 this constraint in similar statements below for the sake of concision.
 
-\paragraph{Subspace Encoding-Decoding via Denoising.}
-To simplify this problem, for a fixed \(\vU\), we have (proof as exercise):
-\begin{align*}
-    \min_{\{\vz_{i}\}_{i = 1}^{N}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vz_{i}}_{2}^{2} 
-    &= \frac{1}{N}\sum_{i = 1}^{N}\min_{\vz_{i}}\norm{\vx_{i} - \vU\vz_{i}}_{2}^{2} \\
-    &= \frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vU^{\top}\vx_{i}}_{2}^{2}. 
-\end{align*}
-That is $\vz_i = \vU^\top\vx_i$ is the optimal solution for the above minimization problem. 
+\paragraph{Subspace encoding-decoding via denoising.}
+To simplify this problem, for a fixed \(\tilde{\vU}\), we have (proof as exercise):
+\begin{align}
+    \min_{\{\tilde{\vz}_{i}\}_{i = 1}^{N}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \tilde{\vU}\tilde{\vz}_{i}}_{2}^{2} 
+    &= \frac{1}{N}\sum_{i = 1}^{N}\min_{\tilde{\vz}_{i}}\norm{\vx_{i} - \tilde{\vU}\tilde{\vz}_{i}}_{2}^{2} \\
+    &= \frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \tilde{\vU}\tilde{\vU}^{\top}\vx_{i}}_{2}^{2}. 
+\end{align}
+That is, the optimal solution \((\vU^{\ast}, \{\vz_{i}^{\ast}\}_{i = 1}^{N})\) to the above optimization problem has $\vz_i^{\ast} = (\vU^{\ast})^\top\vx_i$.
 
-Now, we can write the original optimization problem in \(\vU\) and \(\{\vz_{i}\}_{i = 1}^{N}\) as an optimization problem just over \(\vU\), i.e.,
+Now, we can write the original optimization problem in \(\tilde{\vU}^{\ast}\) and \(\{\tilde{\vz}_{i}\}_{i = 1}^{N}\) as an optimization problem just over \(\tilde{\vU}\), i.e., to obtain the basis \(\vU^{\ast}\) and compact codes \(\{\vz_{i}^{\ast}\}_{i = 1}^{N}\) it suffices to solve either of the two following equivalent problems:
 \begin{equation}\label{eq:pca_equals_denoising}
-    \min_{\vU, \{\vz_{i}\}_{i = 1}^{N}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vz_{i}}_{2}^{2} = \min_{\vU}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vU^{\top}\vx_{i}}_{2}^{2}.
+    \min_{\tilde{\vU}, \{\tilde{\vz}_{i}\}_{i = 1}^{N}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \tilde{\vU}\tilde{\vz}_{i}}_{2}^{2} = \min_{\tilde{\vU}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \tilde{\vU}\tilde{\vU}^{\top}\vx_{i}}_{2}^{2}.
 \end{equation}
 Note that the problem on the right-hand side of \eqref{eq:pca_equals_denoising}
 is a \textit{denoising} problem: given noisy observations \(\vx_{i}\) of
 low-rank data, we aim to find the \textit{noise-free} copy of \(\vx_{i}\), which
-under the model \eqref{eq:pca_dgp} is $\vz_{o, i}$. That is, the denoised input $\hat{\vx}_i = \vU\vU^\top \vx_i$. Notice that this is the point on the subspace that is closest to $\vx_i$. Here by solving the equivalent problem of finding the best subspace, parameterized by basis \(\vU\), the \textit{denoiser} is the projection matrix \(\vU\vU^{\top}\) that projects the noisy data point $\x_i$ onto the subspace. %Denoising is one of the fundamental building blocks of high-dimensional data analysis, and we will discuss it often in this book, as many algorithms we will discuss are essentially denoising with respect to a particular data model (such as in \eqref{eq:pca_dgp}, but a bit more complicated). 
+under the model \eqref{eq:pca_dgp} is $\vz_{i}$. That is, the denoised input $\hat{\vx}_i = \vU\vU^\top \vx_i$. Notice that this is the point on the subspace that is closest to $\vx_i$, as visualized in \Cref{fig:pca-geometry}. Here by solving the equivalent problem of finding the best subspace, parameterized by the learned basis \(\vU^{\ast}\), we learn an approximation to the \textit{denoiser}, i.e., the projection matrix \(\vU^{\ast}(\vU^{\ast})^{\top} \approx \vU\vU^{\top}\) that projects the noisy data point $\x_i$ onto the subspace \(\cS\). %Denoising is one of the fundamental building blocks of high-dimensional data analysis, and we will discuss it often in this book, as many algorithms we will discuss are essentially denoising with respect to a particular data model (such as in \eqref{eq:pca_dgp}, but a bit more complicated). 
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+       \node (zero) at (0, 0) {};
+       \node (u1) at (5, 1) {\(\vu_{1}\)};
+       \draw[blue, ->, thick] (zero) -- (u1);
+       \node[circle, inner sep=1.25pt, fill=red, draw=black] (x) at (3, 1.5) {};
+       \node[circle, inner sep=1.25pt, fill=green, draw=black] (x_hat) at (3.2, 0.64)  {};
+       \node at ($(x) + (0.5, 0.0)$) {\(\vx\)};
+       \node at ($(x_hat) + (1, -0.2)$) {\(\hat{\vx} = \vu_{1}\vu_{1}^{\top}\vx\)};
+       \draw[brown, ->, thick] (x_hat) -- (x);
+       \node at (2.75, 1) {\color{brown}\(\varepsilon\)};
+    \end{tikzpicture}
+    \caption{\small \textbf{Geometry of PCA.} A data point $\vx$ (red) is projected onto the one-dimensional learned subspace spanned by the unit basis vector $\vu_1$ (blue arrow). The projection $\vU\vU^\top\vx = \vu_{1}\vu_{1}^{\top}\vx$ (green) is the denoised version of $\vx$ using the low-dimensional structure given by $\vu_{1}$, and $\boldsymbol{\varepsilon}$ (brown arrow) represents the projection residual or noise.}
+    \label{fig:pca-geometry}
+\end{figure}
 
 Putting the above process together, we essentially obtain a simple encoding-decoding scheme that maps a data point $\vx$ in $\R^D$ to a lower-dimensional (latent) space $\R^d$ and then back to $\R^D$:
 \begin{equation}
-\x \xrightarrow{\hspace{2mm} \mathcal{E} = \vU^\top \hspace{2mm}}  \z \xrightarrow{\hspace{2mm} \mathcal{D} = \vU \hspace{2mm}}   \hat{\x}.  
+\x \xrightarrow{\hspace{2mm} \mathcal{E} = (\vU^\ast)^\top \hspace{2mm}}  \z \xrightarrow{\hspace{2mm} \mathcal{D} = \vU^\ast \hspace{2mm}}   \hat{\x}.  
 \label{eqn:autoencoding-PCA}
 \end{equation}
-Here, $\vz \in \R^d$ can be viewed as the compact code (or a latent representation) of a data point  $\x \in \R^D$ and the learned subspace basis $\vU$ as the associated codebook whose columns are the (learned) optimal code words. The process achieves the function of denoising $\x$ by projecting it onto the subspace spanned by $\vU$.
+Here, $\vz \in \R^d$ can be viewed as the low-dimensional compact code (or a latent representation) of a data point  $\x \in \R^D$ and the learned subspace basis $\vU^\ast$ as the associated codebook whose columns are the (learned) optimal code words. The process achieves the function of denoising $\x$ by projecting it onto the subspace spanned by $\vU^\ast$.
 
-\paragraph{Computing the Subspace Basis.}
+\paragraph{Computing the subspace basis.}
 For now, we continue our calculation. Let \(\vX = \mat{\vx_{1}, \dots, \vx_{N}} \in \R^{D \times N}\) be the matrix whose columns are the observations \(\vx_{i}\). We have (proof as exercise)
 \begin{align}
-    \argmin_{\vU}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vU^{\top}\vx_{i}}_{2}^{2}
-    &= \argmax_{\vU}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vU^{\top}\vx_{i}}_{F}^{2} \\ 
-    &= \argmax_{\vU}\tr\rc{\vU^{\top}\bp{\frac{\vX\vX^{\top}}{N}}\vU}.
+    \argmin_{\tilde{\vU}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \tilde{\vU}\tilde{\vU}^{\top}\vx_{i}}_{2}^{2}
+    &= \argmax_{\tilde{\vU}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\tilde{\vU}^{\top}\vx_{i}}_{F}^{2} \\ 
+    &= \argmax_{\tilde{\vU}}\tr\rc{\tilde{\vU}^{\top}\bp{\frac{\vX\vX^{\top}}{N}}\tilde{\vU}}.
 \end{align}
-Thus, to compute the principal components, we find the orthogonal matrix \(\vU\), which maximizes the term: \(\tr(\vU^{\top}(\vX\vX^{\top}/N)\vU)\). In fact, the best such matrix \(\vU_{\star}\) has columns which are the \textit{top \(d\) eigenvectors} of \(\vX\vX^{\top}/N\). While this can be obtained via brute force calculation, such as an inductive proof, we do not do so here and leave it to \Cref{exercise:principal-components-derivation}. We instead provide a little intuition by considering the case \(d = 1\). Then we only have a single unit vector \(\vu\) to recover, and solve the problem \(\max_{\vu} \vu^{\top}(\vX\vX^{\top}/N)\vu\). This is the so-called \textit{Rayleigh quotient} of \(\vX\vX^{\top}/N\) and the optimal solutions to this problem are eigenvectors corresponding to the maximum eigenvalue of \(\vX\vX^{\top}/N\). Thus, the worked-out solution for the case \(d = 1\) corresponds to our proposed solution for the general \(d\) case. In summary, we have
-\begin{tcolorbox}
-    \textit{The principal components correspond to the optimal linear denoiser and are given by the top \(d\) eigenvectors of \(\vX\vX^{\top}/N\).}
-\end{tcolorbox}
-\yima{The presentation of the above paragraph is somewhat awkward... Did we give the result for the $d=1$ case as an exercise or give the derivation somewhere? Or assume the student already knows that or at least give some reference? Also, maybe give a picture that illustrates the geometry?}
+Thus, to compute the principal components, we find the orthogonal matrix \(\tilde{\vU}\) which maximizes the term \(\tr(\tilde{\vU}^{\top}(\vX\vX^{\top}/N)\tilde{\vU})\). We can prove via induction that this matrix \(\vU^{\ast}\) has columns which are the \textit{top \(d\) unit eigenvectors} of \(\vX\vX^{\top}/N\). We leave the whole proof to the reader in \Cref{exercise:principal-components-derivation}, but we handle the base case of the induction here. Suppose that \(d = 1\). Then we only have a single unit vector \(\vu\) to recover, so the above problem reduces to
+\begin{equation}
+    \max_{\tilde{\vu} \colon \norm{\tilde{\vu}}_{2} = 1} \tilde{\vu}^{\top}(\vX\vX^{\top}/N)\tilde{\vu}.
+\end{equation}
+This is the so-called \textit{Rayleigh quotient} of \(\vX\vX^{\top}/N\). By invoking the spectral theorem we diagonalize \(\vX\vX^{\top}/N = \vV\vLambda\vV^{\top}\), where \(\vV\) is orthogonal and \(\vLambda\) is diagonal with non-negative entries. Hence 
+\begin{equation}
+    \tilde{\vu}^{\top}(\vX\vX^{\top}/N)\tilde{\vu} = \tilde{\vu}^{\top}\vV\vLambda\vV^{\top}\vu = (\vV^{\top}\tilde{\vu})^{\top}\vLambda(\vV^{\top}\tilde{\vu}).
+\end{equation}
+Since \(\vV\) is an invertible orthogonal transformation, \(\vV^{\top}\tilde{\vu}\) is a unit vector, and optimizing over \(\tilde{\vu}\) is equivalent to optimizing over \(\tilde{\vw} := \vV^{\top}\tilde{\vu}\). Hence, we can write
+\begin{equation}
+    \tilde{\vu}^{\top}(\vX\vX^{\top}/N)\tilde{\vu} = \tilde{\vw}^{\top}\vLambda\tilde{\vw},
+\end{equation}
+whose optimal solutions \(\vw^{\star}\) among unit vectors are one-hot vectors whose only nonzero (hence unit) entry is in one of the indices corresponding to the largest eigenvalue of \(\vX\vX^{\top}/N\). This means that \(\tilde{\vu} = \vV\tilde{\vw}\), the optimal solution to the original problem, corresponds to a unit eigenvector of \(\vX\vX^{\top}/N\) (i.e., column of \(\vV\)) which corresponds to the largest eigenvalue.  Suitably generalizing this to the case \(d > 1\), and summarizing all the previous discussion, we have the following informal Theorem.
+\begin{theorem}\label{thm:pca}
+    Suppose that our dataset \(\{\vx_{i}\}_{i = 1}^{N} \subseteq \R^{D}\) can be written as 
+    \begin{equation}
+        \vx_{i} = \vU\vz_{i} + \veps_{i}, \qquad \forall i \in [N],
+    \end{equation}
+    where \(\vU \in \O(D, d)\) captures the \textit{low-rank structure}, \(\{\vz_{i}\}_{i = 1}^{N} \subseteq \R^{d}\) are the \textit{compact codes} of the data, and \(\{\veps_{i}\}_{i = 1}^{N} \subseteq \R^{D}\) are small vectors indicating the deviation of our data from the low-rank model. Then the \textit{principal components} \(\vU^{\ast} \in \O(D, d)\) of our dataset are given by the top \(d\) eigenvectors of \(\vX\vX^{\top}/N\), where \(\vX = [\vx_{1}, \dots, \vx_{N}] \in \R^{D \times N}\), and approximately correspond to the optimal linear denoiser: \(\vU^{\ast}(\vU^{\ast})^{\top} \approx \vU\vU^{\top}\).
+\end{theorem}
+We do not give explicit rates of approximation here as they can become rather technical. In the special case that \(\veps_{i} = \vzero\) for all \(i\), the learned \(\vU^{\ast}\) spans the support of the samples \(\{\vx_{i}\}_{i = 1}^{N}\). If in addition the \(\vz_{i}\) are sufficiently diverse (say, spanning all of \(\R^{d}\)) then we would have perfect recovery: \(\vU^{\ast}(\vU^{\ast}) = \vU\vU^{\ast}\).
+% \yima{The presentation of the above paragraph is somewhat awkward... Did we give the result for the $d=1$ case as an exercise or give the derivation somewhere? Or assume the student already knows that or at least give some reference? Also, maybe give a picture that illustrates the geometry?}
 
 
 \begin{remark}
-    In some data analysis tasks, the data matrix \(\vX\) is formatted such that each data point is a \textit{row} rather than a \textit{column} as is presented here. In this case the principal components are the top \(d\) eigenvectors of \(\vX^{\top}\vX\).
+    In some data analysis tasks, the data matrix \(\vX\) is formatted such that each data point is a \textit{row} rather than a \textit{column} as is presented here. In this case the principal components are the top \(d\) eigenvectors of \(\vX^{\top}\vX/N\).
 \end{remark}
 
 
 \begin{remark}[Basis Selection via Denoising Eigenvalues]
-    In many cases, either our data will not truly be distributed according to a subspace-plus-noise model, or we will not know the true underlying dimension \(d\) of the subspace. In this case, we have to choose \(d\); this problem is called \textit{model selection}. In the restricted case of PCA, one way to perform model selection is to compute \(\vX\vX^{\top}/N\) and look for instances where adjacent eigenvalues go from large to small; this is one indicator that the index of the larger eigenvalue is the ``true dimension \(d\)'', and the rest of the eigenvalues of \(\vX\vX^{\top}/N\) are contributed by the noise or disturbances \(\veps_{i}\). Model selection is a difficult problem and, nowadays in the era of deep learning where it's called ``hyperparameter optimization'', is usually done via brute force or Bayesian optimization. %\sdb{``thresholding noise'' to learn $\vU$}
+    In many cases, either our data will not truly be distributed according to a subspace-plus-noise model, or we will not know the true underlying dimension \(d\) of the subspace. In this case, we have to choose \(d\); this problem is called \textit{model selection}. In the restricted case of PCA, one way to perform model selection is to compute \(\vX\vX^{\top}/N\) and look for instances where adjacent eigenvalues sharply decrease; this is one indicator that the index of the larger eigenvalue is the ``true dimension \(d\)'', and the rest of the eigenvalues of \(\vX\vX^{\top}/N\) are contributed by the noise or disturbances \(\veps_{i}\). Model selection is a difficult problem and, nowadays in the era of deep learning where it is called ``hyperparameter optimization'', is usually done via brute force or Bayesian optimization. %\sdb{``thresholding noise'' to learn $\vU$}
 \end{remark}
 
 \begin{remark}[Denoising Samples]
     The expression on the right-hand side of \eqref{eq:pca_equals_denoising}, that is,
     \begin{equation}\label{eq:orthogonal_denoising}
-        \min_{\vU}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \vU\vU^{\top}\vx_{i}}_{2}^{2},
+        \min_{\tilde{\vU}}\frac{1}{N}\sum_{i = 1}^{N}\norm{\vx_{i} - \tilde{\vU}\tilde{\vU}^{\top}\vx_{i}}_{2}^{2},
     \end{equation}
-    is what's known as a \textit{denoising problem}, thusly named because it is an optimization problem whose solution \textit{removes the noise from the samples so it fits on the subspace}. Denoising --- learning a map which removes noise from noisy samples so that it fits on the data structure (such as in \eqref{eq:pca_dgp}, but maybe  more complicated) --- is a common method for learning distributions that will be discussed in the sequel and throughout the manuscript.
+    is what's known as a \textit{denoising problem}, thusly named because it is an optimization problem whose solution \textit{removes the noise from the samples so it fits on the subspace}. Denoising --- learning a map which removes noise from noisy samples so that it fits on the data structure (such as in \eqref{eq:pca_dgp}, but maybe  more complicated) --- is a common method for learning distributions that will be discussed in the sequel and throughout the manuscript. Note that we have already discussed this notion, but it bears repeating due to its central importance in later Chapters.
 \end{remark}
 
 \begin{remark}[Neural Network Interpretation]
-    If we do a PCA, we approximately recover the support of the distribution encoded by the parameter \(\vU_{\star}\). The learned denoising map then takes the form \(\vU_{\star}\vU_{\star}^{\top}\). On top of being a denoiser, this can be viewed as a \textit{simple two-layer weight-tied linear neural network}: the first layer multiplies by \(\vU_{\star}^{\top}\), and the second layer multiplies by \(\vU_{\star}\), namely
+    If we do a PCA, we approximately recover the support of the distribution encoded by the parameter \(\vU_{\ast}\). The learned denoising map then takes the form \(\vU^{\ast}(\vU^{\ast})^{\top}\). On top of being a denoiser, this can be viewed as a \textit{simple two-layer weight-tied linear neural network}: the first layer multiplies by \((\vU^{\ast})^{\top}\), and the second layer multiplies by \(\vU^{\ast}\), namely
     \begin{equation}
-        \operatorname{denoise}(\vx) = \underbrace{\vU_{\star} \circ \underbrace{\id \circ \underbrace{\vU_{\star}^{\top}\vx}_{\text{first ``layer''}}}_{\text{post-activation of first ``layer''}}}_{\text{output of ``NN''}}
+        \operatorname{denoise}(\vx) = \underbrace{\vU^{\ast} \circ \underbrace{\id \circ \underbrace{(\vU^{\ast})^{\top}\vx}_{\text{first ``layer''}}}_{\text{post-activation of first ``layer''}}}_{\text{output of ``NN''}}
     \end{equation}
     Contrasting this to a standard two-layer neural network, we see a structural similarity:
     \begin{equation}
-        \operatorname{NN}(\vx) = \underbrace{\vW_{\star} \circ \underbrace{\mathrm{ReLU} \circ \underbrace{\vU_{\star}^{\top}\vx}_{\text{first layer}}}_{\text{post-activation of first layer}}}_{\text{output of NN}}
+        \operatorname{NN}(\vx) = \underbrace{\vW^{\ast} \circ \underbrace{\mathrm{ReLU} \circ \underbrace{(\vU^{\ast})^{\top}\vx}_{\text{first layer}}}_{\text{post-activation of first layer}}}_{\text{output of NN}}
     \end{equation}
-    In particular, PCA can be interpreted as \textit{learning a simple two-layer denoising autoencoder},\footnote{In fact, as we have mentioned in the previous chapter, PCA was one of the first problems that neural networks were used to solve \cite{Oja1982SimplifiedNM,Baldi89}.} one of the simplest examples of a non-trivial neural network. In this framework, the \textit{learned representations} would just be \(\vU_{\star}^{\top}\vx\). In this way, PCA serves as a model problem for (deep) representation learning, which we will draw upon further in the monograph. Notice that in this analogy, the representations reflect, or are projections of, the input data towards a learned low-dimensional structure. This property will be particularly relevant in the future.
+    In particular, PCA can be interpreted as \textit{learning a simple two-layer denoising autoencoder},\footnote{In fact, as we have mentioned in the previous chapter, PCA was one of the first problems that neural networks were used to solve \cite{Oja1982SimplifiedNM,Baldi89}.} one of the simplest examples of a non-trivial neural network. In this framework, the \textit{learned representations} would just be \((\vU^{\ast})^{\top}\vx \approx \vz\). In this way, PCA serves as a model problem for (deep) representation learning, which we will draw upon further in the monograph. Notice that in this analogy, the representations reflect, or are projections of, the input data towards a learned low-dimensional structure. This property will be particularly relevant in the future.
 \end{remark}
 
 \subsection{Pursuing Low-rank Structure via Power Iteration}\label{subsec:power iterations}
@@ -219,10 +253,10 @@ Because \(\lambda_{1} > \lambda_{i}\) for all \(i > 1\), the terms inside the su
 \begin{equation}
     \lim_{t \to \infty}\vv_{t} = \frac{\alpha_{1}}{\abs{\alpha_{1}}}\vw_{1} = \sign(\alpha_{1})\vw_{1},
 \end{equation}
-which is a top unit eigenvector of \(\vM$. The top eigenvalue \(\lambda_{1}\) of \(\vM\) can be estimated by \(\vv_{t}^{\top}\vM\vv_{t}\), which converges similarly rapidly to \(\lambda_{1}\). 
+which is a top unit eigenvector of \(\vM\). The top eigenvalue \(\lambda_{1}\) of \(\vM\) can be estimated by \(\vv_{t}^{\top}\vM\vv_{t}\), which converges similarly rapidly to \(\lambda_{1}\). 
 \end{proof}
 
-\yima{How may the power iteration process be related to the denoising processing for the single Gaussian in Chapter 3?}
+% \yima{How may the power iteration process be related to the denoising processing for the single Gaussian in Chapter 3?} \DP{there is not much of a connection, and we discuss this in Ch3}
 
 To find the second top eigenvector, we apply the power iteration algorithm to \(\vM - \lambda_{1}\vv_{1}\vv_{1}^{\top}\), which has eigenvectors \((\vw_{i})_{i = 2}^{D}\) and corresponding eigenvalues \((\lambda_{i})_{i = 2}^{D}\). By repeating this procedure \(d\) times in sequence, we can very efficiently estimate the top \(d\) eigenvectors of \(\vM\) very quickly, for any symmetric positive semidefinite matrix \(\vM\). Thus we can also apply it to \(\vX\vX^{\top}/N\) to recover the top \(d\) principal components, which is what we were after in the first place. Notice that this approach recovers one principal component at a time; we will contrast this to other algorithmic approaches, such as gradient descent on global objective functions, in future sections.
 
@@ -236,49 +270,58 @@ To find the second top eigenvector, we apply the power iteration algorithm to \(
 
 Notice that the above formulation makes no statistical assumptions on the data-generating process. However, it is common to include statistical elements within a given data model, as it may add further enlightening interpretations about the result of the analysis. As such, we ask the natural question: \textit{what is the statistical analog to low-dimensional structure?} Our answer is that a low-dimensional \textit{distribution} is one whose support is concentrated around a low-dimensional geometric structure. 
 
-To illustrate this point, we discuss \textit{probabilistic principal component analysis (PPCA).} This formulation can be viewed as a statistical variant of regular PCA. Mathematically, we now consider our data as samples from a random variable \(\vx\) taking values in \(\R^{D}\) (also sometimes called a \textit{random vector}). We say that \(\vx\) has (approximate) low-rank statistical structure if and only if there exists an orthonormal matrix \(\vU_{o} \in \O(D, d)\), a random variable \(\vz_{o}\) taking values in \(\R^{d}\), and a \textit{small} random variable \(\veps\) taking values in \(\R^{D}\) such that \(\vz_{o}\) and \(\veps\) are independent, and
+To illustrate this point, we discuss \textit{probabilistic principal component analysis (PPCA).} This formulation can be viewed as a statistical variant of regular PCA. Mathematically, we now consider our data as samples from a random variable \(\vx\) taking values in \(\R^{D}\) (also sometimes called a \textit{random vector}). We say that \(\vx\) has (approximate) low-rank statistical structure if and only if there exists an orthonormal matrix \(\vU \in \O(D, d)\), a random variable \(\vz\) taking values in \(\R^{d}\), and a \textit{small} random variable \(\veps\) taking values in \(\R^{D}\) such that \(\vz\) and \(\veps\) are independent, and
 \begin{equation}
-    \vx = \vU_{o}\vz_{o} + \veps.
+    \vx = \vU\vz + \veps.
 \end{equation}
-Our goal is again to recover \(\vU_{o}\). Towards this end, we set up the analogous problem as in Subsection \eqref{sub:pca}, i.e., optimizing over subspaces \(\vU\) and random variables \(\vz\) to solve the following problem:
+Our goal is again to recover \(\vU\). Towards this end, we set up the analogous problem as in Subsection \eqref{sub:pca}, i.e., optimizing over subspace supports \(\tilde{\vU}\) and random variables \(\vz\) to solve the following problem:
 \begin{equation}
-    \min_{\vU, \vz}\Ex\norm{\vx - \vU\vz}_{2}^{2}.
+    \min_{\tilde{\vU}, \tilde{\vz}}\Ex\norm{\vx - \tilde{\vU}\tilde{\vz}}_{2}^{2}.
 \end{equation}
 Since we are finding the best such random variable \(\vz\) we can find its realization \(\vz(\vx)\) separately for each value of \(\vx\). Performing the same calculations as in Subsection \eqref{sub:pca}, we obtain %\sdb{weird notation here (it's a $\vz(\vx)$ inside the expectation? and $\vz$ reused?)}
 \begin{equation}\label{eq:ppca_denoising}
-    \min_{\vU, \vz}\Ex\norm{\vx - \vU\vz}_{2}^{2} = \min_{\vU}\Ex\min_{\vz(\vx)}\norm{\vx - \vU\vz(\vx)}_{2}^{2} = \min_{\vU}\Ex\norm{\vx - \vU\vU^{\top}\vx}_{2}^{2},
+    \min_{\tilde{\vU}, \tilde{\vz}}\Ex\norm{\vx - \tilde{\vU}\tilde{\vz}}_{2}^{2} = \min_{\tilde{\vU}}\Ex\min_{\tilde{\vz}(\vx)}\norm{\vx - \tilde{\vU}\tilde{\vz}(\vx)}_{2}^{2} = \min_{\tilde{\vU}}\Ex\norm{\vx - \tilde{\vU}\tilde{\vU}^{\top}\vx}_{2}^{2},
 \end{equation}
-again re-emphasizing the fact that the estimated subspace with principal components \(\vU\) corresponds to a denoiser \(\vU\vU^{\top}\) which projects onto that subspace. As before, we obtain 
+again re-emphasizing the fact that the estimated subspace with principal components \(\vU^{\star}\) corresponds to a denoiser \(\vU^{\star}(\vU^{\star})^{\top}\) which projects onto that subspace. As before, we obtain 
 \begin{align}\label{eq:PPCA}
-    \argmin_{\vU}\Ex\norm{\vx - \vU\vU^{\top}\vx}_{2}^{2} 
-    &= \argmax_{\vU}\Ex\norm{\vU^{\top}\vx}_{2}^{2} \\
-    &= \argmax_{\vU}\tr(\vU^{\top}\Ex[\vx\vx^{\top}]\vU),
+    \argmin_{\tilde{\vU}}\Ex\norm{\vx - \tilde{\vU}\tilde{\vU}^{\top}\vx}_{2}^{2} 
+    &= \argmax_{\tilde{\vU}}\Ex\norm{\tilde{\vU}^{\top}\vx}_{2}^{2} \\
+    &= \argmax_{\tilde{\vU}}\tr(\tilde{\vU}^{\top}\Ex[\vx\vx^{\top}]\tilde{\vU}),
 \end{align}
-and the solution to the latter problem is just the top \(d\) principal components of the second moment matrix \(\Ex[\vx\vx^{\top}]\). Actually, the above problems are visually very similar to the equations for computing the principal components in the previous Subsection, except with \(\Ex[\vx\vx^{\top}]\) replacing \(\vX\vX^{\top}/N\). In fact, the latter quantity is an estimate for the former. Both formulations effectively do the same thing, and have the same practical solution --- compute the left singular vectors of the data matrix \(\vX\), or equivalently the top eigenvectors of the estimated covariance matrix \(\vX\vX^{\top}/N\). The statistical formulation, however, has an additional interpretation. Suppose that \(\Ex[\vz_{o}] = \vzero\) and \(\Ex[\veps] = \vzero\). We have
+and the solution to the latter problem is just the top \(d\) principal components of the second moment matrix \(\Ex[\vx\vx^{\top}]\). Actually, the above problems are visually very similar to the equations for computing the principal components in the previous Subsection, except with \(\Ex[\vx\vx^{\top}]\) replacing \(\vX\vX^{\top}/N\). In fact, the latter quantity is an estimate for the former. Both formulations effectively do the same thing, and have the same practical solution --- compute the left singular vectors of the data matrix \(\vX\), or equivalently the top eigenvectors of the estimated covariance matrix \(\vX\vX^{\top}/N\). The statistical formulation, however, has an additional interpretation. Suppose that \(\Ex[\vz] = \vzero\) and \(\Ex[\veps] = \vzero\). We have
 \begin{equation}
-    \Ex[\vx] = \vU_{o}\Ex[\vz_{o}] + \Ex[\veps] = \vzero,
+    \Ex[\vx] = \vU\Ex[\vz] + \Ex[\veps] = \vzero,
 \end{equation}
 so that \(\Cov[\vx] = \Ex[\vx\vx^{\top}]\). Now working out \(\Cov[\vx]\) we have 
 \begin{equation}
-    \Cov[\vx] = \vU_{o}\Cov[\vz_{o}]\vU_{o}^{\top} + \Cov[\veps] = \vU_{o}\Ex[\vz_{o}\vz_{o}^{\top}]\vU_{o}^{\top} + \Cov[\veps].
+    \Cov[\vx] = \vU\Cov[\vz]\vU^{\top} + \Cov[\veps] = \vU\Ex[\vz\vz^{\top}]\vU^{\top} + \Cov[\veps].
 \end{equation}
 In particular, if \(\Cov[\veps]\) is small, it holds that \(\Cov[\vx] = \Ex[\vx\vx^{\top}]\) is approximately a low-rank matrix, in particular rank \(d\). Thus the top \(d\) eigenvectors of \(\Ex[\vx\vx^{\top}]\) essentially summarize the whole covariance matrix. But they are also the principal components, so we can interpret principal component analysis as performing a low-rank decomposition of \(\Cov[\vx]\).
 
 \begin{remark}
     By using the probabilistic viewpoint of PCA, we achieve a clearer and more quantitative understanding of how it relates to denoising. First, consider the denoising problem in \eqref{eq:ppca_denoising}, namely
     \begin{equation}
-        \min_{\vU}\Ex\norm{\vx - \vU\vU^{\top}\vx}_{2}^{2}.
+        \min_{\tilde{\vU}}\Ex\norm{\vx - \tilde{\vU}\tilde{\vU}^{\top}\vx}_{2}^{2}.
     \end{equation}
-    It is not too hard to prove that if \(\veps\) is an isotropic Gaussian random variable, i.e., with distribution \(\veps \sim \dNorm(\vzero, \sigma^{2}\vI)\),\footnote{Other distributions work so long as they support all of \(\R^{D}\), but the Gaussian is the easiest to work with here.} then for \textit{any} solution \(\vU_{\star}\) to this problem, we have 
+    It is not too hard to prove that if \(\veps\) is an isotropic Gaussian random variable, i.e., with distribution \(\veps \sim \dNorm(\vzero, \sigma^{2}\vI)\),\footnote{Other distributions work so long as they support all of \(\R^{D}\), but the Gaussian is the easiest to work with here.} then for \textit{any} solution \(\vU^{\ast}\) to this problem, we have 
     \begin{equation}
-        \vU_{\star}\vU_{\star}^{\top} = \vU_{o}\vU_{o}^{\top}
+        \vU^{\ast}(\vU^{\ast})^{\top} = \vU\vU^{\top}
     \end{equation}
-    and so the true supporting subspace, say \(\cS_{o} \doteq \Range(\vU_{o})\), is recovered as the span of columns of \(\vU_{\star}\), since 
+    and so the true supporting subspace, say \(\cS \doteq \Range(\vU)\), is recovered as the span of columns of \(\vU^{\ast}\), since 
     \begin{equation}
-        \cS_{o} = \Range(\vU_{o}) = \Range(\vU_{o}\vU_{o}^{\top}) = \Range(\vU_{\star}\vU_{\star}^{\top}) = \Range(\vU_{\star}).
+        \cS = \Range(\vU) = \Range(\vU\vU^{\top}) = \Range(\vU^{\ast}(\vU^{\ast})^{\top}) = \Range(\vU^{\ast}).
     \end{equation}
-    In particular, the learned \textit{denoising map} \(\vU_{\star}\vU_{\star}^{\top}\) is an orthogonal projection onto \(\cS_{o}\), pushing noisy points onto the ground truth supporting subspace. We can establish a similar technical result in the case where we only have finite samples, as in Subsection \ref{sub:pca}, but this takes more effort and technicality. %\DP{include formal error rate?}
+    In particular, the learned \textit{denoising map} \(\vU^{\ast}(\vU^{\ast})^{\top}\) is an orthogonal projection onto \(\cS\), pushing noisy points onto the ground truth supporting subspace. We can establish a similar technical result in the case where we only have finite samples, as in \Cref{thm:pca}, but this takes more effort and technicality. Summarizing this discussion, we have the following informal Theorem.
 \end{remark}
+
+
+\begin{theorem}\label{thm:ppca}
+    Suppose that the random variable \(\vx\) can be written as
+    \begin{equation}
+        \vx = \vU\vz + \veps
+    \end{equation}
+    where \(\vU \in \O(D, d)\) captures the \textit{low-rank structure}, \(\vz\) is a random vector taking values in \(\R^{d}\), and \(\veps\) is a random vector taking values in \(\R^{D}\) such that \(\vz\) and \(\veps\) are independent, and \(\veps\) is small. Then the \textit{principal components} \(\vU^{\ast} \in \O(D, d)\) of our dataset are given by the top \(d\) eigenvectors of \(\Ex[\vx\vx^{\top}]\), and approximately correspond to the optimal linear denoiser: \(\vU^{\ast}(\vU^{\ast})^{\top} \approx \vU\vU^{\top}\).
+\end{theorem}
 
 % \sdb{maybe more discussion on the conceptual significance of the denoising connection (correct errors... link to model selection and to score-based generative modeling... sample complexity and the conceptual insights). maybe do these for the case of $\vz$ Gaussian? (ICA chapter is ``non-Gaussian'')}
 
@@ -298,12 +341,13 @@ There are many excellent resources discussing algorithms and approaches to solve
 \begin{equation}
     \vM = \mat{\vone_{(D - 1) \times 1} & \vzero_{(D - 1) \times (N - 1)} \\ 1 & \vone_{1 \times (N - 1)} }.
 \end{equation}
-Then we know that the data were distributed on a line, and we know a vector on that line --- it's just the first column of the matrix \(\vY = \vM \odot \vX\). From the last coordinate of each column, also revealed to us by the mask, we can solve for each column since for each final coordinate there is only one vector on the line with this coordinate. Thus we can reconstruct \(\vX\) with perfect accuracy, and we only need a linear number of observations \(D + N - 1\). 
+Then we know that the data were distributed on a line, and we know a vector on that line --- it is just the first column of the matrix \(\vY = \vM \odot \vX\). From the last coordinate of each column, also revealed to us by the mask, we can solve for each column since for each final coordinate there is only one vector on the line with this coordinate. Thus we can reconstruct \(\vX\) with perfect accuracy, and we only need a linear number of observations \(D + N - 1\). 
 
 In the real world, actual problems are somewhere in between the two limiting cases discussed above. Yet the differences between these two extremes, as well as the earlier discussion of PCA, reveal a general kernel of truth:
-\begin{tcolorbox}
+\begin{quote}
+    \centering
     \textit{The lower-dimensional and more structured the data distribution is, the easier it is to process, and the fewer observations are needed --- provided that the algorithm effectively utilizes this low-dimensional structure.}
-\end{tcolorbox}
+\end{quote}
 As is perhaps predictable, we will encounter this motif repeatedly in the remainder of the manuscript, starting in the very next section.
 
 % An initial idea for solving this recovery problem is to set up an optimization problem, where the candidate solution matches the observation at all the unmasked indices and also has approximately low rank. This idea can be expressed by the following problem formulation:
@@ -476,24 +520,23 @@ making this an instantiation of the mixture-of-subspaces model \eqref{eq:mixture
 
 %\subsection{Learning Sparsely-Used Orthogonal Dictionaries}
 
-\paragraph{Orthogonal Dictionary for Sparse Coding.}
+\paragraph{Orthogonal dictionary for sparse coding.}
 Now we can formulate the compressive autoencoding problem for mixtures of low-dimensional subspaces that we will study in this section.
 We assume that we have samples $\vX = [\vx_1, \dots \vx_N]$ from an unknown sparse dictionary model \eqref{eq:mixture-of-subspaces-dictionary}, possibly with added noises $\veps_i$.
 Let us begin from the assumption that the dictionary $\vU$ in the sparse dictionary model \eqref{eq:mixture-of-subspaces-dictionary} is complete and orthogonal,\footnote{As we will soon see, for the complete case, we do not lose any generality by making the orthogonal assumption.} and that each coefficient vector $\vz$ is $d$-sparse, with $d \ll D$.
 Assume moreover without loss of generality that $\vU$ is an orthogonal matrix (Exercise \ref{exercise:whitening}).
-In this setting, compressive autoencoding amounts to \textit{correctly learning the orthogonal dictionary $\vU$}: we
-can then take $\cE(\vx) = \vU^T \vx$ as the encoder and $\cD(\vz) = \vU \vz$ as the decoder, and $\cD = \cE^{-1}$.
-Our task is then:
-\begin{tcolorbox}
-    Suppose that $\vx$ satisfies the sparse dictionary model \eqref{eq:mixture-of-subspaces-dictionary} with orthogonal dictionary $\vU$ and sparsity level $d$.
-    Given sufficiently many samples $\vX = [\vx_1, \dots, \vx_N]$ of $\vx$,  
-    \textit{learn the dictionary $\vU$} by some optimization procedure so that
-    $\cE(\vx) = \vU^\top \vx$ and $\cD(\vz) = \vU \vz$ forms a lossless autoencoding pair on $\vx$.
+In this setting, compressive autoencoding amounts to \textit{correctly learning the orthogonal dictionary $\vU$ via optimization}: we
+can then take $\cE(\vx) = \vU^\top \vx$ as the encoder and $\cD(\vz) = \vU \vz$ as the decoder, and $\cD = \cE^{-1}$. Pictorially:
+% \begin{tcolorbox}
+%     Suppose that $\vx$ satisfies the sparse dictionary model \eqref{eq:mixture-of-subspaces-dictionary} with orthogonal dictionary $\vU$ and sparsity level $d$.
+%     Given sufficiently many samples $\vX = [\vx_1, \dots, \vx_N]$ of $\vx$,  
+%     \textit{learn the dictionary $\vU$} by some optimization procedure so that
+%     $\cE(\vx) = \vU^\top \vx$ and $\cD(\vz) = \vU \vz$ forms a lossless autoencoding pair on $\vx$.
 \begin{equation}
 \x \xrightarrow{\hspace{2mm} \mathcal{E} = \vU^\top \hspace{2mm}}  \z \xrightarrow{\hspace{2mm} \mathcal{D} = \vU \hspace{2mm}}   \hat{\x}.  
 \label{eqn:autoencoding-DL}
 \end{equation}    
-\end{tcolorbox}
+% \end{tcolorbox}
 We see that the autoencoding pair $(\cE, \cD)$ for complete dictionary learning is symmetric, as in the case of a single linear subspace, making the computational task of encoding and decoding no more difficult than in the linear case. On the other hand, the task of learning the dictionary $\vU$ is strictly more difficult than learning a single linear subspace by PCA. 
 To see why we cannot simply use PCA to learn the orthogonal dictionary $\vU$ correctly, note that the 
 loss function that gave rise to PCA, namely \eqref{eq:pca_equals_denoising}, is completely invariant to rotations of the rows of the matrix $\vU$: that is, if $\vQ$ is any $d \times d$ orthogonal matrix, then $\vU$ and $\vU \vQ$ are both feasible and have an identical loss for \eqref{eq:pca_equals_denoising}. The sparse dictionary model is decidedly not invariant to such transformations: if we replaced $\vU$ by $\vU \vQ$ and made a corresponding rotation $\vQ^\top \vz$ of the representation coefficients $\vz$, we would destroy the sparsity structure of $\vz$, violating the modeling assumption. Thus, we need to develop new algorithms for learning orthogonal dictionaries. 
@@ -504,10 +547,10 @@ loss function that gave rise to PCA, namely \eqref{eq:pca_equals_denoising}, is 
 
 In this section, we will derive algorithms for solving the orthogonal dictionary learning problem. To be more precise,  we assume that the observed vector $\vx \in \R^D$ follows a statistical model
 \begin{equation}
-    \vx = \vU_o \vz + \veps, 
+    \vx = \vU \vz + \veps, 
     \label{eq:ica-model-ch2}
 \end{equation}
-where $\vU_o \in \R^{D \times D}$ is an unknown orthogonal dictionary, $\vz$ is a random vector with statistically independent components $z_i$, each with zero mean, and $\veps \in \R^D$ is an independent random vector of small (Gaussian) noises. The goal is to recover $\vU_o$ (and hence $\vz$) from samples of $\vx$.
+where $\vU \in \R^{D \times D}$ is an unknown orthogonal dictionary, $\vz$ is a random vector with statistically independent components $z_i$, each with zero mean, and $\veps \in \R^D$ is an independent random vector of small (Gaussian) noises. The goal is to recover $\vU$ (and hence $\vz$) from samples of $\vx$.
 %The model \eqref{eq:ica-model-ch2} arises in applications such as blind source separation, where each independent component $z_i$ represents an independent source (such as sound associated to a distinct instrument in a musical recording) that is superimposed to produce the observation $\vx$.
 %It is also a fundamental primitive for feature extraction from high-dimensional data via a mixture-of-subspaces model, as we will see shortly.
 
@@ -518,13 +561,13 @@ This modeling assumption implies that the vector of independent components $\vz$
 we calculate $\bE\left[\norm{\vz}_0\right] = d\theta$, which is small when $\theta$ is inversely proportional to $d$. 
 
 \begin{remark}[The Orthogonal Assumption] 
-At first sight, the assumption that the dictionary $\bm U_o$ is orthogonal might seem to be somewhat restrictive. But there is actually no loss of generality. One may consider a complete dictionary to be any square invertible matrix $\vD$. With samples generated from this dictionary: $\vX = \vD \vZ \in \mathbb{R}^{D\times N}$, it is easy to show\footnote{See for example \cite{sun2017completeI}.} that with some preconditioning of the data matrix $\vX$: 
+At first sight, the assumption that the dictionary $\vU$ is orthogonal might seem to be somewhat restrictive. But there is actually no loss of generality. One may consider a complete dictionary to be any square invertible matrix $\vU$. With samples generated from this dictionary: $\vX = \vU \vZ \in \mathbb{R}^{D\times N}$, it is easy to show\footnote{See for example \cite{sun2017completeI}.} that with some preconditioning of the data matrix $\vX$: 
 \begin{equation}
     \bar{\vX} = \Big(\frac{1}{N\theta} \vX\vX^\top\Big)^{-\frac{1}{2}}\vX,
 \end{equation}
-then there exists an orthogonal matrix $\vD_o \in \mathrm{O}(D)$ such that
+then there exists an orthogonal matrix $\vU_{o} \in \O(D)$ such that
 \begin{equation}
-    \bar{\vX} = \vU_o\vZ.
+    \bar{\vX} = \vU_{o}\vZ.
 \end{equation}
 \end{remark}
 
@@ -538,30 +581,34 @@ then there exists an orthogonal matrix $\vD_o \in \mathrm{O}(D)$ such that
 \end{figure}
 
 
-\paragraph{Dictionary Learning via the MSP Algorithm.}
+\paragraph{Dictionary learning via the MSP algorithm.}
 
 Now suppose that we are given a set of observations:
 \begin{equation}
-    \x_i = \vU_o \vz_i + \veps_i,\ \forall i =1, 2, \ldots, N.
+    \x_i = \vU \vz_i + \veps_i,\ \forall i \in [N].
 \end{equation}
-Let $\vX = [\x_1, \x_2, \ldots, \x_N]$ and $\vZ = [\vz_1, \vz_2, \ldots, \vz_N]$. The goal is to recover $\vU_o$ from the data $\vX$. Therefore, Given any orthogonal matrix $\vA \in \mathrm{O}(D)$, $$\vA\vx_i = \vA\vU_o \vz_i + \vA\veps_i$$ would be nearly sparse if $\vA = \vU_o^T$ (as by assumption the noise $\veps_i$ is of small magnitude). 
+Let $\vX = [\vx_1, \dots, \vx_N]$ and $\vZ = [\vz_1, \dots, \vz_N]$. The goal is to recover $\vU$ from the data $\vX$. Therefore, given any orthogonal matrix $\vA \in \O(D)$, 
+\begin{equation}
+    \vA\vx_i = \vA\vU \vz_i + \vA\veps_i
+\end{equation}
+would be nearly sparse if $\vA = \vU^T$ (as by assumption the noise $\veps_i$ is of small magnitude). 
 
-Also, given $\vU_o$ is orthogonal and the fact $\veps$ is small, the vector $\vx$ is (nearly) constant $\bE[\norm{\vx}_2^2] \approx \bE[\norm{\vz}_2^2]=d$. It is a known fact that for vectors on a sphere, maximizing the $\ell^4$ norm is equivalent to minimizing the $\ell^0$ norm (for promoting sparsity),
-\begin{equation*}
-            \argmax_{\vz \in \mathbb{S}^n}\|\vz\|_{4}\quad\Leftrightarrow\quad \argmin_{\vz \in \mathbb{S}^n}\|\vz\|_{0}.
-\end{equation*}
+Also, given $\vU$ is orthogonal and the fact $\veps$ is small, the vector $\vx$ has a predictable expected norm, i.e., $\bE[\norm{\vx}_2^2] \approx \bE[\norm{\vz}_2^2]=d$. It is a known fact that for vectors on a sphere, maximizing the $\ell^4$ norm is equivalent to minimizing the $\ell^0$ norm (for promoting sparsity),
+\begin{equation}
+    \argmax_{\vz \in \mathbb{S}^n}\|\vz\|_{4}\quad\Leftrightarrow\quad \argmin_{\vz \in \mathbb{S}^n}\|\vz\|_{0}.
+\end{equation}
 This is illustrated in Figure \ref{fig:L4-sphere}.
 
-For an orthogonal matrix $\vA$, it preserves the 2-norm: $\|\vA \x\|_2^2 = \|\x\|_2^2$ is nearly constant. Therefore, to find the correct orthogonal dictionary $\vU_o$ from $\vX$, we may try to solve the following optimization program:
+An orthogonal matrix $\vA$ preserves the Euclidean (\(\ell^{2}\)) norm: $\|\vA \x\|_2^2 = \|\x\|_2^2$. Therefore, to find the correct orthogonal dictionary $\vU$ from $\vX$, we may try to solve the following optimization program:
 \begin{equation}\label{eq0:orthogonal-dictionary-learning-l4}
-    \max_{\vA \in \mathrm{O}(D)}\,
+    \max_{\tilde{\vA} \in \O(D)}\,
      \frac{1}{4} \norm*{
-    \vA \vX
+    \tilde{\vA} \vX
     }_4^4 =  \frac{1}{4} \sum_{i=1}^N \norm*{
     \vA \vx_i
     }_4^4
 \end{equation}
-This is known as the $\ell^4$ maximization problem \cite{Zhai-2020}.
+This is known as the $\ell^4$ maximization problem \cite{Zhai-2020}. After we find the solution \(\vA^{\ast}\), we can take the transpose \(\vU^{\ast} = (\vA^{\ast})^{\top}\)
 \begin{remark}
     It is also known that for vectors on a sphere, minimizing the $\ell^1$ norm is equivalent to minimizing the $\ell^0$ norm (for promoting sparsity),
 \begin{equation*}
@@ -574,14 +621,14 @@ Note that the above problem is equivalent to the following constrained optimizat
 \begin{equation}\label{eq:orthogonal-dictionary-learning-l4}
     \min\,
     -   \frac{1}{4} \norm*{
-    \vA \vX
-    }_4^4 \quad \mbox{subject to} \quad  \vA^\top\vA = \vI.
+    \tilde{\vA} \vX
+    }_4^4 \quad \mbox{subject to} \quad  \tilde{\vA}^\top\tilde{\vA} = \vI.
 \end{equation}
 As shown in \cite{Wright-Ma-2022}, using the Lagrange multiplier method, one can derive that the optimal solution to the problem should satisfy the following 
 ``fixed point'' condition:
-$$
-\vA = \mathcal{P}_{\mathrm O(D)}[( {\vA \vX})^{\circ3}\vX^\top],
-$$
+\begin{equation}
+    \vA^{\ast} = \mathcal{P}_{\mathrm O(D)}[( {\vA^{\ast} \vX})^{\circ3}\vX^\top],
+\end{equation}
 where $\mathcal{P}_{\mathrm O(D)}[\,\cdot\,]$ is a projection onto the space of orthogonal matrices $\mathrm O(D)$.\footnote{For any matrix with an SVD: $\vM = \vU\bm \Sigma \vV^\top$, $\mathcal{P}_{\mathrm O(D)}[\vM] = \vU \vV^\top$. We leave this as an exercise for the reader.} 
 
 To compute the fixed point for the above equation, similar to we computed eigenvectors for PCA \eqref{eqn:PCA-fixed-point}, we may take the following power iteration:
@@ -591,7 +638,7 @@ To compute the fixed point for the above equation, similar to we computed eigenv
 This is known as the {\em matching, stretching, and projection} (MSP) algorithm proposed by \cite{Zhai-2020}. It was shown that under broad conditions such a greedy algorithm indeed converges to the correct solution at a superlinear rate.
 
 \begin{remark}[Global Optimality of $\ell^4$ Maximization]\label{rem:L4-global}
-The constrained $\ell^4$ maximization problem is a nonconvex program. In general one should expect that any greedy (say gradient-descent type) algorithms would converge to the globally optimal solution. Surprisingly, one can show that, unlike general nonconvex programs, the landscape of $\ell^4$ maximization over a sphere
+The constrained $\ell^4$ maximization problem is a nonconvex program. In general one should \textit{not} expect that any greedy (say gradient-descent type) algorithms would converge to the globally optimal solution. Surprisingly, one can show that, unlike general nonconvex programs, the landscape of $\ell^4$ maximization over a sphere
 \begin{equation}\label{eq:l4-maximization-sphere}
     \min\,
     -   \frac{1}{4} \norm*{
@@ -684,7 +731,7 @@ Towards deriving an algorithm based on ICA, we focus on an objective function kn
 \end{equation}
 If we have only finite samples from the random variable $X$ arranged into a vector $\vx = [x_1, \dots, x_N]$, we define kurtosis through their empirical average, which yields
 \begin{equation}\label{eq:kurtosis-vector}
-\kurt(\vx) = \tfrac{1}{N} \norm{\vx}_4^4 - \tfrac{3}{N^2} \norm{\vx}_2^4.
+\kurt(\vx) = \frac{1}{N} \norm{\vx}_4^4 - \frac{3}{N^2} \norm{\vx}_2^4.
 \end{equation}
 Finally, for random vectors, we define their kurtosis as the sum of each component's scalar kurtosis.
 Kurtosis is a natural loss function for ICA because for Gaussian $X$, kurtosis is zero; the reader can verify further that the Bernoulli-Gaussian distribution has positive kurtosis. 
@@ -699,7 +746,7 @@ Formally, we seek to solve the problem
 At one extreme, we may set $k = D$ and seek to recover the entire dictionary $\vU$ in a single shot.  At the other extreme, we may set $k=1$ and seek to recover a single direction (column of $\vU$) at a time, performing \textit{deflation}, i.e., replacing the data matrix $\vX$ by $(\vI - \vu\vu^\top) \vX$, after each step before finding another direction.
 There is a natural tradeoff between the scalability of the $k=1$ incremental approach and the efficiency and robustness of the $k=D$ approach. We will therefore consider both below.
 
-\paragraph{Incremental ICA: Correctness and FastICA Algorithm.}
+\paragraph{Incremental ICA: correctness and FastICA algorithm.}
 The FastICA algorithm, advanced by Hyv\"{a}rinen and Oja \cite{hyvarinen-1997}, is a fast fixed-point algorithm for solving the $k=1$ kurtosis maximization scheme for ICA.
 The problem at hand is
 \begin{equation}\label{eq:kurtosis-maximization-sphere-finitesample}
@@ -790,7 +837,7 @@ Iterating the mapping defined by the lefthand side of this fixed point expressio
    \end{split}
 \end{equation}
 It turns out that the FastICA algorithm converges extremely rapidly (actually at a \textit{cubic} rate) to columns of the dictionary $\vU$. 
-Exercise \ref{exercise:fast-ica-convergence} explores these issues in more depth. \yima{Missing reference to exercise.}
+Exercise \ref{exercise:fast-ica-convergence} explores these issues in more depth. \DP{referenced exercise isn't complete yet} %\yima{Missing reference to exercise.}
 Comparing the FastICA algorithm \eqref{eq:fast-ica} to the power method studied in \ref{sub:pca} for the PCA problem, we notice a striking similarity. Indeed, FastICA is essentially a modified power method, involving the gradient of the empirical kurtosis rather than the simpler linear gradient of the PCA objective.
 
 %\sdb{Add an algorithm box for FastICA.}
@@ -1143,22 +1190,11 @@ Notice that the representations become far sparser and the codebooks far more in
 In fact, overcomplete dictionary learning was originally proposed as a biologically plausible algorithm for image representation based on empirical evidence of how early stages of the visual cortex represent visual stimuli \cite{Olshausen1996-ap,Olshausen1997-yv}. 
 
 In the remainder of this section, we will develop the conceptual and computational foundations of overcomplete dictionary learning.
-In analogy to the orthogonal dictionary learning problem \eqref{eqn:autoencoding-DL}, we state the compressive autoencoding problem for sparsely-used overcomplete dictionaries:
-\begin{tcolorbox}
-    Suppose that $\vx$ satisfies the model \eqref{eq:model-DL-overcomplete} with overcomplete dictionary $\vA$ and sparsity level $d$.
-    Given samples $\vX = [\vx_1, \dots, \vx_N]$ of $\vx$,  
-    find
-    \begin{enumerate}[left=0pt, label=\arabic*.]
-        \item an encoder $\cE : \R^D \to \R^m$ mapping each $\vx$ to its \textit{sparse code} $\vz$,
-        \item a decoder $\cD(\vz) = \vA \vz$ reconstructing each $\vx$ from its sparse code.
-    \end{enumerate}
-    Thus 
-    $\cE(\vx)$ and $\cD(\vz) = \vA \vz$ forms a lossy autoencoding pair on $\vx$.
+In analogy to the orthogonal dictionary learning problem \eqref{eqn:autoencoding-DL}, we state the compressive autoencoding problem for sparsely-used overcomplete dictionaries. Namely, supposing that the model \eqref{eq:model-DL-overcomplete} is satisfied with data \(\vx\), overcomplete dictionary \(\vA\), and sparsity level \(d\), and given samples \(\vX = [\vx_1, \dots, \vx_N]\) of \(\vx\), we want to learn an encoder \(\cE : \R^D \to \R^m\) mapping each \(\vx\) to its \textit{sparse code} \(\vz\), and a decoder \(\cD(\vz) = \vA \vz\) reconstructing each \(\vx\) from its sparse code, so that \(\cE(\vx)\) and \(\cD(\vz) = \vA\vz\) forms a lossy autoencoding pair for \(\vx\). Pictorially:
 \begin{equation}
 \x \xrightarrow{\hspace{4mm} \mathcal{E} \hspace{4mm}}  \z \xrightarrow{\hspace{2mm} \mathcal{D} = \vA \hspace{2mm}}   \hat{\x}.  
 \label{eqn:autoencoding-DL-overcomplete}
 \end{equation}    
-\end{tcolorbox}
 We will start from the construction of the encoder $\cE$.
 We will work incrementally: first, \textit{given the true dictionary $\vA$}, we will show how the problem of \textit{sparse coding} gives an elegant, scalable, and provably-correct algorithm for recovering the sparse code $\vz$ of $\vx$.
 Although this problem is NP-hard in the worst case, it can be solved efficiently and scalably for dictionaries $\vA$ which are \textit{incoherent}, i.e.\ having columns that are not too correlated.
@@ -1179,40 +1215,40 @@ This structure will foreshadow many developments to come in the remainder of the
 
 \subsection{Sparse Coding with an Overcomplete Dictionary} 
 
-In this section, we will consider a data model which accommodates sparse linear combinations of many motifs, or \textit{atoms}. Mechanically, this suggests that we consider the following data model. We say that data \(\{\vx_{i}\}_{i = 1}^{N} \subseteq \R^{D}\) have (approximate) \(s\)-sparse coding structure if and only if there exists a matrix \(\vA_{o} = \mat{\va_{o, 1}, \dots, \va_{o, d}} \in \R^{D \times d}\), vectors \(\{\vz_{o, i}\}_{i = 1}^{N} \subseteq \R^{d}\) with \(\norm{\vz_{o, i}}_{0} \leq s\) for all \(i\), and small vectors \(\{\veps_{i}\}_{i = 1}^{N} \subseteq \R^{D}\) such that
+In this section, we will consider a data model which accommodates sparse linear combinations of many motifs, or \textit{atoms}. Mechanically, this suggests that we consider the following data model. We say that data \(\{\vx_{i}\}_{i = 1}^{N} \subseteq \R^{D}\) have (approximate) \(s\)-sparse coding structure if and only if there exists a matrix \(\vA = \mat{\va_{1}, \dots, \va_{d}} \in \R^{D \times d}\), vectors \(\{\vz_{i}\}_{i = 1}^{N} \subseteq \R^{d}\) with \(\norm{\vz_{i}}_{0} \leq s\) for all \(i\), and small vectors \(\{\veps_{i}\}_{i = 1}^{N} \subseteq \R^{D}\) such that
 \begin{equation}\label{eq:vectorized_sparse_dl_dgp}
-    \vx_{i} = \vA_{o}\vz_{o, i} + \veps_{i}, \qquad \forall i \in [N].
+    \vx_{i} = \vA\vz_{i} + \veps_{i}, \qquad \forall i \in [N].
 \end{equation}
-Note the mechanical difference between the sparse coding structure and the principal components structure: 1. the low-dimensional representations \(\vz_{o, i}\) are required to be \(s\) sparse, and 2. \(\vA_{o}\) is not required to be orthogonal. 
+Note the mechanical difference between the sparse coding structure and the principal components structure: 1. the low-dimensional representations \(\vz_{i}\) are required to be \(s\) sparse, and 2. \(\vA\) is not required to be orthogonal. 
 
-The \(s\)-sparsity condition comes from the desire for each data point to be representable by a  linear combination of a small number $s$ of atoms (i.e. columns of $\vA_o$). This essentially imposes that the intrinsic dimension of the data distribution is lower than $s$.
+The \(s\)-sparsity condition comes from the desire for each data point to be representable by a linear combination of a small number \(s\) of atoms (i.e. columns of \(\vA\)). This essentially imposes that the intrinsic dimension of the data distribution is lower than \(s\).
 
-The relaxing of the orthogonality condition is because, as in our covering example above, \(d\) is much larger than \(D\) and it is impossible to build an orthogonal matrix of size \(D \times d\). Nevertheless, the dictionary \(\vA_{o}\), which is either given or learned, is often \textit{incoherent} in the sense that products \(\va_{o, i}^{\top}\va_{o, j}\) are often small, hence nearly orthogonal.\footnote{As it turns out, in a high-dimensional space, it is rather easy to pack a number of nearly orthogonal vectors that is much larger than the ambient dimension \cite{Wright-Ma-2022}. } 
+The relaxing of the orthogonality condition is because, as in our covering example above, \(d\) is much larger than \(D\) and it is impossible to build an orthogonal matrix of size \(D \times d\). Nevertheless, the dictionary \(\vA\), which is either given or learned, is often \textit{incoherent} in the sense that products \(\va_{i}^{\top}\va_{j}\) are often small, hence nearly orthogonal.\footnote{As it turns out, in a high-dimensional space, it is rather easy to pack a number of nearly orthogonal vectors that is much larger than the ambient dimension \cite{Wright-Ma-2022}. } 
 
-Note that we can collect the \(\vx_{i}\) into \(\vX = \mat{\vx_{1}, \dots, \vx_{N}} \in \R^{D \times N}\), collect the \(\vz_{o, i}\) into \(\vZ_{o} = \mat{\vz_{o, 1}, \dots, \vz_{o, N}} \in \R^{d  \times N}\), and collect the \(\veps_{i}\) into \(\vE = \mat{\veps_{1}, \dots, \veps_{N}} \in \R^{D \times N}\), to rewrite \eqref{eq:vectorized_sparse_dl_dgp} as 
+Note that we can collect the \(\vx_{i}\) into \(\vX = \mat{\vx_{1}, \dots, \vx_{N}} \in \R^{D \times N}\), collect the \(\vz_{i}\) into \(\vZ = \mat{\vz_{1}, \dots, \vz_{N}} \in \R^{d  \times N}\), and collect the \(\veps_{i}\) into \(\vE = \mat{\veps_{1}, \dots, \veps_{N}} \in \R^{D \times N}\), to rewrite \eqref{eq:vectorized_sparse_dl_dgp} as 
 \begin{equation}\label{eq:sparse_dl_dgp}
-    \vX = \vA_{o}\vZ_{o} + \vE.
+    \vX = \vA\vZ + \vE.
 \end{equation}
-The first problem we consider is: what if we know the \(\vA_{o}\) matrix, and want to represent our data \(\vX\) using the \(\vA_{o}\)? This is the purview of \textit{sparse coding}. Similar to orthogonal dictionary learning, we attempt to find the sparsest signals that are consistent with our observations, and this naturally leads to the following optimization problem:
+The first problem we consider is: what if we know the \(\vA\) matrix, and want to represent our data \(\vX\) using the \(\vA\)? This is the purview of \textit{sparse coding}. Similar to orthogonal dictionary learning, we attempt to find the sparsest signals that are consistent with our observations, and this naturally leads to the following optimization problem:
 \begin{equation}\label{eq:sparse_dl_lasso}
-    \min_{\vZ \in \R^{d \times N}}\bc{\norm{\vX - \vA_{o}\vZ}_{2}^{2} + \lambda \norm{\vZ}_{1}},
+    \min_{\vZ \in \R^{d \times N}}\bc{\norm{\vX - \vA\vZ}_{2}^{2} + \lambda \norm{\vZ}_{1}},
 \end{equation}
-where the $\ell^1$ norm $\norm{\vZ}_{1}$ is known to promote sparsity of the solution \cite{Wright-Ma-2022}. 
-This problem is known as the LASSO problem. However, unlike the PCA or the complete dictionary learning case, there is no clear power iteration-type algorithm to recover \(\vZ_{\star}\). A natural alternative is to consider solving the above optimization problem with gradient descent type algorithms. Let $f(\vZ) = \norm{\vX - \vA_{o}\vZ}_{2}^{2} + \lambda \norm{\vZ}_{1}$. Conceptually we could try to find \(\vZ_{\star}\) with the following iterations:
+where the \(\ell^1\) norm \(\norm{\vZ}_{1}\) is known to promote sparsity of the solution \cite{Wright-Ma-2022}. 
+This problem is known as the LASSO problem. However, unlike the PCA or the complete dictionary learning case, there is no clear power iteration-type algorithm to recover \(\vZ^{\ast}\). A natural alternative is to consider solving the above optimization problem with gradient descent type algorithms. Let \(f(\vZ) = \norm{\vX - \vA\vZ}_{2}^{2} + \lambda \norm{\vZ}_{1}\). Conceptually we could try to find \(\vZ^{\ast}\) with the following iterations:
 \begin{equation}
-    \vZ_{t+1} \leftarrow \vZ_t + \eta \nabla f(\vZ).
+    \vZ_{t+1} \leftarrow \vZ_t + \eta \nabla f(\vZ_t).
 \end{equation}
 
-However, because the term associated with the $\ell^1$ norm $\norm{\vZ}_{1}$ is non-smooth, we cannot just run gradient descent. For this type of functions, we need to replace the gradient $\nabla f(\vZ)$ with something that generalizes the notion of gradient, known as the subgradient $\partial f(\vZ)$:
+However, because the term associated with the \(\ell^1\) norm \(\norm{\vZ}_{1}\) is non-smooth, we cannot just run gradient descent. For this type of functions, we need to replace the gradient \(\nabla f(\vZ)\) with something that generalizes the notion of gradient, known as the subgradient \(\partial f(\vZ)\):
 \begin{equation}
-    \vZ_{t+1} \leftarrow \vZ_t + \eta \partial f(\vZ).
+    \vZ_{t+1} \leftarrow \vZ_t + \eta \partial f(\vZ_t).
 \end{equation}
 However, it is known that the convergence of subgradient descent is usually very slow. Hence, for this type of optimization problems, it is conventional to adopt a so-called {\em proximal gradient descent}-type algorithm. One may refer to \cite{Wright-Ma-2022} for a detailed introduction to this method. 
 
 Applying proximal gradient to the LASSO objective function \eqref{eq:sparse_dl_lasso}, it leads to the classic \textit{iterative shrinkage-thresholding algorithm} (ISTA), which implements the iteration
 \begin{eqnarray}
     \vZ_{1} &\sim& \dNorm(\vzero, \vI), \\
-    \vZ_{t + 1} &=& S_{\eta\lambda}\rp{\vZ_{t} - 2\eta \vA_{o}^{\top}(\vA_{o}\vZ_{t} - \vX)}, \quad \forall t \geq 1,\label{eq:ista_update}
+    \vZ_{t + 1} &=& S_{\eta\lambda}\rp{\vZ_{t} - 2\eta \vA^{\top}(\vA\vZ_{t} - \vX)}, \quad \forall t \geq 1,\label{eq:ista_update}
 \end{eqnarray}
 with step size \(\eta \geq 0\), and the soft-thresholding operator \(S_{\alpha}\) defined on scalars by
 \begin{equation}
@@ -1222,11 +1258,11 @@ and applied element-wise to the input matrix.  As a proximal gradient descent al
 
 We now take a moment to remark on the functional form of the update operator in \eqref{eq:ista_update}, it takes the form 
 \begin{equation}
-    \vZ_{t + 1} = \texttt{nonlinearity}(\vZ_{t} + \texttt{linear}^{\top}(\texttt{linear}(\vZ) + \texttt{bias})).
+    \vZ_{t + 1} = \texttt{nonlinearity}(\vZ_{t} + \texttt{linear}^{\top}(\texttt{linear}(\vZ_{t}) + \texttt{bias})).
 \end{equation}
 This functional form is very similar to that of a residual network layer, namely,
 \begin{equation}
-    \vZ_{t + 1} = \vZ_{t} + \texttt{linear}_{1}^{\top}(\texttt{nonlinearity}(\texttt{linear}_{2}(\vZ) + \texttt{bias}_{1}) + \texttt{bias}_{2},
+    \vZ_{t + 1} = \vZ_{t} + \texttt{linear}_{1}^{\top}(\texttt{nonlinearity}(\texttt{linear}_{2}(\vZ_{t}) + \texttt{bias}_{1}) + \texttt{bias}_{2},
 \end{equation}
 only decoupling the linear maps (i.e., matrix multiplications), adding a bias, and moving the nonlinearity. The ISTA, then, can be viewed as a forward pass of a primitive (recurrent one-layer) neural network. We argue in Chapter \ref{ch:representation} that such operations are essential to deep representation learning.
 
@@ -1243,20 +1279,20 @@ only decoupling the linear maps (i.e., matrix multiplications), adding a bias, a
 
 Recall that we have the data model 
 \begin{equation}
-    \vX = \vA_{o}\vZ_{o} + \vE,
+    \vX = \vA\vZ + \vE,
 \end{equation}
-where \(\vZ_{o}\) is sparse, and our goal previously was to estimate \(\vZ_{o}\) given knowledge of the data \(\vX\) and the dictionary atoms \(\vA_{o}\). Now we turn to the more usual, more natural, and more difficult case where we do not know either \(\vA_{o}\) or \(\vZ_{o}\) and seek to learn them from a large dataset. In particular, we solve the problem
+where \(\vZ\) is sparse, and our goal previously was to estimate \(\vZ\) given knowledge of the data \(\vX\) and the dictionary atoms \(\vA\). Now we turn to the more usual, more natural, and more difficult case where we do not know either \(\vA\) or \(\vZ\) and seek to learn them from a large dataset. In particular, we solve the problem
 \begin{equation}
-    \min_{\vA, \vZ}\bc{\norm{\vX - \vA\vZ}_{F}^{2} + \lambda \norm{\vZ}_{1}}.
+    \min_{\tilde{\vA}, \tilde{\vZ}}\bc{\norm{\vX - \tilde{\vA}\tilde{\vZ}}_{F}^{2} + \lambda \norm{\tilde{\vZ}}_{1}}.
     \label{eqn:DL-overcomplete}
 \end{equation}
 \begin{remark}[$\ell^4$ maximation versus $\ell^1$ minimization]
-Note that the above problem formulation follows naturally from the LASSO formulation \eqref{eq:sparse_dl_lasso} for sparse coding. We promote the sparsity of the solution with minimizing the $\ell^1$ norm. Nevertheless, if we are only interested in recovering the over-complete dictionary $\vA$, the $\ell^4$ maximization scheme introduced in Section \ref{sec:complete-dictionary} also generalizes to the over-complete case, without any significant  modification. Interested readers may refer to the work of \cite{Qu2020Geometric}. 
+Note that the above problem formulation follows naturally from the LASSO formulation \eqref{eq:sparse_dl_lasso} for sparse coding. We promote the sparsity of the solution with minimizing the \(\ell^1\) norm. Nevertheless, if we are only interested in recovering the over-complete dictionary \(\vA\), the \(\ell^4\) maximization scheme introduced in Section \ref{sec:complete-dictionary} also generalizes to the over-complete case, without any significant modification. Interested readers may refer to the work of \cite{Qu2020Geometric}. 
 \end{remark}
 
-The above problem \eqref{eqn:DL-overcomplete}, which we call \textit{overcomplete dictionary learning}, is nonconvex as here both $\vA$ and $\vZ$ are unknown now. We cannot be solved easily by the standard convex optimization toolkit. Nevertheless, because it is interesting, simple to state, and practically important, there have been many important works dedicated to different algorithms and theoretical analysis for this problem. Here, for the interest of this book, we present an idiomatic approach to solve this problem which is closer to the spirit of deep learning.
+The above problem \eqref{eqn:DL-overcomplete}, which we call \textit{overcomplete dictionary learning}, is nonconvex as here both \(\vA\) and \(\vZ\) are unknown now. We cannot be solved easily by the standard convex optimization toolkit. Nevertheless, because it is interesting, simple to state, and practically important, there have been many important works dedicated to different algorithms and theoretical analysis for this problem. Here, for the interest of this book, we present an idiomatic approach to solve this problem which is closer to the spirit of deep learning.
 
-From our experience with the LASSO problem above, it is easy to see that, for the two unknowns $\vA$ and $\vZ$, if we fix one and optimize the other, each subproblem is in fact convex and easy to solve. This naturally suggests that we could attempt to solve the above program \eqref{eqn:DL-overcomplete} by minimizing against $\vZ$ or $\vA$ alternatively, say using gradient descent. This leads to the following iterative scheme:
+From our experience with the LASSO problem above, it is easy to see that, for the two unknowns \(\vA\) and \(\vZ\), if we fix one and optimize the other, each subproblem is in fact convex and easy to solve. This naturally suggests that we could attempt to solve the above program \eqref{eqn:DL-overcomplete} by minimizing against \(\vZ\) or \(\vA\) alternatively, say using gradient descent. This leads to the following iterative scheme:
 \begin{align}
     & \vZ^{1}
      \sim \dNorm(\vzero, \vI), \quad \vA_{1}
@@ -1273,7 +1309,7 @@ Here, unlike typically alternating minimization scheme, we here use two separate
 The main observation from the above approach is to notice that \textit{when we fix \(\vA\), the ISTA update for $\vZ^\ell$ \eqref{eqn:ISTA-update} looks like the forward pass of a deep neural network with weights given by \(\vA\) (and \(\vA^{\top}\))}. But in general, we do not know the true $\vA_o$, and the current estimate $\vA_t$ could be erroneous. Hence it needs to be further updated using \eqref{eqn:DL-update} based on the residual of using the current $\vA_t$ and $\vZ^{\ell +1}$ to recover $\vX$. 
 
 
-\paragraph{Layerwise Learned Sparse Coding.}
+\paragraph{Layerwise learned sparse coding.}
 Hence, if we view each ISTA update \eqref{eqn:ISTA-update} as a layer and allow the associated dictionary, now denoted as $\vA_t^\ell$, to update in time, this leads to a  ``layerwise-learnable'' sparse coding scheme:
 \begin{align}
     & \vZ^{\ell + 1} = S_{\eta\lambda}\rp{\vZ^{\ell} - 2\eta\vA_{t}^{\ell\top}(\vA_{t}^\ell\vZ^{\ell} - \vX)}, \quad \forall \ell \in [L] \\ 
@@ -1281,19 +1317,19 @@ Hence, if we view each ISTA update \eqref{eqn:ISTA-update} as a layer and allow 
 \end{align}
 Each of the \(L\) inner steps can be considered as a one-layer  forward pass, while each of  the \(T\) outer steps can be considered as a one-layer  backward pass, of a primitive deep neural network. In particular, this algorithm is the simplest case in which a clear divide between forward optimization and backward learning manifests. This divide is still observed in current neural networks.
 
-\paragraph{Learned ISTA.} The above deep-network  interpretation of the alternating minimization is more conceptual than practical, as the process could be rather inefficient and take many layers or iterations to converge. But this is mainly because we try to infer both $\vZ_o$ and $\vA_o$ from $\vX$. The problem can be significantly simplified and the above iterations can be made much more efficient if we only use them to learn $\vA^\ell$ from a given set of samples of input and output  $(\vX, \vZ_o)$ for the iterative sparse encoding:
+\paragraph{Learned ISTA.} The above deep-network  interpretation of the alternating minimization is more conceptual than practical, as the process could be rather inefficient and take many layers or iterations to converge. But this is mainly because we try to infer both \(\vZ\) and \(\vA\) from \(\vX\). The problem can be significantly simplified and the above iterations can be made much more efficient if we only use them to learn \(\vA^\ell\) from a given set of samples of input and output  \((\vX, \vZ)\) for the iterative sparse encoding:
 \begin{align}
-    & \vZ^{\ell + 1} = S_{\eta\lambda}\rp{\vZ^{\ell} - 2\eta\vA^{\ell\top}(\vA^\ell\vZ^{\ell} - \vX)}, \quad \forall \ell \in [L].
+    & \vZ^{\ell + 1} = S_{\eta\lambda}\rp{\vZ^{\ell} - 2\eta(\vA^{\ell})^{\top}(\vA^\ell\vZ^{\ell} - \vX)}, \quad \forall \ell \in [L].
 \end{align}
 If we denote the operator for each iteration as $\vZ^{\ell + 1} = f(\vA^\ell, \vZ^\ell)$, the above iteration can be illustrated in terms of a diagram:
 \begin{equation*}
-\vX, \vZ^0 \xrightarrow{\hspace{1mm} f(\vA^1,\,\cdot\,) \hspace{1mm}}  \vZ^1 \xrightarrow{\hspace{1mm} f(\vA^2,\,\cdot\,) \hspace{1mm}}  \vZ^2  \xrightarrow{\hspace{1mm} f(\vA^3,\,\cdot\,) \hspace{1mm}} \cdots \vZ^{L-1}  \xrightarrow{\hspace{1mm} f(\vA^{L-1},\,\cdot\,) \hspace{1mm}} \vZ^L \approx \vZ_o.  
+\vX, \vZ^1 \xrightarrow{\hspace{1mm} f(\vA^1,\,\cdot\,) \hspace{1mm}}  \vZ^2 \xrightarrow{\hspace{1mm} f(\vA^2,\,\cdot\,) \hspace{1mm}}  \vZ^3  \xrightarrow{\hspace{1mm} f(\vA^3,\,\cdot\,) \hspace{1mm}} \cdots \vZ^{L}  \xrightarrow{\hspace{1mm} f(\vA^{L},\,\cdot\,) \hspace{1mm}} \vZ^{L + 1} \approx \vZ.  
 \label{eqn:deep-sparse-encoding}
 \end{equation*}
 
-Thus, given the sequential architecture, to learn the operator \(\vA^\ell\) at each layer, it is completely natural to learn it, say via back propagation (BP),\footnote{See Appendix \ref{app:optimization} for a brief description of BP.} by minimizing the error between the final code $\vZ^L$ and the ground truth $\vZ_o$:
+Thus, given the sequential architecture, to learn the operator \(\vA^\ell\) at each layer, it is completely natural to learn it, say via back propagation (BP),\footnote{See Appendix \ref{app:optimization} for a brief description of BP.} by minimizing the error between the final code $\vZ^L$ and the ground truth $\vZ$:
 \begin{equation}
-    \min_{\{\vA^\ell\}} \big\|\vZ^L(\vA^1, \ldots, \vA^{L-1}) - \vZ_o\big\|_2^2.
+    \min_{\{\vA^\ell\}} \big\|\vZ^L(\vA^1, \ldots, \vA^{L}) - \vZ\big\|_2^2.
 \end{equation}
 This is the basis of the Learned ISTA (LISTA) algorithm \cite{gregor2010learning}, which can be viewed as the learning algorithm for a deep  neural network, which tries to emulate the sparse encoding process from $\vX$ to $\vZ$. In particular, it can be viewed as a \textit{simple representation learning algorithm}. 
 %\yima{probably spell out LISTA as an algorithm in pseudo code form.}
@@ -1327,7 +1363,7 @@ Mention early generalizations to multiple subspaces (e.g. GPCA) and their limita
 
 
 \begin{exercise}\label{exercise:principal-components-derivation}
-    Prove that, for any symmetric matrix \(\vA\), the solution to the problem \(\max_{\vU \in \O(D, d)}\tr\left(\vU^{\top}\vA\vU\right)\) is the matrix \(\vU^{\star}\) whose columns are the top \(d\) unit eigenvectors of \(\vA\).
+    Prove that, for any symmetric matrix \(\vA\), the solution to the problem \(\max_{\vU \in \O(D, d)}\tr\left(\vU^{\top}\vA\vU\right)\) is the matrix \(\vU^{\ast}\) whose columns are the top \(d\) unit eigenvectors of \(\vA\).
 \end{exercise}
 
 \begin{exercise}\label{exercise:gaussian-rot-invar}
