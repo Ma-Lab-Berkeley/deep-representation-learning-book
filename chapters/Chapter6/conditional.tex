@@ -28,10 +28,277 @@ In this chapter, we will discuss general approaches to learn the desired distrib
 
 \section{Conditional Estimation with a Known Data Distribution}
 \subsection{Low-rank Matrix Completion}
+Another classical problem of this kind is the low-rank {\em matrix
+completion} problem. Consider a random vector $\x \in \mathbb{R}^m$
+which is distributed according to a low-rank Gaussian (or
+low-dimensional subspace) of rank $r < m$. Suppose we have drawn $n >
+r$ independent samples from this distribution and form a matrix $\X =
+[\x_1, \ldots, \x_n] \in \mathbb{R}^{m\times n}$. Obviously, the rank
+of the matrix is
+\begin{equation}
+\mbox{rank}(\X) = r < \min\{m, n\}.
+\end{equation}
+Now let $\Omega$ indicate a set indices of observed entries of the
+matrix $\X$. Let the observed entries to be:
+\begin{equation}
+\Y = \mathcal{P}_{\Omega}(\X).
+\end{equation}
+The remaining entries supported on $\Omega^c$ are unobserved or
+missing. The problem is whether we can recover from $\Y$ the missing
+entries correctly.  Figure \ref{fig:matrix-completion} shows one
+example of matrix completion.
+% \begin{figure}
+%     \centering
+%     \includegraphics[width=0.8\linewidth]{figures/Matrix-Completion.png}
+%     \caption{An example for completing a matrix with correlations
+% among entries.}
+%     \label{fig:matrix-completion}
+% \end{figure}
 
+\begin{figure}
+\centering
+% \includegraphics[width=0.3\linewidth]{figures/Matrix-masked.png}
+% \hspace{5mm}  \hspace{5mm}
+% \includegraphics[width=0.3\linewidth]{figures/Matrix-completed.png}
+\includegraphics[width=0.3\linewidth]{figs_chap5/masked-checkerboard.png}\;\;
+\includegraphics[width=0.3\linewidth]{figs_chap5/mask.png}\;\;
+\includegraphics[width=0.3\linewidth]{figs_chap5/checkerboard.png}
+\caption{Illustration of  completing an image as low-rank matrix
+  with some entries masked or corrupted. Left: the masked/corrupted
+image $\Y$; middle: the mask $\Omega$; right: the completed image $\hat \X$.}
+\label{fig:matrix-completion}
+\end{figure}
 
-\section{Conditional Generation with Measurement Matching}
+Notice that the fundamental reason why such a matrix can be completed
+is because columns and rows of the matrix are highly correlated and
+they all lie on a low-dimensional subspace. For the example shown in
+Figure \ref{fig:matrix-completion}, the dimension or the rank of the
+matrix completed is only two. Hence the fundamental idea to recover
+such a matrix is to seek a matrix that has the lowest rank among all
+matrices that have entries agreeing with the observed ones:
+\begin{equation}
+\min \mbox{rank}(\X) \quad \mbox{subject to}
+\quad
+\Y = \mathcal{P}_{\Omega}(\X).
+\label{eqn:rank-min}
+\end{equation}
+This is known as the {\em low-rank matrix completion} problem.
+However, as the rank function is discontinuous and rank minimization
+is in general an NP-hard problem, we often like to relax it with
+something easier to optimize.
+
+Based on our knowledge about compression from Chapter
+\ref{ch:compression}, we could  promote the low-rankness of the
+recovered matrix $\X$ by enforcing the lossy coding rate (or the
+volume spanned by $\X$) of the data in $\X$ to be small:
+\begin{equation}
+\min R_\epsilon(\X) = \frac{1}{2} \log \det \left(\boldsymbol{I} +
+\alpha  \X\X^\top \right) \quad \mbox{subject to}
+\quad
+\Y = \mathcal{P}_{\Omega}(\X).
+\label{eqn:rate-min}
+\end{equation}
+The problem can viewed as a continuous relaxation of the above
+low-rank matrix completion problem \eqref{eqn:rank-min} and it can be
+solved via gradient descent. As one can show, the gradient descent
+operator for the $\log\det$ objective is precisely minimizing a close
+surrogate of the rank of the matrix $\X\X^\top$.
+
+The rate distortion function is a nonlinear function, and its gradient
+descent does not always guarantee finding the correct solution.
+However, since the underlying structure sought for $\X$ is linear,
+the rank function admits a rather effective convex relaxation: the
+nuclear norm---the sum of all singular values of the matrix $\X$. As
+shown in the compressive sensing literature, under fairly
+broad conditions,\footnote{Typically, such conditions specify the
+necessary and sufficient amount of entries needed for the completion
+to be computationally feasible. These conditions have been
+systematically characterized in \cite{Wright-Ma-2022}.} the matrix
+completion problem \eqref{eqn:rank-min}
+can be effectively solved by the following convex program:
+\begin{equation}
+\min \|\X\|_* \quad \mbox{subject to}
+\quad
+\Y = \mathcal{P}_{\Omega}(\X),
+\label{eqn:nuclear-min}
+\end{equation}
+where the nuclear norm $\|\X\|_*$ is the sum of singular values of
+$\X$. In practice, we often convert the above constrained convex optimization
+program to an unconstrained one:
+\begin{equation}
+\min \|\X\|_*  + \lambda \|
+\Y - \mathcal{P}_{\Omega}(\X)\|_F^2,
+\label{eqn:nuclear-min-lagrangian}
+\end{equation}
+for some properly chosen $\lambda > 0$. Interested readers may refer to
+\cite{Wright-Ma-2022} for how to develop algorithms  that can solve
+the above programs  efficiently and effectively.
+Figure \ref{fig:matrix-completion} shows a real example in which the
+matrix $\hat \X$ is actually recovered by solving the above program.
+
+It has been shown that for images (or more accurately textures) and 3D scenes
+with low-rank structures, they can be very effectively completed via
+solving optimization programs of the above kind, even if there is
+additional corruption and distortion
+\cite{Zhang2010TILTTI,Liang-ECCV2012,Yi_2023_ICCV}.
+
+\section{Conditional Generation by Learning a Data Representation}
+
 \subsection{Image Completion with Masked Auto-Encoding}
+For a general image $\vX$ such as the one shown on the left of Figure
+\ref{fig:crate_mae_pipeline}, we can no longer view it as a low-rank
+matrix. However, humans still demonstrate remarkable ability to
+complete a scene and recognize familiar objects despite severe
+occlusion. This suggests that our brain has learned the
+low-dimensional distribution of natural images and can use it for
+completion, hence recognition. However, the distribution of all
+natural images is not as simple as a low-dimensional linear subspace.
+Hence a natural question is whether we can learn the more
+sophisticated distribution of natural images and use it to perform
+image completion?
+
+\begin{figure}[t!]
+%\vspace{-0.5in}
+\begin{center}
+  \includegraphics[width=0.99\textwidth]{figs_chap5/crate_mae_pipeline.png}
+\end{center}
+%\vspace{-0.1in}
+\caption{\small \textbf{Diagram of the overall  (masked)
+  autoencoding process.} The (image) token representations are
+  transformed iteratively towards a parsimonious (e.g., compressed
+  and sparse) representation by each encoder layer \(f^{\ell}\).
+  Furthermore, such representations are transformed back to the
+  original image by the decoder layers \(g^{\ell}\). Each encoder
+  layer \(f^{\ell}\) is meant to be (partially) inverted by a
+corresponding decoder layer \(g^{L - \ell}\).}
+\label{fig:crate_mae_pipeline}
+%\vspace{-0.2in}
+\end{figure}
+
+One natural approach is to find an encoding and decoding scheme by
+solving the following {\em masked autoencoding} (MAE) program that
+minimizes the reconstruction loss:
+\begin{equation}\label{eq:mae_loss}
+\min L_{\mathrm{MAE}}(f, g) \doteq \mathbb{E}\big[\norm{(g \circ
+f)(\mathcal{P}_\Omega(\vX)) - \vX}_{2}^{2}].
+\end{equation}
+Unlike the matrix completion problem which has a simple underlying
+structure, we should no longer expect that the encoding and decoding
+mappings admit simple closed forms or the program can be solved by
+explicit algorithms.
+
+For a general natural image, we can no longer assume its columns or
+rows are sampled from a low-dimensional subspace or a low-rank
+Gaussian. However, it is reasonable to assume that the image consists
+of multiple regions. Image patches in each region are similar and can
+be modeled as one (low-rank) Gaussian or subspace. Hence, to exploit
+the low-dimensionality of the distribution, the objective \textit{of the
+encoder} $f$ is to transform $\X$ to a representation $\Z$:
+\begin{equation}
+    f: \X \mapsto \Z
+\end{equation}
+such that the distribution of $\Z$ can be well modeled as a mixture of subspaces, say $\{\vU_{[K]}\}$,
+such that the overall coding rate and sparsity of the resulting
+feature $\Z$ is the minimum:
+\begin{equation}\label{eq:sparse_rr}
+\min \mathbb{E}_{\vZ}[\Delta R(\vZ \mid \vU_{[K]}) - \lambda
+\norm{\vZ}_{0}] = \mathbb{E}_{\vZ}[R(\vZ) - R^{c}(\vZ \mid
+\vU_{[K]}) - \lambda \norm{\vZ}_{0}].
+\end{equation}
+
+As we have shown in the previous Chapter \ref{ch:representation}, the
+encoder $f$ that minimizes the above objective can be constructed by
+a sequence of transformer-like operators. As shown in the work of
+\cite{Pai2024masked}, the decoder $g$ can be viewed and hence
+constructed explicitly as the inverse process of the encoder $f$.
+Figure \ref{fig:crate_mae_layers} illustrates the overall
+architectures of both the encoder and the corresponding decoder at
+each layer. The parameters of the encoder $f$ and decoder $g$ can be
+learned by optimizing the reconstruction loss \eqref{eq:mae_loss} via
+gradient descent.
+
+\begin{figure}[t!]
+%\vspace{-0.5in}
+\centering
+\includegraphics[width=0.99\textwidth]{figs_chap5/crate_mae_layers.png}
+%\vspace{-0.1in}
+\caption{\small \textbf{Diagram of each encoder layer
+  (\textit{top}) and decoder layer (\textit{bottom}).} Notice that
+  the two layers are highly anti-parallel --- each is constructed to
+  do the operations of the other in reverse order. That is, in the
+  decoder layer \(g^{\ell}\), the \(\ISTA\) block of \(f^{L - \ell}\)
+  is partially inverted first using a linear layer, then the
+  \(\MSSA\) block of \(f^{L - \ell}\) is reversed; this order
+unravels the transformation done in \(f^{L - \ell}\).}
+\label{fig:crate_mae_layers}
+%\vspace{-0.2in}
+\end{figure}
+
+Figure \ref{fig:mae_autoencoding-small} shows some representative
+results of the so-designed masked auto-encoder. More implementation details and
+results of the masked autoencoder for natural image completion can be
+found in Chapter \ref{ch:applications}.
+\begin{figure}[t]
+%\vspace{-0.5in}
+\centering
+\includegraphics[width=0.99\textwidth]{figs_chap5/crate_mae_autoencoding_small.pdf}
+%\vspace{-0.1in}
+\caption{\small \textbf{Autoencoding visualizations of CRATE-Base
+  and ViT-MAE-Base \cite{he2022masked} with 75\% patches masked.}
+  We observe that the reconstructions from CRATE-Base are on par
+  with the reconstructions from ViT-MAE-Base, despite using \(<
+  1/3\) of the parameters.
+}
+\label{fig:mae_autoencoding-small}
+%\vspace{-0.2in}
+\end{figure}
+
+%\yima{Generalize low-rank matrix completion to masked autoencoding
+% (MAE):  \href{https://arxiv.org/abs/2404.02446}{masked image completion}. }
+
+%\yima{Maybe trying to optimize rate reduction type objective...
+% Theoretical justification: maybe mention the recent work from Qing
+% Qu's group about memorization and generalization (diffusion process
+% for the PCA or mixture of low-dim Gaussians case). Probably some
+% work on incremental optimal transport...}
+
+%\section{Conditional Denoising and Diffusion}
+%\label{sec:auto-denoising-diffusion}
+%\yima{We now relax the requirement of sample-wise reconstruction to
+% distribution-wise.}
+
+The above (masked) autoencoding problems can be viewed to sample the learned low-dimensional distribution such that the generated samples are consistent with certain observations or conditions.
+
+But let us examine the image completion task studied in the previous
+section: Given the
+visual part of an image $\X_v = \mathcal{P}_{\Omega}(\X)$, we try to
+estimate the masked part $\X_m = \mathcal{P}_{\Omega^c}(\X)$. For realizations
+$(\vXi_v, \vXi_m)$ of the random variable $\vX=(\vX_v, \vX_m)$, let
+\[p_{\X_m \mid \X_v}(\vXi_m\mid \vXi_v)\]
+be the conditional distribution of $\X_m$ given
+$\X_v$. It is easy to show that the optimal solution to the  MAE
+formulation \eqref{eq:mae_loss} is given by the conditional expectation:
+\begin{equation}
+  \argmin_{h = g \circ f}\, L_{\mathrm{MAE}}(h)
+  % \doteq \mathbb{E}\big[\norm{(g \circ f)(\mathcal{P}_\Omega(\vX)) - \vX}_{2}^{2}].
+  = \vXi_v \mapsto \vXi_v + \mathbb{E}[\X_m \mid \X_v=\vXi_v].
+\end{equation}
+In general, however, this expectation may not even be on the
+low-dimensional distribution of natural images! This partially
+explains why some of the recovered patches in \Cref{fig:mae_autoencoding-small}
+are a little blurry.
+
+For many practical purposes, we would like to learn (a representation
+of) the conditional distribution $p_{\X_m \mid \X_v}$, or equivalently
+$p_{\X \mid \X_v}$,
+and then sample this distribution directly. Notice that, when the
+distribution of $\X$ is low-dimensional, it is possible that if a
+sufficient part of $\X$, $\X_v$, is observed, it fully determines
+$\X$ hence the missing part $\X_m$. In other words, the distribution
+$p_{\X \mid \X_v}$ is a generalized function---if $\vX$ is fully determined by $\vX_v$ it is the delta function, and more generally one of its exotic cousins.
+
+\subsection{Conditional Sampling with Measurement Matching}
+\label{sec:conditioned-decoding}
 
 \section{Conditional Generation with Measurement Consistency}
 \subsection{New View Synthesis from an Image Sequence}
