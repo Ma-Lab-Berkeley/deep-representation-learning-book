@@ -2106,16 +2106,92 @@ still write given only paired data $(\vx, \vy) \sim p_{\vx, \vy}$
   \vxi).
 \end{equation}
 A natural ideal is then to directly implement the likelihood correction term in
-\eqref{eq:conditional-denoising-mmse-denoiser-paired-data} using a deep network,
-which maps noisy data samples $\vx_t$ to a probability distribution over labels
-$\vy$. This is most straightforward to implement in the setting where $\vy$
-corresponds to a class label in a classification problem (recall \Cref{a}), and
-indeed, historically, methods for conditioning the generation of diffusion
-models were first developed in the classification setting \cite{}. Below, we
-will first discuss this important special case, then discuss how to implement
-the likelihood term in
-\Cref{eq:conditional-denoising-mmse-denoiser-paired-data} in more general
-settings of interest.
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data} using a deep network:
+the network maps noisy data samples $\vx_t$ to a probability distribution over
+measurements $\vy$, then one evaluates its gradient with respect to $\vx_t$
+using backpropagation to compute the correction term in
+\Cref{eq:conditional-denoising-mmse-denoiser-paired-data}.
+Such an approach was already recognized and exploited to perform conditional
+sampling in pioneering early works on diffusion models, notably those by
+\citet{Sohl-Dickstein2015} and by \citet{song2020score}. For example, in the
+setting where $\vy$ corresponds to a class label taking values in the index set
+$\set{1, \dots, K}$, a deep network mapping noisy
+inputs and their corresponding noise levels $(\vx_t, t) \in \bR^{D} \times
+\bR$ to a probability distribution over labels $y \in \set{1, \dots, K}$ can be
+trained via the standard cross entropy training with a labeled dataset by adding
+independent noise to the training images.\footnote{In \Cref{ch:applications}, we
+discuss the process of training such a classifier in full detail.}
+
+However, this straightforward methodology has two key drawbacks. The first is
+that, empirically, such a trained deep network classifier frequently does not
+provide a strong enough guidance signal (in
+\Cref{eq:conditional-denoising-mmse-denoiser-paired-data}) to ensure that
+generated samples reflect the conditioning information $\vy$. This was first
+pointed out by \citet{Dhariwal2021-hg}, who noted that in the setting of
+class-conditional ImageNet generation, the learned deep network
+classifier's probability outputs for the class $y$ being conditioned on were
+frequently around
+$0.5$---large enough to be the dominant class, but not large enough to provide
+a strong guidance signal---and that upon inspection, generations were not
+consistent with the conditioning class $y$. \citet{Dhariwal2021-hg} proposed to
+address this heuristically by incorporating an ``inverse temperature'' hyperparameter $w > 0$
+into the definition of the conditional denoiser
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data}:
+\begin{equation}\label{eq:denoiser-classifier-guidance}
+  \bE[ \vx \mid \vx_t=\vxi, \vy=\vnu]
+  =
+  \bE[\vx \mid \vx_t=\vxi] 
+  + w\frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log p_{\vy \mid \vx_t}(\vnu\mid
+  \vxi),
+\end{equation}
+with the case $w = 1$ coinciding with
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data}.
+\citet{Dhariwal2021-hg} found that a setting $w > 1$ performed best empirically.
+Note that
+\begin{align}
+  w\frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log p_{\vy \mid \vx_t}(\vnu\mid
+  \vxi)
+  &=
+  \frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log \left(
+  p_{\vy \mid \vx_t}(\vnu\mid \vxi)^w
+  \right) \\
+  &=
+  \frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log \left(
+  \frac{
+    p_{\vy \mid \vx_t}(\vnu\mid \vxi)^w
+  }{
+    \int p_{\vy \mid \vx_t}(\vnu'\mid \vxi)^w \odif \vnu'
+  }
+  \right)
+\end{align}
+and $(p_{\vy \mid \vx_t})^w$ is proportional to 
+
+
+
+\begin{example}[Classification] One may view the problem of
+classification as a special case for completing or predicting
+missing parts of a random vector. For classification, given a
+sample vector $\x$, we would like to predict its class label $\y$.
+If we stack the two together as one joint vector:
+\begin{equation}
+  \vw = (\x, \y),
+\end{equation}
+one may view the problem of predicting the class label $\y$ as a
+problem of completing $\vw$ by observing only the $\x$ part. This
+is usually done by estimating and transforming the joint
+distribution of $\vw$ that minimizes the entropy (or coding
+rate) of the resulting representation of the empirical distribution
+of $\vx$.\footnote{A set of samples for $\x$ and their associated
+class labels $\y$} In fact, the common practice of introducing an
+auxiliary ``class token'' in the training of a Transformer for
+classification tasks can be viewed as learning such a
+representation by compressing (the coding rate of) given samples of
+$\vw$. If the distribution of the data $\x$ is already a
+mixture of (low-dimensional) Gaussians, the work
+\cite{wright2008classification} showed that classification can be
+done effectively by directly minimizing {\em the (lossy) coding
+length} associated with the given samples.
+\end{example}
 
 \sdb{Working here. Classifier guidance and CFG. Need a simulation of this.}
 
