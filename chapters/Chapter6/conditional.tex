@@ -5,7 +5,26 @@
 
 \chapter{Conditional Estimation and Generation}
 
-In the previous chapters of this book, we have studied how to effectively and efficiently learn a representation for a variable $\x$ in the world with a distribution $p(\x)$ that has a low-dimensional support in a high-dimensional space. In this chapter and the next, we show how to apply these methods to learn the distribution and representation of many practical data which facilitate many real tasks in increasingly more general and challenging settings. 
+In the previous chapters of this book, we have studied how to effectively and efficiently learn a representation for a variable $\x$ in the world with a distribution $p(\x)$ that has a low-dimensional support in a high-dimensional space. In general, a good representation or autoencoding should enable us to utilize the learned distribution of the data $\x$ and its representation $\z$ for various subsequent classification, 
+estimation, and generation tasks under different conditions. The fundamental purpose of autoencoding is indeed to grant certain access to and \textit{control} over the distribution of the data. 
+
+In the previous chapters, we have developed the methodology for representation learning and  autoencoding in a general, task-agnostic fashion. Here onwards, we will tailor our discussion
+towards specific modern applications where we desire to learn useful
+representations for specific structured data distributions, such as images, 3D
+scenes, and videos, and where we have \textit{a priori} knowledge of certain
+structured attributes of the data, such as partial observations, class labels, or text captions. In such cases, the modern practice is to establish such an autoencoding indirectly: rather than a direct encoder-decoder mapping between $\vx$ and $\vz$, we seek to establish a \textit{binding} or mapping between $\vx$ and $\vz$, which grants us the ability to generate samples of $\vx$ conditioned on
+the (specified \textit{a priori}) attributes $\vz$, or even to generate these
+attributes conditioned on a data sample $\vx$. This methodology is highly
+related to the direct encoder-decoder autoencoding loops we have discussed in the previous Chapter,\footnote{And even uses it as a primitive in many cases, such as in the use of VAEs with conditional diffusion models.} but
+it enables far more impressive applications, including all of the groundbreaking
+multimodal capabilities of modern generative models.
+
+In this chapter, we will discuss how to exploit such an autoencoding
+representation for completion tasks in the data domain: a pedagogically-useful special case of
+the general binding formalism. More precisely, we will study how to exploit the
+(compressive) autoencoding for completing a data sample conditioned on a partial observation of the data. We will also study of data sampling and generation
+conditioned on certain learned features or attributes of the data.
+In this chapter and the next, we show how to apply these methods to learn the distribution and representation of many practical data which facilitate many real tasks in increasingly more general and challenging settings. 
 
 In general, once we have learned the distribution of $\x$, it can be very useful for conducting subsequent inference in the world related to $\x$. As we will see, almost all practical applications can be converted to the problem that given an observation $\y$ that depends on $\x$, say
 \begin{equation}
@@ -15,21 +34,35 @@ we need to solve the ``inverse problem'' of obtaining a good estimate $\hat \x(\
 \begin{equation}
 p(\x\mid \y) = \frac{p(\y\mid \x) p(\x) }{p(\y)}, 
 \end{equation} 
-where the last equation due to the Bayes rule.  Both the conditional estimation and conditional generation (or prediction) can be naturally inferred from the conditional distribution. 
+where the last equation due to the Bayes rule.  Both the conditional estimation and conditional generation (or sampling or prediction) can be naturally inferred from the conditional distribution. 
 
-In practice, however, initial information about the distributions of $\x$ and $\y$ and their relationship can be given in many different ways. In general, they can mainly be categorized into four cases, which are, conceptually, increasingly more challenging:
+In practice, however, initial information about the distributions of $\x$ and $\y$ and their relationship can be given in many different ways or forms. In general, they can mostly be categorized into four cases, which are, conceptually, increasingly more challenging:
 \begin{itemize}
 \item {\em Case 1:} Both a model for the distribution of $\x$ and the observation model $\y = h(\x) (+ \boldsymbol{w})$ is known, even in  an analytical form. This is typically the case for many classic signal processing problems, such as signal denoising, the sparse vector recovery problem we saw in Chapter \label{ch:classic} and the low-rank matrix recovery problem to be introduced below.
 \item {\em Case 2:} We do not have a model for the distribution but only samples $\X = \{\x_1, \ldots, \x_N\}$ of $\x$, and the observation model $\y = h(\x) (+ \boldsymbol{w})$ is also known. A model for the distribution $p(\x)$ of $\x$ needs to be learned, and subsequently the conditional distribution $p(\x\mid \y)$. Natural image completion is one typical example for this class of problems.
-\item {\em Case 3:} We only have the paired samples: $(\X, \Y) = \{ (\x_1, \y_1), \ldots, (\x_N, \y_N) \}$ of the joint distribution of $(\x, \y)$. The distributions of $\x$ and $\y$ and their relationship $h(\cdot)$ need to be learned from these paired sample data. For example, given many images and their captions, learning to conduct text-conditioned image generation is one such problem. 
+\item {\em Case 3:} We only have the paired samples: $(\X, \Y) = \{ (\x_1, \y_1), \ldots, (\x_N, \y_N) \}$ of the two variables  $(\x, \y)$. The distributions of $\x$ and $\y$ and their relationship $h(\cdot)$ need to be learned from these paired sample data. For example, given many images and their captions, learning to conduct text-conditioned image generation is one such problem. 
 \item {\em Case 4:} We only have the samples $\Y = \{\y_1, \ldots, \y_N\}$ of the observations $\y$, and the observation model $h(\cdot)$ needs to be known, at least in some parametric family $h(\cdot, \boldsymbol{\theta})$. The distribution $p(\x)$ and $p(\x \mid \y)$ need to be learned from $\hat \x$, estimated from $\Y$. For example, learning to render a new view from a sequence of calibrated or uncalibrated views is one such problem.
 \end{itemize}
 In this chapter, we will discuss general approaches to learn the desired distributions and solve the associated conditional estimation or generation for these cases, typically with a representative problem. 
 
 \section{Conditional Estimation with a Known Data Distribution}
+Notice that in the setting we have discussed in previous Chapters, the
+autoencoding network is trained to reconstruct a set of complete samples of the random vector $\x$. This would allow us to generate samples of the learned (low-dimensional) distribution. In practice, however, the
+low-dimensionality of the distribution is often exploited for
+completion or prediction tasks. More specifically, we often need to
+recover a sample $\x$ when parts of it are missing (or even corrupted). That is, we want to recover or predict the rest of $\x$
+from observing only a fraction of it:
+\begin{equation}
+f: \mathcal{P}_{\Omega}(\x) \mapsto \hat{\x},
+\end{equation}
+where $\mathcal{P}_{\Omega}(\spcdot)$ represents a masking operation
+(see \Cref{fig:matrix-completion} for an example).
+
+In this section and the next, we will study the completion task under two different conditions: one is when the distribution of the data $\x$ is already given, either learned or known a priori (even in certain analytical form); one is when only raw samples of $\x$ are available and we need to learn the low-dimensional distribution from the samples in order to solve the completion task well.
+
 \subsection{Low-rank Matrix Completion}
-One classical problem of this kind is the low-rank {\em matrix
-completion} problem. Consider a random vector $\x \in \mathbb{R}^m$
+The low-rank {\em matrix
+completion} problem is a classical problem for data completion when its distribution is low-dimensional and known. Consider a random vector $\x \in \mathbb{R}^m$
 which is distributed according to a low-rank Gaussian (or
 low-dimensional subspace) of rank $r < m$. Suppose we have drawn $n >
 r$ independent samples from this distribution and form a matrix $\X =
@@ -1036,13 +1069,70 @@ modifications to extend to a general noising process, as in
 $t_{\ell} = T\ell / L$, as for \Cref{eq:denoising-iteration-basic} in
 \Cref{sub:compression_denoising}).
 
-\subsection{Head Pose Conditioned Body Gesture Generation}
-A typical problem of this kind is  body/hand gesture generation conditioned on a given head pose (sequence). Maybe a vignette for this.
+\subsection{Body Pose Generation Conditioned on Head and Hands} The type of conditional estimation or generation problems arise rather naturally in many practical applications. 
+A typical problem of this kind is how to estimate and generate body pose and hand gesture conditioned on a given head pose and egocentric images, as illustrated in Figure \ref{fig:pose-teaser}. This is often the problem we need to solve when one is wearing a head-mounted device such as the Vision-pro from Apple or the Project Aria from Meta. The pose of the whole body and the gesture of the hands need to be inferred so that we can use the information to control virtual objects that the person interacts with.
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figs_chap6/pose-teaser.pdf}
+    \caption{
+A system that estimates human body height, pose,  and hand parameters (middle), conditioned on ego-centric SLAM poses and images (left). Outputs capture the wearer's actions in the allocentric reference frame of the scene, which we visualize here with 3D reconstructions (right).
+  }
+  \label{fig:pose-teaser}
 
+\end{figure*}
+
+Notice that in this case, one only has the head pose  provided by the device and a very limited field of view for part of one's hands and upper limps. The pose of the rest of the body needs to ``inferred'' or ``completed'' based on such partial information. The only way one can estimate the body pose at all time is by learning the joint distribution of the head and body pose sequence in advance and then sample this prior distribution conditioned on the real-time partial inputs. Figure \ref{fig:pose-method} outlines a system called EgoAllo \cite{yi2024egoallo} to solve this problem based on a learned conditional diffusion-denoising model. 
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figs_chap6/pose-method.pdf}
+\caption{
+    \textbf{Overview of technical components of EgoAllo \cite{yi2024egoallo}.}
+    % We take SLAM poses and egocentric video as input.
+    A diffusion model is pretrained that can generate body pose sequence based on local body parameters (middle).
+    An invariant parameterization $g(\cdot)$ of SLAM poses (left) is used to condition the diffusion model. These can be placed into the global coordinate frame via global alignment to input poses.
+    When available, egocentric video is used for hand detection (left) via HaMeR~\cite{pavlakos2023reconstructing}, which can be incorporated into samples via guidance by the generated gesture.
+  }
+  \label{fig:pose-method}
+\end{figure*}
+
+Strictly speaking, the solution proposed in EgoAllo \cite{yi2024egoallo} does not enforce measurement matching using the techniques introduced above. Instead it heuristically enforces the condition by utilizing  the cross-attention mechanism in a transformer architecture. There is reason to believe that the cross-attention mechanism is in a way approximately realizing the conditional sampling of the denoising a posteriori. We believe the more principled techniques introduced here, if properly implemented, can lead to better methods that further improve the body pose estimation. 
 
 \section{Conditional Generation with Paired Data}
+
 \subsection{Class Conditioned Image Generation} 
-Image generation with or without classifier guidance. 
+The problem of
+classification can be viewed as one to learn a (lossy) encoder for a random vector. That is, given a sample of a random vector $\x$, we would like to predict its class label $\y$. In other words, we need to learn a mapping:
+\begin{equation}
+  h: \x \mapsto \y.
+\end{equation}
+In general, we do not know the mapping $h(\cdot)$ and it needs to be learned from a set of paired samples $(\X, \Y) = \{ (\x_1, \y_1), \ldots, (\x_N, \y_N) \}$. 
+
+We know the distribution of $\x$ is low-dimensional. From the previous chapters, we have learned that given sufficient samples, in principle, we can learn a structured representation $\z$ for $\x$ through a learned compressive encoding:
+\begin{equation}
+    f: \x \mapsto \z. 
+\end{equation}
+$\z$ can also be viewed as a learned code for $\x$.
+It is rather reasonable to assume that the class assignment $\y$ for $\x$ should strongly depend on the (mixed) low-dimensional structures of the distribution, hence those of $\z$ too.
+
+Therefore, we may combine the two codes $\y$ and $\z$ together and try to learn a combined encoder:
+\begin{equation}
+    f: \x \mapsto (\z, \y). 
+\end{equation}
+From our study in previous chapters, the mapping $f$ is usually learned as a sequence of compression or denoising operators in the same space. Hence to leverage on such operations, we may introduce another random vector $\vw$ that can be viewed as an initial random guess of the class label $\y$. We try to learn a compression or denoising mapping:
+\begin{equation}
+    f: (\x, \vw) \mapsto (\z, \y)
+\end{equation}
+within a common feature space. 
+
+In fact, the common practice of introducing an
+auxiliary ``class token'' in the training of a Transformer for
+classification tasks, such as in ViT, can be viewed as learning such a
+representation by compressing (the coding rate of) given (noisy) samples of
+$(\x, \vw)$. If the distribution of the data $\x$ is already a
+mixture of (low-dimensional) Gaussians, the work \cite{wright2008classification} has shown that classification can be
+done effectively by directly minimizing {\em the (lossy) coding
+length} associated with the given samples.
+
 
 \subsection{Caption Conditioned Image Generation}
 An vignette for image generation conditioned on a given caption. (say, DALLE with CLIP for caption conditioned generation.)
