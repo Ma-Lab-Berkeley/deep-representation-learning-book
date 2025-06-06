@@ -1171,80 +1171,142 @@ The problem of image classification can be viewed as one such an example. In a s
 \begin{equation}
     f: \x \mapsto \z. 
 \end{equation}
-$\z$ can also be viewed as a learned (lossy but structured) code for $\x$. It is rather reasonable to assume that if the class assignment $\y$  truly depends on the low-dimensional  structures of $\x$ and the learned code $\z$ truly reflect such structures, $\y$ and $\z$ can be made highly correlated hence their joint distribution $p(\z, \y)$ should be extremely low-dimensional. Therefore, we may combine the two desired codes $\y$ and $\z$ together and try to learn a combined encoder:
+The representation $\z$ can also be viewed as a learned (lossy but structured) code for $\x$. It is rather reasonable to assume that if the class assignment $\y$  truly depends on the low-dimensional  structures of $\x$ and the learned code $\z$ truly reflect such structures, $\y$ and $\z$ can be made highly correlated hence their joint distribution $p(\z, \y)$ should be extremely low-dimensional. Therefore, we may combine the two desired codes $\y$ and $\z$ together and try to learn a combined encoder:
 \begin{equation}
     f: \x \mapsto (\z, \y) 
 \end{equation}
 where the joint distribution of $(\z, \y)$ is highly low-dimensional. 
 
 From our study in previous chapters, the mapping $f$ is usually learned as a sequence of compression or denoising operators in the same space. Hence to leverage on such family of operations, we may introduce an auxiliary vector $\vw$ that can be viewed as an initial random guess of the class label $\y$. In this way, we can learn a compression or denoising mapping:
-\begin{equation}
+\begin{equation}\label{eq:classifier-with-class-token}
     f: (\x, \vw) \mapsto (\z, \y)
 \end{equation}
 within a common space. In fact, the common practice of introducing an auxiliary ``class token'' in the training of a Transformer for classification tasks, such as in ViT, can be viewed as learning such a representation by compressing (the coding rate of) given (noisy) samples of $(\x, \vw)$. If the distribution of the data $\x$ is already a mixture of (low-dimensional) Gaussians, the work \cite{wright2008classification} has shown that classification can be done effectively by directly minimizing {\em the (lossy) coding length} associated with the given samples.
 
 
 \subsection{Class Conditioned Image Generation}\label{sub:cfg} 
-While a learned classifier allows us to classify a given image $\x$ to its corresponding class, we often like to generate an image of a given class, by sampling the learned distribution of natural images. To some extent, this can be viewed as the ``inverse'' problem to image classification. Let $p(\x)$ denote the distribution of natural images, say modeled by a diffusion-denoising process. Given a class label $\y$, say an ``Apple'', we would like to sample the conditional distribution $p(\x \mid \y)$ to generate an image of an apple:
+While a learned classifier allows us to classify a given image $\x$ to its
+corresponding class, we often like to generate an image of a given class, by
+sampling the learned distribution of natural images. To some extent, this can be
+viewed as the ``inverse'' problem to image classification. Let $p_{\x}$ denote
+the distribution of natural images, say modeled by a diffusion-denoising
+process. Given a class label random variable $y \in [K]$ with realization $\nu$, say
+an ``Apple'', we would like to sample the conditional distribution $p_{\x \mid
+y}(\,\cdot\, \mid \nu)$ to generate an image of an apple:
 \begin{equation}
-    g: \y \mapsto \x, \quad \x \sim p(\x\mid \y).
+  %g: \vnu \mapsto \hat{\x}, \quad 
+  \hat{\x} \sim p_{\x\mid \y}(\,\cdot\, \mid \vnu).
 \end{equation}
 We call this {\em class-conditioned image generation}.
 
-In the previous section, we have seen how to use the denoising-diffusion paradigm for conditional sampling from the posterior $p_{\vx \mid \vy}$ given
+In \Cref{sec:conditioned-decoding}, we have seen how to use the denoising-diffusion paradigm for
+conditional sampling from the posterior $p_{\vx \mid \vy}$ given
 \textit{model-based} measurements $\vy = h(\vx) + \vw$
 (\Cref{eq:measurement-matching-observation}), culminating in the
-DPS algorithm \Cref{alg:iterative_denoising_conditional}. This is a powerful
-framework, but it does not apply to the class (or text) conditioned image generation problem here, where an explicit generative model $h$ for the observations/attributes $\vy$ is not available due to the
+DPS algorithm \eqref{alg:iterative_denoising_conditional}. This is a powerful
+framework, but it does not apply to the class (or text) conditioned image
+generation problem here, where an explicit generative model $h$ for the
+observations/attributes $y$ is not available due to the
 intractability of analytical modeling. In this section, we will present techniques for extending
 conditional sampling to this setting.
 
 
 Thus, we now assume only that we have access to samples from the joint
-distribution of $(\vx, \vy)$:
+distribution of $(\vx, y)$:
 \begin{equation}
-  (\vx, \vy) \sim p_{\vx, \vy}.
+  (\vx, y) \sim p_{\vx, y}.
 \end{equation}
-Our goal remains to produce conditional samples $\hat{\vx}$ from the posterior,
-given realizations $\vnu$ of $\vy$:
-\begin{equation}
-  \hat{\vx} \sim p_{\vx \mid \vy}(\spcdot \mid \vnu).
-\end{equation}
-As in the previous section, we will repeatedly use the notation $\vxi$ to denote
-realizations of $\vx$, and we define $\vx_t = \alpha_t \vx + \sigma_t \vg$
+% Our goal remains to produce conditional samples $\hat{\vx}$ from the posterior,
+% given realizations $\vnu$ of $\vy$:
+% \begin{equation}
+%   \hat{\vx} \sim p_{\vx \mid \vy}(\spcdot \mid \vnu).
+% \end{equation}
+As in the previous section, we define $\vx_t = \alpha_t \vx + \sigma_t \vg$
 with $\vg \sim \cN(\Zero, \vI)$ independent of $(\vx, \vy)$, as in
-\Cref{eq:gen_additive_gaussian_noise_model} in \Cref{ch:compression}.
+\Cref{eq:gen_additive_gaussian_noise_model} in \Cref{ch:compression},
+and we will repeatedly use the notation $\vxi$ to denote realizations of $\vx$
+and $\vx_t$.
+
 To proceed, we note that our development of conditional sampling under
-measurements \eqref{eq:measurement-matching-observation} did not explicitly use
-the forward model $h$ except for in making the DPS approximation
+measurements $\vy = h(\vx) + \vw$ only explicitly used the
+forward model $h$ in making the DPS approximation
 \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}.
-In particular, we always have the conditional posterior denoiser decomposition
-\eqref{eq:posterior-sampling-denoiser-decomposition} by virtue of Bayes' rule
+In particular, the conditional posterior denoiser decomposition
+\eqref{eq:posterior-sampling-denoiser-decomposition} \textit{still holds in the
+paired data setting}, by virtue of Bayes' rule
 and conditional independence of $\vy$ and $\vx_t$ given $\vx$ (recall
-\Cref{fig:posterior-sampling-cds}), and thus we can
-still write given only paired data $(\vx, \vy) \sim p_{\vx, \vy}$
+\Cref{fig:posterior-sampling-cds}). Thus we can still write in the paired
+data setting
 \begin{equation}\label{eq:conditional-denoising-mmse-denoiser-paired-data}
-  \bE[ \vx \mid \vx_t=\vxi, \vy=\vnu]
+  \bE[ \vx \mid \vx_t=\vxi, y=\nu]
   =
-  \bE[\vx \mid \vx_t=\vxi] + \frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log p_{\vy \mid \vx_t}(\vnu\mid
+  \bE[\vx \mid \vx_t=\vxi] + \frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log p_{y \mid \vx_t}(\nu\mid
   \vxi).
 \end{equation}
 A natural ideal is then to directly implement the likelihood correction term in
-\eqref{eq:conditional-denoising-mmse-denoiser-paired-data} using a deep network:
-the network maps noisy data samples $\vx_t$ to a probability distribution over
-measurements $\vy$, then one evaluates its gradient with respect to $\vx_t$
-using backpropagation to compute the correction term in
-\Cref{eq:conditional-denoising-mmse-denoiser-paired-data}.
-Such an approach was already recognized and exploited to perform conditional
-sampling in pioneering early works on diffusion models, notably those by
-\citet{Sohl-Dickstein2015} and by \citet{song2020score}. For example, in the
-setting where $\vy$ corresponds to a class label taking values in the index set
-$\set{1, \dots, K}$, a deep network mapping noisy
-inputs and their corresponding noise levels $(\vx_t, t) \in \bR^{D} \times
-\bR$ to a probability distribution over labels $y \in \set{1, \dots, K}$ can be
-trained via the standard cross entropy training with a labeled dataset by adding
-independent noise to the training images.\footnote{In \Cref{ch:applications}, we
-discuss the process of training such a classifier in full detail.}
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data} using a deep network
+$f_{\theta_{\mathrm{c}}}$ with parameters $\theta_{\mathrm{c}}$, as in
+\Cref{eq:classifier-with-class-token}: 
+% which maps noisy samples
+% $\vx_t$ (and, as is common in practice, the time $t$ in the noising process) to
+% a probability distribution over class labels $\vy$:
+\begin{equation}
+  f_{\theta_{\mathrm{c}}} : (t, \vx_t) \mapsto \softmax(\vW_{\mathrm{head}} \vz_t).
+\end{equation}
+This expression combines the final representations $\vz_t$ (which also depend on
+$\theta_{\mathrm{c}}$) of the noisy inputs
+$\vx_t$ with a classification head $\vW_{\mathrm{head}} \in \bR^{K \times d}$, which maps the
+representations to a probability distribution over the $K$ possible classes.
+As is common in practice, it also takes the time $t$ in the noising process as
+input.
+Thus, with appropriate training, it provides an approximation to the log-likelihood
+$\log p_{y \mid \vx_t}$, and differentiating $\log f_{\theta_{\mathrm{c}}}$ with
+respect to its input $\vx_t$
+allows an approximation to the second term in
+\Cref{eq:conditional-denoising-mmse-denoiser-paired-data}:
+\begin{equation}\label{eq:conditional-denoising-mmse-denoiser-paired-data-approx}
+  % \bE[ \vx \mid \vx_t=\vxi, \vy=\vnu]
+  \bar{\vx}_{\theta}(t, \vx_t, y)
+  =
+  % \bE[\vx \mid \vx_t=\vxi] 
+  \bar{\vx}_{\theta_{\mathrm{d}}}(t, \vx_t)
+  + \frac{\sigma_t^2}{\alpha_t}
+  \nabla_{\vx_t}
+  \ip*{
+    \log f_{\theta_{\mathrm{c}}}(\vx_t, t)
+  }{
+    \ve_{y}
+  }
+\end{equation}
+where, as usual, we approximate the first term in
+\Cref{eq:conditional-denoising-mmse-denoiser-paired-data} via a learned
+unconditional denoiser for $\vx_t$ with parameters $\theta_{\mathrm{d}}$, and
+where we write $\ve_k$ for $k \in [K]$ to denote the $k$-th canonical basis
+vector for $\R^K$ (i.e., the vector with
+a one in the $k$-th position, and zeros elsewhere).
+The reader should note that the conditional denoiser $\bar{\vx}_{\theta}$
+requires two separate training runs, with separate losses: one for the
+classifier parameters $\theta_{\mathrm{c}}$, on a classification
+loss,\footnote{In \Cref{ch:applications}, we review the process of training such
+a classifier in full detail.} and one for the denoiser parameters
+$\theta_{\mathrm{d}}$, on a denoising loss. Such an approach to conditional
+sampling was already recognized and exploited to perform conditional sampling in
+pioneering early works on diffusion models, notably those by
+\citet{Sohl-Dickstein2015} and by \citet{song2020score}.
+
+% the network maps noisy data samples $\vx_t$ to a probability distribution over
+% measurements $\vy$, then one evaluates its gradient with respect to $\vx_t$
+% using backpropagation to compute the correction term in
+% \Cref{eq:conditional-denoising-mmse-denoiser-paired-data}.
+% Such an approach was already recognized and exploited to perform conditional
+% sampling in pioneering early works on diffusion models, notably those by
+% \citet{Sohl-Dickstein2015} and by \citet{song2020score}. For example, in the
+% setting where $\vy$ corresponds to a class label taking values in the index set
+% $\set{1, \dots, K}$, a deep network mapping noisy
+% inputs and their corresponding noise levels $(\vx_t, t) \in \bR^{D} \times
+% \bR$ to a probability distribution over labels $y \in \set{1, \dots, K}$ can be
+% trained via the standard cross entropy training with a labeled dataset by adding
+% independent noise to the training images.
 
 However, this straightforward methodology has two key drawbacks. The first is
 that, empirically, such a trained deep network classifier frequently does not
