@@ -1266,14 +1266,14 @@ allows an approximation to the second term in
 \Cref{eq:conditional-denoising-mmse-denoiser-paired-data}:
 \begin{equation}\label{eq:conditional-denoising-mmse-denoiser-paired-data-approx}
   % \bE[ \vx \mid \vx_t=\vxi, \vy=\vnu]
-  \bar{\vx}_{\theta}(t, \vx_t, y)
+  \bar{\vx}_{\theta}^{\mathrm{naive}}(t, \vx_t, y)
   =
   % \bE[\vx \mid \vx_t=\vxi] 
   \bar{\vx}_{\theta_{\mathrm{d}}}(t, \vx_t)
   + \frac{\sigma_t^2}{\alpha_t}
   \nabla_{\vx_t}
   \ip*{
-    \log f_{\theta_{\mathrm{c}}}(\vx_t, t)
+    \log f_{\theta_{\mathrm{c}}}(t, \vx_t)
   }{
     \ve_{y}
   }
@@ -1308,38 +1308,50 @@ pioneering early works on diffusion models, notably those by
 % trained via the standard cross entropy training with a labeled dataset by adding
 % independent noise to the training images.
 
-However, this straightforward methodology has two key drawbacks. The first is
+However, this straightforward methodology has two key drawbacks (which is why we
+label it as ``naive''). The first is
 that, empirically, such a trained deep network classifier frequently does not
 provide a strong enough guidance signal (in
 \Cref{eq:conditional-denoising-mmse-denoiser-paired-data}) to ensure that
-generated samples reflect the conditioning information $\vy$. This was first
-pointed out by \citet{Dhariwal2021-hg}, who noted that in the setting of
+generated samples reflect the conditioning information $y$. This was first
+emphasized by \citet{Dhariwal2021-hg}, who noted that in the setting of
 class-conditional ImageNet generation, the learned deep network
 classifier's probability outputs for the class $y$ being conditioned on were
 frequently around
 $0.5$---large enough to be the dominant class, but not large enough to provide
 a strong guidance signal---and that upon inspection, generations were not
 consistent with the conditioning class $y$. \citet{Dhariwal2021-hg} proposed to
-address this heuristically by incorporating an ``inverse temperature'' hyperparameter $w > 0$
-into the definition of the conditional denoiser
-\eqref{eq:conditional-denoising-mmse-denoiser-paired-data}:
-\begin{equation}\label{eq:denoiser-classifier-guidance}
-  \bE[ \vx \mid \vx_t=\vxi, \vy=\vnu]
+address this heuristically by incorporating an ``inverse temperature''
+hyperparameter $\gamma > 0$
+into the definition of the naive conditional denoiser
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data-approx}, referring to the
+resulting conditional denoiser as having incorporated ``classifier guidance''
+(CG):
+\begin{equation}\label{eq:conditional-denoising-mmse-denoiser-paired-data-approx-cg}
+  \bar{\vx}_{\theta}^{\mathrm{CG}}(t, \vx_t, y)
   =
-  \bE[\vx \mid \vx_t=\vxi] 
-  + w\frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log p_{\vy \mid \vx_t}(\vnu\mid
-  \vxi),
+  \bar{\vx}_{\theta_{\mathrm{d}}}(t, \vx_t)
+  + \gamma\frac{\sigma_t^2}{\alpha_t}
+  \nabla_{\vx_t}
+  \ip*{
+    \log f_{\theta_{\mathrm{c}}}(t, \vx_t)
+  }{
+    \ve_{y}
+  }
 \end{equation}
-with the case $w = 1$ coinciding with
-\eqref{eq:conditional-denoising-mmse-denoiser-paired-data}.
-\citet{Dhariwal2021-hg} found that a setting $w > 1$ performed best empirically.
-Note that
+with the case $\gamma = 1$ coinciding with
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data-approx}.
+\citet{Dhariwal2021-hg} found that a setting $\gamma > 1$ performed best empirically.
+One possible interpretation for this is as follows: note that, in the context of
+the \textit{true} likelihood term
+\Cref{eq:conditional-denoising-mmse-denoiser-paired-data}, scaling by $\gamma$
+gives equivalently
 \begin{align}
-  w\frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log p_{\vy \mid \vx_t}(\vnu\mid
+  \gamma\frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log p_{\vy \mid \vx_t}(\vnu\mid
   \vxi)
   &=
   \frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log \left(
-  p_{\vy \mid \vx_t}(\vnu\mid \vxi)^w
+  p_{\vy \mid \vx_t}(\vnu\mid \vxi)^\gamma
   \right), %\\
   % &=
   % \frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log \left(
@@ -1350,21 +1362,25 @@ Note that
   % }
   % \right)
 \end{align}
-which suggests the natural interpretation of the parameter $w$ performing
+which suggests the natural interpretation of the parameter $\gamma$ performing
 (inverse) \textit{temperature scaling} on the likelihood
 $p_{\vy \mid \vx_t}$, which is precise if we consider the renormalized
 distribution 
-$ { p_{\vy \mid \vx_t}(\vnu\mid \vxi)^w } / { \int p_{\vy \mid \vx_t}(\vnu'\mid
-\vxi)^w \odif \vnu' } $.
+$ { p_{\vy \mid \vx_t}(\vnu\mid \vxi)^\gamma } / { \int p_{\vy \mid \vx_t}(\vnu'\mid
+\vxi)^\gamma \odif \vnu' } $.
 However, note that this \textit{is not} a rigorous interpretation in the context
 of \Cref{eq:conditional-denoising-mmse-denoiser-paired-data}, because the
 gradients are taken with respect to $\vxi$, and the normalization constant in
 the temperature-scaled distribution is in general a function of $\vxi$.
-We will return to this point \sdb{in a subsequent example}.
-Regardless, choosing $w > 1$ has the effect of exaggerating large values of the
-likelihood $p_{\vy \mid \vx_t}$ relative to smaller ones, which amplifies the
-guidance signal provided, leading to dramatic improvements in generation quality
-and faithfulness to the conditioning signal in practice.
+Instead, the parameter $\gamma$ should simply be understood as amplifying large
+values of the deep network classifier's output probabilities
+$f_{\theta_{\mathrm{c}}}(t, \vx_t)$ relative to smaller ones, 
+which amplifies the guidance signal provided.
+% We will return to this point \sdb{in a subsequent example}.
+% Regardless, choosing $w > 1$ has the effect of exaggerating large values of the
+% likelihood $p_{\vy \mid \vx_t}$ relative to smaller ones, which amplifies the
+% guidance signal provided, leading to dramatic improvements in generation quality
+% and faithfulness to the conditioning signal in practice.
 
 % \begin{example}[Classification] One may view the problem of
 % classification as a special case for completing or predicting
