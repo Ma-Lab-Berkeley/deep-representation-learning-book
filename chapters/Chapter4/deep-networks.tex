@@ -894,23 +894,20 @@ In practice, the $\ell_0$-norm is often relaxed to the $\ell_1$-norm to improve 
 % To optimize the learning objective and learn compact and structured representation, one approach is unrolled optimization~\cite{gregor2010learning,tolooshams2021stable}: each layer of the deep network implements an iteration of an optimization algorithm on the learning objective. 
 % For example, one can design the layer $f^{\ell}$ such that the forward pass is equivalent to a proximal gradient descent step for optimizing learning objective $L(\vZ)$, i.e., $\vZ^{\ell+1} = f^{\ell}(\vZ^{\ell}) = \texttt{Prox}[\vZ^{\ell} - \eta\cdot\nabla_{\vZ} L(\vZ^{\ell})]$. Here we use $\eta$ to denote the step size and $\texttt{Prox}[\cdot]$ to denote the proximal operator~\cite{parikh2014proximal}.
 
-Although easy to state, each term of the above  objective can be computationally very challenging
-to optimize \cite{Wright-Ma-2022,chan2021redunet}. Hence it is natural to take an approximation approach that realizes the global transformation $f$ optimizing 
-\Cref{eq:sparse-rr} through a concatenation of multiple, say $L$, simple \textit{incremental and local} operations $f^\ell$ that push the representation distribution towards the desired parsimonious model distribution:
-\vspace{-2mm}
+Although easy to state, each term in the above objective is computationally challenging to optimize \cite{Wright-Ma-2022,chan2021redunet}. Hence it is natural to adopt an approximation approach that realizes the global transformation $f$ to optimize 
+\eqref{eq:sparse-rr} through a concatenation of multiple, say $L$, simple \textit{incremental and local} operations $f^\ell$ that push the representation distribution towards the desired parsimonious model distribution:
 \begin{equation}
-f\colon \X
-\xrightarrow{\hspace{1mm} f^0 \hspace{1mm}} \Z^0 \rightarrow \cdots \rightarrow \Z^\ell \xrightarrow{\hspace{1mm} f^\ell \hspace{1mm}} \Z^{\ell+1} \rightarrow  \cdots \to \Z^L = \Z,
+f\colon \X = \bm Z^0 \xrightarrow{\hspace{1mm} f^0 \hspace{1mm}} \Z^1 \rightarrow \cdots \rightarrow \Z^\ell \xrightarrow{\hspace{1mm} f^{\ell} \hspace{1mm}} \Z^{\ell+1} \rightarrow  \cdots \xrightarrow{\hspace{1mm} f^{L-1}} \Z^L = \Z,
 \label{eq:incremental}
 \end{equation}
-where $f^0: \bR^{D} \rightarrow \bR^{d}$ is the pre-processing mapping that transforms input tokens $\x_{i} \in \bR^{D}$ to their token representations $\z_{i}^{1} \in \bR^{d}$.  
-Each incremental \textit{forward mapping} $\Z^{\ell + 1} = f^\ell(\Z^\ell)$, or a ``layer'', transforms the token distribution to \textit{optimize} the above sparse rate reduction objective \eqref{eq:sparse-rr}, conditioned on the distribution of its input tokens $\Z^\ell$. {In contrast to other unrolled optimization approaches such as the ReduNet \cite{chan2021redunet}}, we \textit{explicitly model} the distribution of $\Z^\ell$ at each layer, say as a mixture of linear subspaces or sparsely generated from a dictionary. The model parameters are learned from data (say via \textit{backward propagation} with end-to-end training). This separation of forward ``optimization'' and backward
+where $f^0: \bR^{D} \rightarrow \bR^{d}$ is the pre-processing mapping that transforms each input token $\x_{i} \in \bR^{D}$ to the initial token representations $\z_{i}^{1} \in \bR^{d}$.  
+Each incremental \textit{forward mapping} $\Z^{\ell + 1} = f^\ell(\Z^\ell)$, or a ``layer'', transforms the token distribution to \textit{optimize} the above sparse rate reduction objective \eqref{eq:sparse-rr}, conditioned on the distribution of its input $\Z^\ell$. {In contrast to other unrolled optimization approaches such as the ReduNet \cite{chan2021redunet}}, we \textit{explicitly model} the distribution of $\Z^\ell$ at each layer, say as a mixture of linear subspaces or sparsely generated from a dictionary. The model parameters are learned from data (say via \textit{backward propagation} with end-to-end training). This separation of forward ``optimization'' and backward
 ``learning'' clarifies the mathematical role of each layer as an operator
 transforming the distribution of its input, whereas the input distribution is
 in turn modeled (and subsequently learned) by the parameters of the layer. 
 
-We show that we can derive these incremental, local operations through an unrolled optimization perspective to achieve \Cref{eq:sparse-rr}.  Once we decide on using an incremental approach to optimizing
-\Cref{eq:sparse-rr}, there are a variety of possible choices to achieve the optimization. Given a model for $\Z^\ell$, say a mixture of subspaces $\vU_{[K]}$, we opt for a two-step \textit{alternating minimization} process with a strong conceptual basis: we first \textit{compress} the tokens $\vZ^{\ell}$ via a gradient step to minimize the coding rate term $\min_{\Z} {R}^c(\vZ; \vU_{[K]})$; we then \textit{sparsify} the compressed tokens, with a suitably-relaxed proximal gradient step on the difference of the sparsity penalty and the expansion term, i.e., $\min_{\Z}[\lambda \norm{\vZ}_{0} - R(\vZ)]$. Both actions are applied incrementally and repeatedly, as each $f^\ell$ in \Cref{eq:incremental} is instantiated with these two steps. 
+Now, we show that we can derive these incremental, local operations through an unrolled optimization perspective to optimize Problem \eqref{eq:sparse-rr}.  Once we decide on using an incremental approach to optimizing Problem
+\eqref{eq:sparse-rr}, there are a variety of possible choices to achieve the optimization. Given a model for $\Z^\ell$, say a mixture of subspaces $\vU_{[K]}$, we opt for a two-step \textit{alternating minimization} process with a strong conceptual basis: we first \textit{compress} the tokens $\vZ^{\ell}$ via a gradient step to minimize the coding rate term $\min_{\Z} {R}^c(\vZ \mid \vU_{[K]})$; we then \textit{sparsify} the compressed tokens, with a suitably-relaxed proximal gradient step on the difference of the sparsity penalty and the expansion term, i.e., $\min_{\Z}[\lambda \norm{\vZ}_{0} - R(\vZ)]$. Both actions are applied incrementally and repeatedly, as each $f^\ell$ in \eqref{eq:incremental} is instantiated with these two steps. 
 
 \begin{figure}[t!]
      \centering
@@ -918,7 +915,7 @@ We show that we can derive these incremental, local operations through an unroll
      \vspace{-0.1in}
      \caption{
      \textbf{The `main loop' of the \textsc{crate} white-box deep network design.} 
-     After encoding input data $\vX$ as a sequence of tokens $\vZ^0$, \textsc{crate} constructs a deep network that transforms the data to a canonical configuration of low-dimensional subspaces by successive   {\textit{\textbf{compression}}} 
+     After encoding input data as a sequence of tokens $\vZ^0$, \textsc{crate} constructs a deep network that transforms the data to a canonical configuration of low-dimensional subspaces by successive   {\textit{\textbf{compression}}} 
      against a local model for the distribution, generating $\vZ^{\ell+1/2}$, and      {\textit{\textbf{sparsification}}} 
      against a global dictionary, generating $\vZ^{\ell+1}$. 
      Repeatedly stacking these blocks and training the model parameters via backpropagation yields a powerful and interpretable representation of the data.
@@ -930,23 +927,37 @@ We show that we can derive these incremental, local operations through an unroll
 
 
 
-\paragraph{One Layer of the \textsc{CRATE} Model} We now present the design of each layer of the white-box transformer architecture -- Coding RATE Transformer (\textsc{crate}) -- proposed in \cite{yu2023white}.
-Each layer of \textsc{crate} contains two blocks: the compression block and the sparsification block. These correspond to a two-step alternating optimization procedure for optimizing the sparse rate reduction objective \eqref{eq:sparse-rr}. Specifically, the $\ell$-th layer of \textsc{crate} is defined as
-\begin{equation}
-    \vZ^{\ell+1} = f^{\ell}(\vZ^{\ell}) = {\texttt{ISTA}(\vZ^{\ell+1/2}\,|\,\vD^{\ell})},\, \mathrm{where}\quad \vZ^{\ell + 1/2}
-    = \vZ^{\ell} + \MSSA(\vZ^{\ell}).
-\end{equation}
-\textbf{{Compression block (MSSA).}} 
-The compression block in \textsc{crate}, called \textbf{M}ulti-head \textbf{S}ubspace \textbf{S}elf-\textbf{A}ttention block (\(\MSSA\)), is derived for compressing the token set $\vZ=[\vz_1, \dots, \vz_{N}]$ by optimizing the compression term $R^c$ (defined Eq.~\eqref{eq:def-mcr-Rc}), i.e.,
-\begin{align}\label{eq:grad_rc_mssa}
-    \vZ^{\ell + 1/2}
-    &= \vZ^{\ell} + \MSSA(\vZ^{\ell} \mid \vU_{[K]}^{\ell}) \approx \vZ^{\ell} - \kappa \nabla_{\vZ}R^{c}(\vZ^{\ell}\,|\,\vU_{[K]}^{\ell}),
-\end{align}
-where $\vU_{[K]}^{\ell}$ denotes the (local) signal model at layer $\ell$, and the \(\MSSA\) operator is defined as
-\begin{equation}\label{eq:mssa}
-    \MSSA(\vZ \mid \vU_{[K]}) =  \frac{\kappa p}{N\epsilon^{2}}\,[\vU_{1} \,\cdots\, \vU_{K}]\mat{(\vU_{1}^{\top}\vZ)\softmax((\vU_{1}^{\top}\vZ)^{\top}(\vU_{1}^{\top}\vZ)) \\ \vdots \\ (\vU_{K}^{\top}\vZ)\softmax((\vU_{K}^{\top}\vZ)^{\top}(\vU_{K}^{\top}\vZ))}.
-\end{equation}
-Compared with the commonly used attention block in transformer~\cite{vaswani2017attention}, where the $k$-th attention head is defined as $(\bm{V}_{k}^{\top}\vZ)\softmax((\bm{Q}_{k}^{\top}\vZ)^{\top}(\bm{K}_{k}^{\top}\vZ))$, $\MSSA$ uses only one matrix to obtain the query, key, and value matrices in the attention: that is,  $\vU_{k} = \bm{Q}_{k} = \bm{K}_{k} = \bm{V}_{k}$.
+\paragraph{One Layer of the \textsc{CRATE} Model} We now design a white-box transformer architecture, named the Coding RATE Transformer (\textsc{crate}), by applying unrolled optimization to the sparse rate reduction objective \eqref{eq:sparse-rr}. Each layer of \textsc{crate} contains two blocks: the compression block and the sparsification block, which correspond to a two-step alternating optimization procedure for optimizing the sparse rate reduction objective \eqref{eq:sparse-rr}. 
+
+
+
+% Specifically, the $\ell$-th layer of \textsc{crate} is defined as
+% \begin{equation}
+%     \vZ^{\ell+1} = f^{\ell}(\vZ^{\ell}) = {\texttt{ISTA}(\vZ^{\ell+1/2}\,|\,\vD^{\ell})},\, \mathrm{where}\ \vZ^{\ell + 1/2}
+%     = \vZ^{\ell} + \MSSA(\vZ^{\ell}).
+% \end{equation}
+
+% \textbf{{Compression block MSSA.}} 
+% The compression block in \textsc{crate}, called \textbf{M}ulti-head \textbf{S}ubspace \textbf{S}elf-\textbf{A}ttention block (\(\MSSA\)), is derived for compressing the token set $\vZ=[\vz_1, \dots, \vz_{N}]$ by optimizing the compression term $R_\epsilon^c$ (defined in~\eqref{eq:def-mcr-Rc}), i.e.,
+% \begin{align}\label{eq:grad_rc_mssa}
+%     \vZ^{\ell + 1/2}
+%     &= \vZ^{\ell} + \MSSA(\vZ^{\ell} \mid \vU_{[K]}^{\ell}) \approx \vZ^{\ell} - \kappa \nabla_{\vZ}R^{c}(\vZ^{\ell}\,|\,\vU_{[K]}^{\ell}),
+% \end{align}
+% where $\vU_{[K]}^{\ell}$ denotes the (local) signal model at layer $\ell$, and the \(\MSSA\) operator is defined as
+% \begin{equation}\label{eq:mssa}
+%     \MSSA(\vZ \mid \vU_{[K]}) =  \frac{\kappa p}{N\epsilon^{2}}\,[\vU_{1} \,\cdots\, \vU_{K}]\mat{(\vU_{1}^{\top}\vZ)\softmax((\vU_{1}^{\top}\vZ)^{\top}(\vU_{1}^{\top}\vZ)) \\ \vdots \\ (\vU_{K}^{\top}\vZ)\softmax((\vU_{K}^{\top}\vZ)^{\top}(\vU_{K}^{\top}\vZ))}.
+% \end{equation}
+% Compared with the commonly used attention block in transformer~\cite{vaswani2017attention}, where the $k$-th attention head is defined as $(\bm{V}_{k}^{\top}\vZ)\softmax((\bm{Q}_{k}^{\top}\vZ)^{\top}(\bm{K}_{k}^{\top}\vZ))$, $\MSSA$ uses only one matrix to obtain the query, key, and value matrices in the attention: that is,  $\vU_{k} = \bm{Q}_{k} = \bm{K}_{k} = \bm{V}_{k}$. 
+
+% \textbf{{Sparse coding block ISTA.}} 
+% The Iterative Shrinkage-Thresholding Algorithm (ISTA) block is designed to optimize the sparsity term and the global coding rate term, $ \lambda \|\vZ\|_{0} - R(\vZ \mid \vU_{[K]})$ in \eqref{eq:sparse-rr}. 
+% \cite{yu2023white} shows that an optimization strategy for these terms posits a (complete) incoherent dictionary $\vD^{\ell} \in \R^{d \times d}$ and takes a proximal gradient descent step towards solving the associated LASSO problem $\argmin_{\vZ \geq \Zero}[\frac{1}{2}\|{\vZ^{\ell + 1/2} - \vD^{\ell}\vZ}\|_{2}^{2} + \lambda \|{\vZ}\|_{1}]$, obtaining the iteration
+% \begin{align}\label{eq:grad_lasso_ista}
+%     \vZ^{\ell + 1}
+%     &= \texttt{ISTA}(\vZ^{\ell+1/2}\,|\,\vD^{\ell}) \nonumber\\
+%     &= \mathrm{ReLU}(\vZ^{\ell+1/2} + \eta\, (\vD^{\ell})^{\top}(\vZ^{\ell+1/2} - \vD^{\ell}\vZ^{\ell+1/2}) - \eta\lambda\mathbf{1}).
+% \end{align}
+% In particular, the \texttt{ISTA} block sparsifies the intermediate iterates $\vZ^{\ell + 1/2}$ w.r.t.~$\vD^{\ell}$ to obtain $\vZ^{\ell + 1}$.
 
 
 \begin{figure}
@@ -956,15 +967,6 @@ Compared with the commonly used attention block in transformer~\cite{vaswani2017
     \label{fig:arch-crate}
 \end{figure}
 
-\textbf{{Sparse coding block (ISTA).}} 
-The Iterative Shrinkage-Thresholding Algorithm (ISTA) block is designed to optimize the sparsity term and the global coding rate term, $ \lambda \|\vZ\|_{0} - R(\vZ \mid \vU_{[K]})$ in \eqref{eq:sparse-rr}. 
-\cite{yu2023white} shows that an optimization strategy for these terms posits a (complete) incoherent dictionary $\vD^{\ell} \in \R^{d \times d}$ and takes a proximal gradient descent step towards solving the associated LASSO problem $\argmin_{\vZ \geq \Zero}[\frac{1}{2}\|{\vZ^{\ell + 1/2} - \vD^{\ell}\vZ}\|_{2}^{2} + \lambda \|{\vZ}\|_{1}]$, obtaining the iteration
-\begin{align}\label{eq:grad_lasso_ista}
-    \vZ^{\ell + 1}
-    &= \texttt{ISTA}(\vZ^{\ell+1/2}\,|\,\vD^{\ell}) \nonumber\\
-    &= \mathrm{ReLU}(\vZ^{\ell+1/2} + \eta\, (\vD^{\ell})^{\top}(\vZ^{\ell+1/2} - \vD^{\ell}\vZ^{\ell+1/2}) - \eta\lambda\mathbf{1}).
-\end{align}
-In particular, the \texttt{ISTA} block sparsifies the intermediate iterates $\vZ^{\ell + 1/2}$ w.r.t.~$\vD^{\ell}$ to obtain $\vZ^{\ell + 1}$.
 
 
 \subsection{Overall White-Box Transformer Architecture: CRATE}
