@@ -796,7 +796,7 @@ The supervised classification setting in which the ReduNet was derived is also s
 
 % \subsection{CRATE}
 
-\subsection{Deep Networks for Sparse Rate Reduction}
+\subsection{Learning Parsimonious Representations via Unrolled Optimization for Sparse Rate Reduction}
 
 % Briefly recapping the sparse Dictionary Learning problem in Chapter \ref{ch:linear-independent}, fine-tuning its unrolled optimization leads to the Learned ISTA (LISTA) architecture. The sparseLand-type networks from unrolling convolutional sparse recovery... 
 
@@ -825,9 +825,9 @@ require that the target marginal distribution of individual tokens
 \(\z_{i}\) should be highly compressed and structured, amenable for compact coding. Particularly, we require the distribution to be \textit{a mixture of low-dimensional (say \(K\)) Gaussian
 distributions}, such that the \(k\)-th Gaussian has mean \(\Zero \in \bR^{d}\), covariance \(\vSigma_{k} \succeq \Zero \in \bR^{d \times d}\), and support spanned by the orthonormal basis \(\vU_{k} \in \bR^{d \times p}\). 
 We denote $\vU_{[K]} = \{\vU_k\}_{k=1}^K$ to be the set of bases of all Gaussians. Hence, to maximize the \textit{information gain} \cite{ma2022principles} for the final token representation, we wish to maximize the rate reduction (see \Cref{subsec:MCR2}) of the tokens, i.e., 
-\begin{align*}
-    \mathrm{max}\ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) = R_{\epsilon}(\Z) - R^c_{\epsilon}(\Z \mid \vU_{[K]}) \quad \mathrm{s.t.}\ \Z = f(\bm X). 
-\end{align*}
+\begin{align}\label{eq:rate reduction}
+    \mathrm{max}\ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) = R_{\epsilon}(\Z) - R^c_{\epsilon}(\Z \mid \vU_{[K]}) \qquad \mathrm{s.t.}\ \Z = f(\bm X). 
+\end{align}
 %i.e., $\max_{\Z} \Delta R(\Z; \vU_{[K]}) = R(\Z) - R^c(\Z; \vU_{[K]})$, 
 % where \(R\) and \(R^{c}\) are estimates of lossy coding rates to be formally defined in Eq.~\eqref{eq:coding_rate} and Eq.~\eqref{eq:def-mcr-Rc}. This also promotes token representations \(\z_{i}\) from different Gaussians to be \textit{incoherent} \cite{yu2020learning}. 
 Here, the first term $R_{\epsilon}$ is an estimate of the lossy coding rate for the whole set of token representations. More specifically, if we view the token representations $\{\bm z_i\}_{i=1}^N$ as i.i.d. samples from a single zero-mean Gaussian, their lossy coding rate subject to quantization precision $\epsilon > 0$ is given as
@@ -844,29 +844,15 @@ The second term $R_{\epsilon}^c$ is an estimate of the lossy coding rate under t
 \end{equation}
 
 \begin{remark}
-    The form \eqref{eq:coding_rate} of the coding rate can be viewed as a generalization to the coding rate \(R_\epsilon^{c}\) in the original rate reduction objective \eqref{eq:MCRc}. In particular, the original objective is defined with respect to a set of known membership labels \(\{\vPi_{k}\}\) specific to the particular data realization \(\vX\). In contrast, the objective here is defined with respect to subspaces \(\vU_{[K]}\) which are defined externally to any specific data realization, though they support the token feature distribution. Suppose that a token representation $\bm z_i$ belongs to a subspace $\bm U_k$ and these subspaces are orthogonal to each other, i.e., $\bm U_k^\top \bm U_l = \bm 0$ for all $k \neq l$. Then, one can verify that the projections $\bm U_k\bm U_k^\top \bm z_i = \bm z_i$ and  $\bm U_l\bm U_l^\top \bm z_i = \bm 0$ for all $l \neq k$. These orthogonal projections effectively serve as implicit membership labels, identifying the subspace to which each token representation belongs. 
+    The expression \eqref{eq:def-mcr-Rc} for the coding rate can be viewed as a generalization of the coding rate \(R_\epsilon^{c}\) used in the original rate reduction objective \eqref{eq:MCRc}. In particular, the original objective is defined with respect to a set of known membership labels \(\{\vPi_{k}\}\) specific to the particular data realization \(\vX\). In contrast, the current objective is defined with respect to subspaces \(\vU_{[K]}\), which are independent of any particular realization but are assumed to support the distribution of token features. Suppose that a token representation $\bm z_i$ belongs to a subspace $\bm U_k$ and these subspaces are orthogonal to each other, i.e., $\bm U_k^\top \bm U_l = \bm 0$ for all $k \neq l$. Then, one can verify that the projections $\bm U_k\bm U_k^\top \bm z_i = \bm z_i$ and  $\bm U_l\bm U_l^\top \bm z_i = \bm 0$ for all $l \neq k$. These orthogonal projections effectively serve as implicit membership labels, identifying the subspace to which each token representation belongs. 
 \end{remark}
 
-
-Since rate reduction is an intrinsic measure of goodness for the representation, it is invariant to arbitrary rotations of the representations. Therefore, to ensure the final representations are amenable to more compact coding, we would like to transform the representations (and their supporting subspaces) so that they become \textit{sparse} with respect to the standard coordinates of the resulting representation space.\footnote{That is, having the fewest nonzero entries.}  
-The combined rate reduction and sparsification process is illustrated in Fig.~\ref{fig:crate-diagram}. 
-Computationally, we may combine the above two goals into a unified objective for optimization:
-\vspace{0.05in}
-\begin{equation}
-\begin{aligned}
-   \max_{f \in \mathcal{F}}\, \mathbb{E}_{\Z}\big[ \Delta R(\Z; \vU_{[K]}) - \lambda \|\bm{Z}\|_0 \big] &=\max_{f \in \mathcal{F}}\, \mathbb{E}_{\Z}\big[ R(\Z) - {R}^c(\Z; \vU_{[K]})- \lambda \|\bm{Z}\|_0 \big]\\\
-   \text{s.t.}\ \Z & = f(\X),
-   \label{eq:sparse-rr}
-\end{aligned}
-\end{equation}
-where the $\ell^0$ norm $\|\Z\|_0$ promotes the sparsity of the final token representations \(\Z = f(\X)\).\footnote{To simplify the notation, we will discuss the objective for one sample $\X$ at a time with the understanding that we always mean to optimize the expectation.} 
-We call this objective ``\textit{sparse rate reduction.}'' 
-% \yima{A figure to illustrate the sparse rate reduction objective...} 
-% \yaodong{Added the figure below and the comparison with MCR$^2$.}
-
-We provide an illustrative figure (Figure~~\ref{fig:sparse-rate-reduction-diagram}) of the sparse rate reduction objective, comparing it with the MCR$^2$ objective introduced earlier. 
-It is easy to see that the rate reduction objective, i.e., MCR$^2$ defined in Eq.~\ref{eqn:maximal-rate-reduction}), is invariant to arbitrary joint rotations of the representations and subspaces. 
-In particular, optimizing the rate reduction may not naturally lead to axis-aligned (i.e., \textit{sparse}) representations. {For instance, consider the three sets of learned representations in Figure~\ref{fig:sparse-rate-reduction-diagram}. The coding rate reduction increases from (a) to (b), but because it is invariant under rotations, remains the same from (b) to (c).} Therefore, we would like to transform the representations (and their supporting subspaces) so that the features $\vZ$ eventually become sparse ---  having few nonzero entries --- with respect to the standard coordinates of the resulting representation space {as in Figure~\ref{fig:sparse-rate-reduction-diagram}(c)}.
+% \begin{figure}
+%     \centering
+%     \includegraphics[width=0.95\textwidth]{figs_chap4/image_eps_ball.png}
+%     \vspace{-0.1in}\caption{\small\textbf{Comparison of three sets of  representations via rate reduction and sparsity.} Each $S_i$ represents one linear subspace, and the number of blue balls represents the difference between the coding rates $\Delta R_{\epsilon}(\vZ \mid \vU_{[K]})$.  }
+%     \label{fig:diagram_compare_compression_sparsification}
+% \end{figure}
 
 
 \begin{figure}[t!]
@@ -878,8 +864,32 @@ In particular, optimizing the rate reduction may not naturally lead to axis-alig
 \end{figure}
 
 
+\paragraph{Sparse Rate Reduction.} Note that the rate reduction objective \eqref{eq:rate reduction} is invariant to arbitrary joint rotations of the representations and subspaces. In particular, optimizing the rate reduction may not naturally lead to axis-aligned (i.e., \textit{sparse}) representations. {For instance, consider the three sets of learned representations in \Cref{fig:sparse-rate-reduction-diagram}. The coding rate reduction increases from (a) to (b), but because it is invariant under rotations, remains the same from (b) to (c).} Therefore, we would like to transform the representations (and their supporting subspaces) so that the features $\vZ$ eventually become sparse\footnote{Concretely, having few nonzero entries.} with respect to the standard coordinates of the resulting representation space {as in \Cref{fig:sparse-rate-reduction-diagram}(c)}. Therefore, to ensure the final representations are amenable to more compact coding, we would like to transform the representations (and their supporting subspaces) so that they become \textit{sparse} with respect to the standard coordinates of the resulting representation space.\footnote{That is, having the fewest nonzero entries.} Computationally, we may combine the above two goals into a unified objective for optimization:
+\vspace{0.05in}
+\begin{equation}
+\begin{aligned}
+   \max_{f \in \mathcal{F}}\ \mathbb{E}_{\Z}\big[ \Delta R_{\epsilon}(\Z; \vU_{[K]}) - \lambda \|\bm{Z}\|_0 \big] \qquad \text{s.t.}\ \Z = f(\X),
+   \label{eq:sparse-rr}
+\end{aligned}
+\end{equation}
+where the $\ell_0$-norm $\|\Z\|_0$ promotes the sparsity of the final token representations \(\Z = f(\X)\).\footnote{To simplify the notation, we will discuss the objective for one sample $\X$ at a time with the understanding that we always mean to optimize the expectation.} We call this objective \textit{sparse rate reduction}. 
+% \yima{A figure to illustrate the sparse rate reduction objective...} 
+% \yaodong{Added the figure below and the comparison with MCR$^2$.}
 
-\paragraph{White-box Deep Architecture via Unrolled Optimization.} 
+% We provide an illustrative figure (Figure~~\ref{fig:sparse-rate-reduction-diagram}) of the sparse rate reduction objective, comparing it with the MCR$^2$ objective introduced earlier. 
+% It is easy to see that the rate reduction objective, i.e., MCR$^2$ defined in Eq.~\ref{eqn:maximal-rate-reduction}), is invariant to arbitrary joint rotations of the representations and subspaces. 
+% In particular, optimizing the rate reduction may not naturally lead to axis-aligned (i.e., \textit{sparse}) representations. {For instance, consider the three sets of learned representations in Figure~\ref{fig:sparse-rate-reduction-diagram}. The coding rate reduction increases from (a) to (b), but because it is invariant under rotations, remains the same from (b) to (c).} Therefore, we would like to transform the representations (and their supporting subspaces) so that the features $\vZ$ eventually become sparse ---  having few nonzero entries --- with respect to the standard coordinates of the resulting representation space {as in Figure~\ref{fig:sparse-rate-reduction-diagram}(c)}.
+
+In practice, the $\ell_0$-norm is often relaxed to the $\ell_1$-norm to improve computational traceability and enable convex optimization techniques \cite{Wright-Ma-2022}. Motivated by this, we relax Problem \eqref{eq:sparse-rr} accordingly, leading to a formulation that remains faithful to the original sparsity objective while being more amenable to efficient algorithms as follow:  
+\begin{equation}
+\begin{aligned}
+   \max_{f \in \mathcal{F}}\ \mathbb{E}_{\Z}\big[ \Delta R_{\epsilon}(\Z; \vU_{[K]}) - \lambda \|\bm{Z}\|_1 \big] \qquad \text{s.t.}\ \Z = f(\X),
+   \label{eq:sparse-rr-1}
+\end{aligned}
+\end{equation}
+ With a slight abuse of terminology, we often refer to this objective function also as the \textit{sparse rate reduction}. 
+
+\paragraph{White-Box Network Architecture via Unrolled Optimization.} 
 
 % To optimize the learning objective and learn compact and structured representation, one approach is unrolled optimization~\cite{gregor2010learning,tolooshams2021stable}: each layer of the deep network implements an iteration of an optimization algorithm on the learning objective. 
 % For example, one can design the layer $f^{\ell}$ such that the forward pass is equivalent to a proximal gradient descent step for optimizing learning objective $L(\vZ)$, i.e., $\vZ^{\ell+1} = f^{\ell}(\vZ^{\ell}) = \texttt{Prox}[\vZ^{\ell} - \eta\cdot\nabla_{\vZ} L(\vZ^{\ell})]$. Here we use $\eta$ to denote the step size and $\texttt{Prox}[\cdot]$ to denote the proximal operator~\cite{parikh2014proximal}.
@@ -905,7 +915,7 @@ We show that we can derive these incremental, local operations through an unroll
 \begin{figure}[t!]
      \centering
          \includegraphics[width=\textwidth]{figs_chap4/CRATE_fig1_patches.pdf}
-     \vspace{-0.2in}
+     \vspace{-0.1in}
      \caption{
      \textbf{The `main loop' of the \textsc{crate} white-box deep network design.} 
      After encoding input data $\vX$ as a sequence of tokens $\vZ^0$, \textsc{crate} constructs a deep network that transforms the data to a canonical configuration of low-dimensional subspaces by successive   {\textit{\textbf{compression}}} 
