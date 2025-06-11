@@ -1041,7 +1041,7 @@ requires only
 \begin{algorithm}
   \caption{Conditional sampling under measurements
   \eqref{eq:measurement-matching-observation}, with an unconditional denoiser and DPS.}
-	\label{alg:iterative_denoising_conditional}
+	\label{alg:iterative_denoising_conditional_DPS}
 	\begin{algorithmic}[1]
 		\Require{An ordered list of timesteps \(0 \leq t_{0} < \cdots < t_{L} \leq T\) to use for sampling.}
     \Require{An unconditional denoiser \(\bar{\vx}_{\theta} \colon
@@ -1085,7 +1085,7 @@ Combining this scheme with the basic implementation of unconditional sampling we
 developed in \Cref{sub:compression_denoising}, we obtain a practical algorithm for
 conditional sampling of the posterior $p_{\vx \mid \vy}$ given measurements
 following \eqref{eq:measurement-matching-observation}.
-\Cref{alg:iterative_denoising_conditional} records this scheme
+\Cref{alg:iterative_denoising_conditional_DPS} records this scheme
 for the case of
 Gaussian observation noise with known standard deviation $\sigma$, with minor
 modifications to extend to a general noising process, as in
@@ -1203,7 +1203,7 @@ In \Cref{sec:conditioned-decoding}, we have seen how to use the denoising-diffus
 conditional sampling from the posterior $p_{\vx \mid \vy}$ given
 \textit{model-based} measurements $\vy = h(\vx) + \vw$
 (\Cref{eq:measurement-matching-observation}), culminating in the
-DPS algorithm \eqref{alg:iterative_denoising_conditional}. This is a powerful
+DPS algorithm \eqref{alg:iterative_denoising_conditional_DPS}. This is a powerful
 framework, but it does not apply to the class (or text) conditioned image
 generation problem here, where an explicit generative model $h$ for the
 observations/attributes $y$ is not available due to the
@@ -1251,9 +1251,10 @@ $f_{\theta_{\mathrm{c}}}$ with parameters $\theta_{\mathrm{c}}$, as in
 % $\vx_t$ (and, as is common in practice, the time $t$ in the noising process) to
 % a probability distribution over class labels $\vy$:
 \begin{equation}
-  f_{\theta_{\mathrm{c}}} : (t, \vx_t) \mapsto \softmax(\vW_{\mathrm{head}} \vz_t).
+  f_{\theta_{\mathrm{c}}} : (t, \vx_t) \mapsto \softmax(\vW_{\mathrm{head}}
+  \vz(t, \vx_t)).
 \end{equation}
-This expression combines the final representations $\vz_t$ (which also depend on
+This expression combines the final representations $\vz(t, \vx_t)$ (which also depend on
 $\theta_{\mathrm{c}}$) of the noisy inputs
 $\vx_t$ with a classification head $\vW_{\mathrm{head}} \in \bR^{K \times d}$, which maps the
 representations to a probability distribution over the $K$ possible classes.
@@ -1341,6 +1342,7 @@ resulting conditional denoiser as having incorporated ``classifier guidance''
 \end{equation}
 with the case $\gamma = 1$ coinciding with
 \eqref{eq:conditional-denoising-mmse-denoiser-paired-data-approx}.
+At sampling time, \sdb{ADD CG ALGO}
 \citet{Dhariwal2021-hg} found that a setting $\gamma > 1$ performed best empirically.
 One possible interpretation for this is as follows: note that, in the context of
 the \textit{true} likelihood term
@@ -1420,6 +1422,50 @@ design the architecture of the deep network implementing the classifier to match
 that of the denoiser. This motivated \citet{Ho2022-ry} to propose a more
 empirically pragmatic methodology, known as classifier-free guidance (CFG).
 \sdb{CFG...}
+
+\begin{algorithm}
+  \caption{Conditional sampling with classification data, with an unconditional
+  denoiser and guidance.}
+	\label{alg:iterative_denoising_conditional_CG_CFG}
+	\begin{algorithmic}[1]
+		\Require{An ordered list of timesteps \(0 \leq t_{0} < \cdots < t_{L} \leq T\) to use for sampling.}
+    \Require{An unconditional denoiser \(\bar{\vx}_{\theta} \colon
+    \{t_{\ell}\}_{\ell = 1}^{L} \times \R^{D} \to \R^{D}\) for $p_{\vx}$.}
+    \Require{Measurement realization $\vnu$ of $\vy$ (\Cref{eq:measurement-matching-observation}) to condition on.}
+    \Require{Forward model $h : \bR^D \to \bR^d$ and measurement noise variance
+    $\sigma^2 > 0$.}
+		\Require{Scale and noise level functions \(\alpha, \sigma \colon \{t_{\ell}\}_{\ell = 0}^{L} \to \R_{\geq 0}\).}
+    \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{\vy \mid \vx}\).}
+    \Function{DDIMSamplerConditionalDPS}{$\bar{\vx}_{\theta}, \vnu, h, \sigma^2,
+    (t_{\ell})_{\ell = 0}^{L}$}
+		\State{Initialize \(\hat{\vx}_{t_{L}} \sim\) approximate distribution of \(\vx_{t_{L}}\)} \Comment{VP \(\implies \dNorm(\vzero, \vI)\), VE \(\implies \dNorm(\vzero, t_{L}^{2}\vI)\).}
+		\For{\(\ell = L, L - 1, \dots, 1\)}
+		% \State{Compute
+		% 	\begin{equation*}
+  %       \nabla_{\vxi}\left[ -\frac{1}{2\sigma^2} \norm*{h(
+  %       \bar{\vx}_{\theta}(t_{\ell}, \vxi)
+  %       ) - \vnu}_2^2 \right]\biggl|_{\vxi = \hat{\vx}_{t_{\ell}}}\biggr.
+		% 	\end{equation*}
+		% }
+		\State{Compute
+			\begin{equation*}
+				\hat{\vx}_{t_{\ell - 1}} := \frac{\sigma_{t_{\ell
+        - 1}}}{\sigma_{t_{\ell}}}\hat{\vx}_{t_{\ell}} + \bp{\alpha_{t_{\ell
+        - 1}} - \frac{\sigma_{t_{\ell
+        - 1}}}{\sigma_{t_{\ell}}}\alpha_{t_{\ell}}}\left(
+        \bar{\vx}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}})
+        - \frac{\sigma_{t_{\ell}}^2}{2\alpha_{t_\ell}\sigma^2}
+        \nabla_{\vxi}\left[ \norm*{h( \bar{\vx}_{\theta}(t_{\ell}, \vxi)
+        ) - \vnu}_2^2 \right]\biggl|_{\vxi = \hat{\vx}_{t_{\ell}}}\biggr.
+        \right)
+			\end{equation*}
+		}
+		\EndFor
+		\State{\Return{\(\hat{\vx}_{t_{0}}\)}}
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
 
 \sdb{A graf about the fact that CFG is practically-motivated (as the derivation
 shows), and rigorous theory that tries to study them may be too high-resolution
