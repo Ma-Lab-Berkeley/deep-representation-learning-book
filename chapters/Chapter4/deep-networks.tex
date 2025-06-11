@@ -806,7 +806,7 @@ We consider a general learning setup associated with real-world signals. Let \(\
 We are given \(B \geq 1\) i.i.d.~samples \(\X_{1}, \dots, \X_{B} \sim \X\), whose tokens are \(\x_{i, b}\). The representations of our samples are denoted \(\Z_{1}, \dots, \Z_{B} \sim \Z\) and those of our tokens are \(\z_{i, b}\). Finally, for a given network, we use \(\Z^{\ell}\) to denote the output of the first \(\ell\) layers when given \(\X\) as input. Correspondingly, the sample outputs are \(\Z_{i}^{\ell}\) and the token outputs are \(\z_{i, b}^{\ell}\).
 
 \begin{remark}
-    In transformers, each input sample is typically converted into a sequence of tokens. The definition of a token depends on the domain: in natural language processing (NLP), tokens typically correspond to words, subwords, or characters; in computer vision, tokens often represent image patches; and in time-series or graph data, tokens can be time points or nodes, respectively. A token representation is a vector that encodes the semantic or structural information of a token, typically produced by the intermediate or final layers of a transformer. These representations are designed to capture meaningful features of the input that are useful for downstream tasks such as classification, generation, or regression.
+    In transformers, each input sample is typically converted into a sequence of tokens. The definition of a token depends on the domain: in natural language processing, tokens typically correspond to words, subwords, or characters; in computer vision, tokens often represent image patches; and in time-series or graph data, tokens can be time points or nodes, respectively. A token representation is a vector that encodes the semantic or structural information of a token, typically produced by the intermediate or final layers of a transformer. These representations are designed to capture meaningful features of the input that are useful for downstream tasks such as classification, generation, or regression.
 \end{remark}
 
 
@@ -864,11 +864,11 @@ The second term $R_{\epsilon}^c$ is an estimate of the lossy coding rate under t
 \end{figure}
 
 
-\paragraph{Sparse Rate Reduction.} Note that the rate reduction objective \eqref{eq:rate reduction} is invariant to arbitrary joint rotations of the representations and subspaces. In particular, optimizing the rate reduction may not naturally lead to axis-aligned (i.e., \textit{sparse}) representations. {For instance, consider the three sets of learned representations in \Cref{fig:sparse-rate-reduction-diagram}. The coding rate reduction increases from (a) to (b), but because it is invariant under rotations, remains the same from (b) to (c).} Therefore, we would like to transform the representations (and their supporting subspaces) so that the features $\vZ$ eventually become sparse\footnote{Concretely, having few nonzero entries.} with respect to the standard coordinates of the resulting representation space {as in \Cref{fig:sparse-rate-reduction-diagram}(c)}. Therefore, to ensure the final representations are amenable to more compact coding, we would like to transform the representations (and their supporting subspaces) so that they become \textit{sparse} with respect to the standard coordinates of the resulting representation space.\footnote{That is, having the fewest nonzero entries.} Computationally, we may combine the above two goals into a unified objective for optimization:
+\paragraph{Sparse Rate Reduction.} Note that the rate reduction objective \eqref{eq:rate reduction} is invariant to arbitrary joint rotations of the representations and subspaces. In particular, optimizing the rate reduction objective may not naturally lead to axis-aligned (i.e., \textit{sparse}) representations. {For instance, consider the three sets of learned representations in \Cref{fig:sparse-rate-reduction-diagram}. The coding rate reduction increases from (a) to (b), but because it is invariant under rotations, remains the same from (b) to (c).} Therefore, we would like to transform the representations (and their supporting subspaces) so that the features $\vZ$ eventually become sparse\footnote{Concretely, having few nonzero entries.} with respect to the standard coordinates of the resulting representation space {as in \Cref{fig:sparse-rate-reduction-diagram}(c)}. Therefore, to ensure the final representations are amenable to more compact coding, we would like to transform the representations (and their supporting subspaces) so that they become \textit{sparse} with respect to the standard coordinates of the resulting representation space.\footnote{That is, having the fewest nonzero entries.} Computationally, we may combine the above two goals into a unified objective for optimization:
 \vspace{0.05in}
 \begin{equation}
 \begin{aligned}
-   \max_{f \in \mathcal{F}}\ \mathbb{E}_{\Z}\big[ \Delta R_{\epsilon}(\Z; \vU_{[K]}) - \lambda \|\bm{Z}\|_0 \big] \qquad \text{s.t.}\ \Z = f(\X),
+   \max_{f \in \mathcal{F}}\ \mathbb{E}_{\Z}\big[ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) - \lambda \|\bm{Z}\|_0 \big] \qquad \text{s.t.}\ \Z = f(\X),
    \label{eq:sparse-rr}
 \end{aligned}
 \end{equation}
@@ -883,7 +883,7 @@ where the $\ell_0$-norm $\|\Z\|_0$ promotes the sparsity of the final token repr
 In practice, the $\ell_0$-norm is often relaxed to the $\ell_1$-norm to improve computational traceability and enable convex optimization techniques \cite{Wright-Ma-2022}. Motivated by this, we relax Problem \eqref{eq:sparse-rr} accordingly, leading to a formulation that remains faithful to the original sparsity objective while being more amenable to efficient algorithms as follow:  
 \begin{equation}
 \begin{aligned}
-   \max_{f \in \mathcal{F}}\ \mathbb{E}_{\Z}\big[ \Delta R_{\epsilon}(\Z; \vU_{[K]}) - \lambda \|\bm{Z}\|_1 \big] \qquad \text{s.t.}\ \Z = f(\X),
+   \max_{f \in \mathcal{F}}\ \mathbb{E}_{\Z}\big[ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) - \lambda \|\bm{Z}\|_1 \big] \qquad \text{s.t.}\ \Z = f(\X),
    \label{eq:sparse-rr-1}
 \end{aligned}
 \end{equation}
@@ -906,8 +906,19 @@ Each incremental \textit{forward mapping} $\Z^{\ell + 1} = f^\ell(\Z^\ell)$, or 
 transforming the distribution of its input, whereas the input distribution is
 in turn modeled (and subsequently learned) by the parameters of the layer. 
 
-Now, we show that we can derive these incremental, local operations through an unrolled optimization perspective to optimize Problem \eqref{eq:sparse-rr}.  Once we decide on using an incremental approach to optimizing Problem
-\eqref{eq:sparse-rr}, there are a variety of possible choices to achieve the optimization. Given a model for $\Z^\ell$, say a mixture of subspaces $\vU_{[K]}$, we opt for a two-step \textit{alternating minimization} process with a strong conceptual basis: we first \textit{compress} the tokens $\vZ^{\ell}$ via a gradient step to minimize the coding rate term $\min_{\Z} {R}^c(\vZ \mid \vU_{[K]})$; we then \textit{sparsify} the compressed tokens, with a suitably-relaxed proximal gradient step on the difference of the sparsity penalty and the expansion term, i.e., $\min_{\Z}[\lambda \norm{\vZ}_{0} - R(\vZ)]$. Both actions are applied incrementally and repeatedly, as each $f^\ell$ in \eqref{eq:incremental} is instantiated with these two steps. 
+Now, we show how to derive these incremental and local operations through an unrolled optimization perspective to solve Problem \eqref{eq:sparse-rr-1}.  Once we decide on using an incremental approach to optimizing Problem
+\eqref{eq:sparse-rr-1}, there are a variety of possible choices to achieve the optimization. Given a model for $\Z^\ell$, say a mixture of subspaces $\vU_{[K]}$, we opt for a two-step \textit{alternating minimization} method with a strong conceptual basis. First, we \textit{compress} the tokens $\vZ^{\ell}$ via a gradient descent to minimize the coding rate term $R^c_\epsilon (\vZ \mid \vU_{[K]}^\ell)$. Specifically, we take a gradient step on $R^c_\epsilon$ with a learning rate $\kappa$ as follows:
+\begin{align}
+    \bm Z^{\ell+1/2} = \bm Z^\ell - \kappa \nabla R^c_\epsilon (\vZ \mid \vU_{[K]}^\ell). 
+\end{align}
+
+
+
+% Next, we \textit{sparsify} the compressed tokens, with a suitably-relaxed proximal gradient step on the difference of the sparsity penalty and the expansion term to minimize the remaining term $\lambda \norm{\vZ}_{1} - R_\epsilon(\vZ)$. 
+% \begin{align}
+%     \bm Z^{l+1} = \mathrm{argmin}\ \frac{1}{2} \left\| \bm Z^{\ell+1/2} - \bm D^\ell\bm Z \right\|_F^2 + \lambda \|\bm Z_1\|.
+% \end{align}
+% These two operators are applied incrementally and repeatedly, as each $f^\ell$ in \eqref{eq:incremental} is instantiated with these two steps.  
 
 \begin{figure}[t!]
      \centering
@@ -922,9 +933,6 @@ Now, we show that we can derive these incremental, local operations through an u
      }
         \label{fig:crate-diagram}
 \end{figure}
-
-
-
 
 
 \paragraph{One Layer of the \textsc{CRATE} Model} We now design a white-box transformer architecture, named the Coding RATE Transformer (\textsc{crate}), by applying unrolled optimization to the sparse rate reduction objective \eqref{eq:sparse-rr}. Each layer of \textsc{crate} contains two blocks: the compression block and the sparsification block, which correspond to a two-step alternating optimization procedure for optimizing the sparse rate reduction objective \eqref{eq:sparse-rr}. 
