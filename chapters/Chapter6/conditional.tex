@@ -1554,23 +1554,50 @@ Let us first examine the special but important case of stereo vision. In this ca
 \begin{equation}
     \y^0 = h(\x, \theta^0) +\vw^0, \quad \y^1 = h(\x, \theta^1) +\vw^1, 
 \end{equation}
-where $\theta_0$ and $\theta_1$ can be assumed to be known. $\y_0$ and $\y_1$ are two 2D-projections of the 3D scene $\x$. We may also assume that they have the same marginal distribution $p(\y)$ and we have learned a diffusion and denoising model for it. That, we know the denoiser:
+where $\theta_0$ and $\theta_1$ can be assumed to be known. $\y^0$ and $\y^1$ are two 2D-projections of the 3D scene $\x$. We may also assume that they have the same marginal distribution $p(\y)$ and we have learned a diffusion and denoising model for it. That, we know the denoiser:
 \begin{equation}
   \bE[\vy \mid \vy_t=\vnu] =
   \vnu + t^2 \nabla_{\vnu}\log p_t(\vnu). 
  \label{eq:y-posterior-sampling-denoiser}    
 \end{equation}
+Or, furthermore, we may assume that we have a sufficient number of samples of stereo pairs $(\y^0, \y^1)$ and have also learned the joint distribution of the pairs. By a little abuse of notation, we also use $\y = h(\x)$ to indicate the pair $\y = (\y^0, \y^1)$ and $p(\y)$ as the learned probability distribution of the pair (say via a denoiser as above).  
 
-The main question here is: How to learn (a representation for) the distribution of the 3D scene $\x$ from its two projections with known relationships? Or equivalently, how to learn a denoiser for $\x$
+The main question now is: How to learn (a representation for) the distribution of the 3D scene $\x$ from its two projections with known relationships? 
+% Or equivalently, how to learn a denoiser for $\x$
+% \begin{equation}
+%   \bE[\vx \mid \vx_t=\vxi] =
+%   \vxi + t^2 \nabla_{\vxi}\log p_t(\vxi),
+%  \label{eq:x-posterior-sampling-denoiser}    
+% \end{equation}
+% where we have $\vnu^0 = h(\vxi, \theta^0)$ and $\vnu^1 = h(\vxi, \theta^1)$.
+People might question the rationale for doing this: why this is necessary if the function $h(\cdot)$ is largely invertible? That is, the observation $\y$ can largely determine the unknown $\x$, which is kind of the case for stereo -- in general, two (calibrated) images contain sufficient information about the scene depth, from the given vintage point. However, 2D images are far from the most compact representation of the 3D scene as the same scene can produce infinite many (highly correlated) 2D images or image pairs. In fact, a good representation of a 3D scene should be invariant to the view point. Hence, a correct representation of the distribution of 3D scenes should be much more compact and structured than the distribution of 2D images, stereo pairs, or image-depth pairs. 
+
+Consider the denoising processing for $\y_t$ in \eqref{eq:y-posterior-sampling-denoiser}. We define a corresponding process $\x_t$ that satisfies: 
 \begin{equation}
-  \bE[\vx \mid \vx_t=\vxi] =
-  \vxi + t^2 \nabla_{\vxi}\log p_t(\vxi),
- \label{eq:x-posterior-sampling-denoiser}    
+    \y_t = h(\x_t) + \vw_t,
 \end{equation}
-where we have $\vnu^0 = h(\vxi, \theta^0)$ and $\vnu^1 = h(\vxi, \theta^1)$.
+where $\vw_t$ is some small error. In general, we know if $t \rightarrow 0$ and $\vw_t \rightarrow \mathbf{0}$, we would expect $\y_t \rightarrow \y$ and $\x_t \rightarrow \x$ in distribution. 
 
+Then we have:
+\begin{equation}
+    h(\x_{t-s}) \approx h(\x_t) + st \nabla \log p_t(h(\x_t)),
+\end{equation}
+for a small $s >0$. We then can iteratively solve for $\x_{t-s}$ from
+\begin{equation}
+    \hat{\x}_{t-s} = \argmin_{\z} \|h(\z) - h(\x_t) - st \nabla \log p_t(h(\x_t))\|_2^2.
+\end{equation}
+Suppose $\z = \x_t + \vv$ for some small increment $\vv$. We have
+\begin{equation}
+    h(\z) \approx h(\x_t) + \frac{\partial h}{\partial \x}\mid_{\x_t} \vv \doteq h(\x_t) + \vA(\x_t) \vv. 
+\end{equation}
+Hence, we can solve for $\hat{\x}_{t-s}$ approximately as:
+\begin{equation}
+    \hat{\x}_{t-s} = \x_t + st\vA(\x_t)^\dagger \nabla \log p_t(h(\x_t)).  
+\end{equation}
+In general, we may expect that the so defined process would converge to the distribution of $\x$. 
 
-
+\paragraph{Uncalibrated image sequences.}
+In the above derivation, we have assumed that the poses (and calibration) of the camera views are known, hence the map $h(\cdot)$ is fully known. In practice, at least some of the poses or calibration of the given images are unknown or only partially known. How can we generalize the problem of learning the distribution of 3D scenes to this more general setting? In fact, without specifying the view of an image pair, it might lead to a more compact representation of the 3D scene that is invariant to the viewpoint (if the camera views are specified with respect to some canonical reference frame of the scene). 
 
 \section{Summary and Notes}
 \paragraph{Measurement matching without clean samples.} In our development of
