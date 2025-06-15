@@ -908,12 +908,49 @@ in turn modeled (and subsequently learned) by the parameters of the layer.
 
 Now, we show how to derive these incremental and local operations through an unrolled optimization perspective to solve Problem \eqref{eq:sparse-rr-1}.  Once we decide on using an incremental approach to optimizing Problem
 \eqref{eq:sparse-rr-1}, there are a variety of possible choices to achieve the optimization. Given a model for $\Z^\ell$, say a mixture of subspaces $\vU_{[K]}$, we opt for a two-step \textit{alternating minimization} method with a strong conceptual basis. First, we \textit{compress} the tokens $\vZ^{\ell}$ via a gradient descent to minimize the coding rate term $R^c_\epsilon (\vZ \mid \vU_{[K]}^\ell)$. Specifically, we take a gradient step on $R^c_\epsilon$ with a learning rate $\kappa$ as follows:
-\begin{align}
-    \bm Z^{\ell+1/2} = \bm Z^\ell - \kappa \nabla R^c_\epsilon (\vZ \mid \vU_{[K]}^\ell). 
+\begin{align}\label{eq:Z l+1/2}
+    \bm Z^{\ell+1/2} = \bm Z^\ell - \kappa \nabla_{\bm Z} R^c_\epsilon (\vZ \mid \vU_{[K]}^\ell). 
 \end{align}
+Next, we \textit{sparsify} the compressed tokens, generating \(\vZ^{\ell + 1}\) via a suitably-relaxed proximal gradient step to minimize the remaining term $\lambda \norm{\vZ}_{1} - R_{\epsilon}(\vZ)$. As we will argue in detail later, we can find such a $\bm Z^{\ell+1}$ by solving a sparse presentation problem with respect to a dictionary $\bm D^\ell$:
+\begin{equation}\label{eq:Z l+1}
+  \vZ^{\ell+1} = \argmin_{{\vZ}}  \lambda \norm{\vZ}_1 + \frac{1}{2}\norm{\vZ^{\ell + 1/2} - \vD^{\ell} {\vZ}}_F^2.
+\end{equation}
+In the following, we provide technical details for each of the two steps above and derive efficient updates for their implementation.
 
 
 
+
+\paragraph{Self-Attention as Gradient Descent on Coding Rate of Tokens.} For the first step \eqref{eq:Z l+1/2}, the gradient of the coding rate \(\nabla_{\bm Z} R^c_\epsilon\) is costly to compute, as it involves \(K\) separate matrix inverses, one for each of the \(K\) subspaces with basis \(\vU_{k}^{\ell}\):
+\begin{equation}
+    \nabla_{\bm Z} R_{\epsilon}^c(\vZ \mid \vU_{[K]})
+    = \frac{p}{N\epsilon^2}\sum_{k=1}^K \vU_k\vU_k^\top\vZ\Big(\I +
+    \frac{p}{N\epsilon^2}(\vU_k^\top\vZ)^\top(\vU_k^\top\vZ)\Big)^{-1}.
+    \label{eq:rate-gradient}
+\end{equation}
+Now, we demonstrate that this gradient can be naturally approximated using a so-called multi-head subspace self-attention (MSSA) operator, which has a similar functional form to the multi-head self-attention operator \citep{vaswani2017attention} with \(K\) heads (i.e., one for each subspace, coming from each matrix inverse). Here, we approximate the gradient \eqref{eq:rate-gradient} using the first-order Neumann series:
+\begin{align}\label{eq:gd_rc_neumann}
+    \nabla_{\bm Z} R_{\epsilon}^{c}(\vZ \mid \vU_{[K]}) 
+    &\approx \frac{p}{N\epsilon^2} \sum_{k = 1}^{K}\vU_{k}\vU_{k}^\top\vZ\left(\vI - \frac{p}{N\epsilon^2} (\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)\right) \notag \\
+    &{= \frac{p}{N\epsilon^2} \left(\sum_{k = 1}^{K} \vU_{k}\vU_{k}^\top\right)\vZ -  \left( \frac{p}{N\epsilon^2}\right)^2\sum_{k = 1}^{K} \vU_{k}(\vU_{k}^\top\vZ)(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)}.
+\end{align}
+In this approximation, we can compute the similarity between projected token representations $\{\bm U_k^\top\bm z_i\}$ through an auto-correlation among the projected features as $(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)$ and convert it to a distribution of membership with a softmax, namely $\softmax{(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)}$. 
+Suppose that a union of subspaces $\bm U_{[K]}$ spans the whole space. Then, we have $\sum_{k = 1}^{K} \vU_{k}\vU_{k}^\top = \bm I$. Hence, \eqref{eq:gd_rc_neumann} becomes
+\begin{align}\label{eq:grad Rc}
+    \nabla_{\bm Z} R_{\epsilon}^{c}(\vZ \mid \vU_{[K]}) 
+     \approx  \frac{p}{N\epsilon^2} \vZ -  \left( \frac{p}{N\epsilon^2}\right)^2 \MSSA\left(\vZ^{\ell} \mid \vU_{[K]}^{\ell}\right),
+\end{align}
+where MSSA is defined through an SSA operator as:
+\begin{align}
+% \vspace{-0.15in}
+    & \mathrm{SSA}\left(\vZ \mid \vU_{k}\right) 
+    \doteq (\vU_{k}^\top \vZ)\mathrm{softmax}\left((\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)\right), \ \forall k \in [K], \label{eq:SSA} \\
+    & \mathrm{MSSA}\left(\vZ \mid \vU_{[K]}\right) 
+    \doteq \frac{p}{N\epsilon^2} \mat{\vU_{1}, \dots, \vU_{K}}\mat{\mathrm{SSA}({\vZ \mid \vU_{1}}) \\ \vdots \\ \mathrm{SSA}({\vZ \mid \vU_{K}})}.\label{eq:Multi-Head-SSA}
+\end{align}  
+Substituting \eqref{eq:grad Rc} into \eqref{eq:Z l+1/2} yields that it can naturally approximated by
+\begin{equation}
+    \vZ^{\ell + 1/2} = \left(1 - \frac{\kappa p}{N\epsilon^2}\right) \vZ^{\ell} + \frac{\kappa p}{N\epsilon^2} \mathrm{MSSA}\left({\vZ^{\ell} \mid \vU_{[K]}^{\ell}}\right).  \label{eq:gd-mcr-parts} 
+\end{equation}
 % Next, we \textit{sparsify} the compressed tokens, with a suitably-relaxed proximal gradient step on the difference of the sparsity penalty and the expansion term to minimize the remaining term $\lambda \norm{\vZ}_{1} - R_\epsilon(\vZ)$. 
 % \begin{align}
 %     \bm Z^{l+1} = \mathrm{argmin}\ \frac{1}{2} \left\| \bm Z^{\ell+1/2} - \bm D^\ell\bm Z \right\|_F^2 + \lambda \|\bm Z_1\|.
@@ -933,6 +970,12 @@ Now, we show how to derive these incremental and local operations through an unr
      }
         \label{fig:crate-diagram}
 \end{figure}
+
+\begin{remark}
+    The SSA operator in \eqref{eq:SSA} resembles the \textit{attention operator} in a typical transformer \citep{vaswani2017attention}, except that here the linear operators of value, key, and query  are all set to be \textit{the same} as the subspace basis, i.e., $\vV_{k} = \vK_{k} = \bm{Q}_{k} = \vU_k^*$. Hence, we name $\mathrm{SSA}({\spcdot\mid\vU_k}): \bR^{d\times n} \rightarrow \bR^{p\times n}$  the \textbf{S}ubspace \textbf{S}elf-\textbf{A}ttention (SSA) operator. Then, the whole MSSA operator in \eqref{eq:Multi-Head-SSA}, formally defined as \(\mathrm{MSSA}({\spcdot \mid \vU_{[K]}}) \colon \bR^{d \times n} \to \bR^{d \times n}\) and called the \textbf{M}ulti-Head \textbf{S}ubspace \textbf{S}elf-\textbf{A}ttention (MSSA) operator, aggregates the attention head outputs by averaging using model-dependent weights, similar in concept to the popular multi-head self-attention operator in existing transformer networks.  The overall gradient step \eqref{eq:gd-mcr-parts} resembles the multi-head self-attention implemented with a skip connection in transformers.  
+\end{remark}
+
+\paragraph{MLP as Proximal Gradient Descent for Sparse Coding of Tokens.} For the second step of alternating minimization, we need to minimize the problem $\lambda \norm{\vZ}_{1} - R_{\epsilon}(\vZ)$. However, this problem is highly nonsmooth and nonconvex, which is difficult to optimize. To get around this problem, we posit a 
 
 
 \paragraph{One Layer of the \textsc{CRATE} Model} We now design a white-box transformer architecture, named the Coding RATE Transformer (\textsc{crate}), by applying unrolled optimization to the sparse rate reduction objective \eqref{eq:sparse-rr}. Each layer of \textsc{crate} contains two blocks: the compression block and the sparsification block, which correspond to a two-step alternating optimization procedure for optimizing the sparse rate reduction objective \eqref{eq:sparse-rr}. 

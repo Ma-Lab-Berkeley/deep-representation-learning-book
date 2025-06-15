@@ -1650,10 +1650,88 @@ Jonathan Ho and Tim Salimans tried to simplify this by training the two matching
 \section{Conditional Generation with Measurement Self-Consistency}
 In this last section, we consider the more extreme, but actually ubiquitous, case for distribution learning in which we only have a set of observed samples $\Y = \{\y_1,\ldots, \y_N\}$ of the data $\x$. To make the problem well-defined, we do assume that the observation model between $\y$ and $\x$ is known to belong to a certain family of analytical models, denoted as $\y = h(\x, \theta)$, with $\theta$ either known or not known.
 
-\subsection{Visual World Model from Image Pairs and Sequences}
-A typical problem of this kind is actually behind how we can learn a working model of the external world from the  images perceived, say through our eyes,  telescopes or microscopes. In particular, humans and animals are able to build a model of the 3D world ((or 4D for a dynamical world) through a sequence of its 2D projections -- a sequence of 2D images (or stereo image pairs). The mathematical or geometric model of the projection is generally known:
+\subsection{Linear Measurement Models}
+First for simplicity, let us consider the measurement is a linear function of the data $\x$ of interest:
 \begin{equation}
-    \y_i = h(\x, \theta_i) +\vw, 
+    \y = \vA\x.
+\end{equation}
+Here the matrix $\vA \in \mathbb{R}^{m\times n}$ is of full rank and $m$ can either be larger or smaller than $n$. We assume $\vA$ is known for now. We are interested in how to learn the distribution of $\x$ from such measurements. Since we no longer have direct samples of $\x$, we wonder whether we can still develop a denoiser for $\x$ with observations $\y$.
+
+\paragraph{Having access to the diffusion process $\x_t$.}
+Let us first consider the following diffusion process:
+\begin{equation}
+    \x_t = \x_0 + \sigma_t \vg, \quad \y_t = \vA(\x_t), 
+\end{equation}
+where $\vg \sim \mathcal{N}(\boldsymbol{0}, \vI)$. 
+Then one show that 
+\begin{equation}
+    \hat{\x}_* = \argmin \mathbb{E}[\|\vA(\hat{\x}(\vA\x_t, \vA) - \x_0)\|^2]
+\end{equation}
+satisfies the condition that:
+\begin{equation}
+    \vA \hat{\x}_*(\vA\x_t, \vA) = \vA \mathbb{E}[\x_0 \mid \vA \x_t, \vA].
+\end{equation} Notice that in the special case when $\vA$ is of  full column rank, we have $ \mathbb{E}[\x_0 \mid \vA\x_t, \vA] = \mathbb{E}[\x_0 \mid \x_t]$. Hence, in the more general case, it was suggested in the work \cite{daras2023ambient} that one could still use the so obtained $\mathbb{E}[\x_0 \mid \vA\x_t, \vA]$ to replace the $\mathbb{E}[\x_0 \mid \x_t]$ in the normal denoising process. This usually works very well in practice, say for many image restoration tasks.
+
+However, one should notice that the above process relies on the assumption that we have access to samples of the diffused distribution of $\x_t$, in an order to learn the denoiser $\mathbb{E}[\x_0 \mid \vA\x_t, \vA]$. That is often not the case in practice when we only have samples of the measurement $\y$ and its diffusion process $\y_t$. 
+\yima{Druv, actually, I think the above so-called ambient diffusion is more related to the measurement matching case studied in Subsection 2, where we train a masked auto-encoder...}
+
+\paragraph{Having access to the diffusion process $\y_t$.} 
+
+Let us consider the following diffusion process:
+\begin{equation}
+    \y_t = \y_0 + \sigma_t \vg, \quad \y_0 = \vA(\x_0), 
+\end{equation}
+where $\vg \sim \mathcal{N}(\boldsymbol{0}, \vI)$. 
+
+First, we consider the case when $\vA$ is of full row rank, i.e., under-determined. Let us define the corresponding process $\x_t$ as one that satisfies:
+\begin{equation}
+\x_t = \argmin_{\x} \|\x \|^2 \quad 
+\mbox{subject to}\; \y_t = \vA \x.   
+\end{equation}
+
+From the denoising process of $\y_t$, we have
+\begin{equation}
+    \y_{t-s} =  \y_t + st \nabla \log p_t(\y_t).
+\end{equation}
+Then we have:
+\begin{equation}
+    \vA\x_{t-s} =   \vA\x_t + st \nabla \log p_t(\vA \x_t),
+\end{equation}
+for a small $s >0$. So $\x_{t-s}$ and $\x_t$ need to satisfy:
+\begin{equation}
+    \vA(\x_{t-s} - \x_t) = st \nabla \log p_t(\vA\x_t). 
+\end{equation}
+Among all $\x_{t_s}$ that satisfy the above constraint, we choose the one that minimizes the distance $\|\x_{t-s} - \x_t\|_2^2$. Therefore, we obtain a ``denoising'' process for $\x_t$:
+\begin{equation}
+    \x_{t-s}  = \x_t + st\vA^\dagger \nabla \log p_t(\vA\x_t). 
+\label{eqn:denoising-projection}
+\end{equation}
+
+Now let us consider the case when $\vA$ is over-determined. We may define the process $\x_t$ by 
+\begin{equation}
+\x_t = \argmin_{\x} \|\vA \x - \y_t\|^2 = \vA^\dagger \y_t.
+\end{equation}
+From the denoising process for $\y_t$, we have
+\begin{equation}
+   \vA^\dagger \y_{t-s} =  \vA^\dagger\y_t + st \vA^\dagger \nabla \log p_t(\y_t).
+\end{equation}
+Since $\x_t = \vA^\dagger \y_t$ and $\vA \x_t = \vA\vA^\dagger \y_t$, we have
+\begin{equation}
+    \x_{t-s}  \approx \x_t + st\vA^\dagger \nabla \log p_t(\vA\x_t),
+\label{eqn:denoising-lifting}
+\end{equation}
+where for the score function $\nabla \log p_t(\y_t)$, we only care about how to denoise $\y_t$ in the range of $\vA$.
+
+% We may consider the following estimate
+% \begin{equation}
+%     \hat{\x}_*(\y_t) = \argmin \mathbb{E}[\|\y_t - \vA\x_0)\|^2]
+% \end{equation}
+
+
+\subsection{Visual World Model from Calibrated Image Pairs}
+In practice, the measurement model is often nonlinear or only partially known. A typical problem of this kind is actually behind how we can learn a working model of the external world from the  images perceived, say through our eyes,  telescopes or microscopes. In particular, humans and animals are able to build a model of the 3D world ((or 4D for a dynamical world) through a sequence of its 2D projections -- a sequence of 2D images (or stereo image pairs). The mathematical or geometric model of the projection is generally known:
+\begin{equation}
+    \y^i = h(\x, \theta^i) +\vw, 
 \end{equation}
 where $h(\cdot)$ represents a  (perspective) projection of the 3D (or 4D) scene from a certain camera view at time $t_i$ to a 2D image (or a stereo pair) and $\vw$ is some possibly additive small measurement noise. Figure \ref{fig:projection-2D} illustrates this relationship. A full exposition of geometry related to multiple 2D views of a 3D scene is beyond the scope of this book. Interested readers may refer to the book \cite{MASKS}. For now, all we need to proceed is that such projections are well understood and multiple images of a scene contains sufficient information about the scene.
 \begin{figure}[t]
@@ -1665,12 +1743,11 @@ where $h(\cdot)$ represents a  (perspective) projection of the 3D (or 4D) scene 
 
 In general, we would like to learn the distribution $p(\x)$ of the 3D (or 4D) world scene $\x$\footnote{Here by abuse of notation, we use $\x$ to represent either a point in 3D or a sample of an entire 3D object or a scene which consists of many points.} from the perceived 2D images of the world so far. The primary function of such a (visual) world model is to allow us to recognize places where we had been before or predict what the current scene would look alike in a future time at a new viewpoint. 
 
-\paragraph{Stereopsis.}
-Let us first examine the special but important case of stereo vision. In this case, we have two (calibrated) views of the 3D scene $\x$:
+Let us first examine the special but important case of stereo vision. In this case, we have two calibrated views of the 3D scene $\x$:
 \begin{equation}
     \y^0 = h(\x, \theta^0) +\vw^0, \quad \y^1 = h(\x, \theta^1) +\vw^1, 
 \end{equation}
-where $\theta_0$ and $\theta_1$ can be assumed to be known. $\y^0$ and $\y^1$ are two 2D-projections of the 3D scene $\x$. We may also assume that they have the same marginal distribution $p(\y)$ and we have learned a diffusion and denoising model for it. That, we know the denoiser:
+where parameters $\theta_0$ and $\theta_1$ for the view poses can be assumed to be known. $\y^0$ and $\y^1$ are two 2D-projections of the 3D scene $\x$. We may also assume that they have the same marginal distribution $p(\y)$ and we have learned a diffusion and denoising model for it. That, we know the denoiser:
 \begin{equation}
   \bE[\vy \mid \vy_t=\vnu] =
   \vnu + t^2 \nabla_{\vnu}\log p_t(\vnu). 
@@ -1688,32 +1765,50 @@ The main question now is: How to learn (a representation for) the distribution o
 % where we have $\vnu^0 = h(\vxi, \theta^0)$ and $\vnu^1 = h(\vxi, \theta^1)$.
 People might question the rationale for doing this: why this is necessary if the function $h(\cdot)$ is largely invertible? That is, the observation $\y$ can largely determine the unknown $\x$, which is kind of the case for stereo -- in general, two (calibrated) images contain sufficient information about the scene depth, from the given vintage point. However, 2D images are far from the most compact representation of the 3D scene as the same scene can produce infinite many (highly correlated) 2D images or image pairs. In fact, a good representation of a 3D scene should be invariant to the view point. Hence, a correct representation of the distribution of 3D scenes should be much more compact and structured than the distribution of 2D images, stereo pairs, or image-depth pairs. 
 
-Consider the denoising processing for $\y_t$ in \eqref{eq:y-posterior-sampling-denoiser}. We define a corresponding process $\x_t$ that satisfies: 
+Consider the denoising processing for $\y_t = \y + t\vg $ in \eqref{eq:y-posterior-sampling-denoiser}, where $\vg$ is standard Gaussian. We define a corresponding ``latent'' process $\x_t$ that satisfies: 
 \begin{equation}
-    \y_t = h(\x_t) + \vw_t,
+    \x_t = \argmin \|\y_t - h(\x_t)\|_2^2.
 \end{equation}
-where $\vw_t$ is some small error. In general, we know if $t \rightarrow 0$ and $\vw_t \rightarrow \mathbf{0}$, we would expect $\y_t \rightarrow \y$ and $\x_t \rightarrow \x$ in distribution. 
 
+From the denoising process \eqref{eq:y-posterior-sampling-denoiser}, we have
+\begin{equation}
+    \y_{t-s} =  \y_t + st \nabla \log p_t(\y_t).
+\end{equation}
 Then we have:
 \begin{equation}
-    h(\x_{t-s}) \approx h(\x_t) + st \nabla \log p_t(h(\x_t)),
+    h(\x_{t-s}) \approx  h(\x_t) + st \nabla \log p_t(h(\x_t)),
 \end{equation}
 for a small $s >0$. We then can iteratively solve for $\x_{t-s}$ from
 \begin{equation}
     \hat{\x}_{t-s} = \argmin_{\z} \|h(\z) - h(\x_t) - st \nabla \log p_t(h(\x_t))\|_2^2.
 \end{equation}
-Suppose $\z = \x_t + \vv$ for some small increment $\vv$. We have
+Suppose $\z = \x_t + \Delta \x$ for some small increment $\Delta \x$. We have
 \begin{equation}
-    h(\z) \approx h(\x_t) + \frac{\partial h}{\partial \x}\mid_{\x_t} \vv \doteq h(\x_t) + \vA(\x_t) \vv. 
+    h(\z) \approx h(\x_t) + \frac{\partial h}{\partial \x}\bigg\rvert_{\x_t} \Delta \x \doteq h(\x_t) + \vA(\x_t) \Delta \x. 
 \end{equation}
 Hence, we can solve for $\hat{\x}_{t-s}$ approximately as:
 \begin{equation}
-    \hat{\x}_{t-s} = \x_t + st\vA(\x_t)^\dagger \nabla \log p_t(h(\x_t)).  
+    \hat{\x}_{t-s} \approx \x_t + st\vA(\x_t)^\dagger \nabla \log p_t(h(\x_t)).  
 \end{equation}
-In general, we may expect that the so defined process would converge to the distribution of $\x$. 
+Notice that when $h$ is linear, the above approximation reduces to the same form that we have obtained in the previous subsection. 
+In general, we may expect that the so defined process would converge to the distribution of $\x$ or a distribution that has the same support as $\x$? \yima{Something very interesting about the above equation. It seems to suggest we could try to learn the distribution of $\x$ through a process that coupled with (many of) its (partial) observations $\y$. An open question here is, exactly what the so-defined ``denoising'' process for $\x_t$ converges to, even in the linear measurement model case? A distribution that has the same low-dimensional support as the original $\x_0$, as $\y_t$ converges to $\y = h(\x_0)$? Maybe we can work on the case for a subspace or a mixture of subspaces?}
 
-\paragraph{Uncalibrated image sequences.}
-In the above derivation, we have assumed that the poses (and calibration) of the camera views are known, hence the map $h(\cdot)$ is fully known. In practice, at least some of the poses or calibration of the given images are unknown or only partially known. How can we generalize the problem of learning the distribution of 3D scenes to this more general setting? In fact, without specifying the view of an image pair, it might lead to a more compact representation of the 3D scene that is invariant to the viewpoint (if the camera views are specified with respect to some canonical reference frame of the scene). 
+\subsection{Visual World Model from Uncalibrated Image Sequences}
+In the above derivation, we have assumed that the measurement model $h(\cdot)$ is fully known. In the case of stereo vision, this is rather reasonable as the poses (and calibration) of the camera views are usually known in advance.\footnote{The relative position of our two eyes is well known to our brain.} In practice, this is not always the case though. For the 3D vision problem, in general at least some of the poses or calibration of the given images are unknown or only partially known. For example, when we move around and survey our surroundings, the relative motion of our eyes between different times is usually not known. Or there are objects moving in the scene and we normally do not know their motion. How can we generalize the problem of learning the distribution of 3D scenes to such more general settings? In fact, without specifying the ego-centric frame as the reference for each stereo pair, it might lead to a more compact representation of the 3D scene that is invariant to the ego-centric viewpoint (say, if the camera views are specified with respect to some canonical world frame of the scene). In fact, our brain seems to be able to learn such a representation that decouples objects in a 3D scene and the motion of the observer or the objects.
+
+Let us model a sequence of stereo pairs as:
+\begin{equation}
+    \y^k = h(\x^k, \theta^k), \quad k=1, \ldots, K,
+\end{equation}
+where $h(\cdot)$ represents the projection map from 3D to 2D. $\theta^k$ denotes the motion parameters of the $k$th view. $\x^k$ represents the 3D scene at time $k$. If the scene is static, $\x^k$ should all be the same. To simplify the notation, we may denote the set of $k$ equations as one:
+\begin{equation}
+    \Y = H(\X,\Theta). 
+\end{equation}
+
+Now suppose we have learned the distribution of $\Y$ via a denoisng process $\Y_t$. Similar as before, we may assume $\X_t$:
+\begin{equation}
+    \Y_t \approx H(\X_t, \Theta_t). 
+\end{equation}
 
 \section{Summary and Notes}
 \paragraph{Measurement matching without clean samples.} In our development of
