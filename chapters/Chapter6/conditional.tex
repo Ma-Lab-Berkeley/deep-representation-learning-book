@@ -1052,7 +1052,7 @@ requires only
     \Require{Forward model $h : \bR^D \to \bR^d$ and measurement noise variance
     $\sigma^2 > 0$.}
 		\Require{Scale and noise level functions \(\alpha, \sigma \colon \{t_{\ell}\}_{\ell = 0}^{L} \to \R_{\geq 0}\).}
-    \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{\vy \mid \vx}\).}
+    \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{\vx \mid \vy}\).}
     \Function{DDIMSamplerConditionalDPS}{$\bar{\vx}_{\theta}, \vnu, h, \sigma^2,
     (t_{\ell})_{\ell = 0}^{L}$}
 		\State{Initialize \(\hat{\vx}_{t_{L}} \sim\) approximate distribution of \(\vx_{t_{L}}\)} \Comment{VP \(\implies \dNorm(\vzero, \vI)\), VE \(\implies \dNorm(\vzero, t_{L}^{2}\vI)\).}
@@ -1509,7 +1509,8 @@ This leads to the form of the CFG denoiser:
   +
   \gamma \bar{\vx}_{\theta}(t, \vx_t, y).
 \end{equation}
-To train the denoiser $\bar{\vx}_{\theta}(t, \vx_t, y^+)$, where $y^+ \in
+To train a denoiser $\bar{\vx}_{\theta}(t, \vx_t, y^+)$ for use with
+classifier-free guidance sampling, where $y^+ \in
 \set{1, \dots, K, \varnothing}$, we proceed almost identically to the
 unconditional training procedure in \Cref{alg:learning_denoiser}, but with two
 modifications:
@@ -1528,23 +1529,71 @@ modifications:
 \end{enumerate}
 In this way, we train a conditional denoiser suitable for use in classifier-free
 guidance sampling. We summarize the overall sampling process for
-class-conditioned sampling with guidance in
-\Cref{alg:iterative_denoising_conditional_CG_CFG}.
+class-conditioned sampling with classifier-free guidance in
+\Cref{alg:iterative_denoising_conditional_CFG}.
+
+% \sdb{I think it makes sense just to present the algorithm box for CFG.}
+% \begin{algorithm}
+%   \caption{Conditional sampling with classification data, with an unconditional
+%   denoiser and guidance.}
+% 	\label{alg:iterative_denoising_conditional_CG}
+% 	\begin{algorithmic}[1]
+% 		\Require{An ordered list of timesteps \(0 \leq t_{0} < \cdots < t_{L} \leq T\) to use for sampling.}
+%     \Require{An unconditional denoiser \(\bar{\vx}_{\theta} \colon
+%     \{t_{\ell}\}_{\ell = 1}^{L} \times \R^{D} \to \R^{D}\) for $p_{\vx}$.}
+%     \Require{Class label $\nu \in \set{1, \dots, K}$ to condition on.}
+%     \Require{Forward model $h : \bR^D \to \bR^d$ and measurement noise variance
+%     $\sigma^2 > 0$.}
+% 		\Require{Scale and noise level functions \(\alpha, \sigma \colon \{t_{\ell}\}_{\ell = 0}^{L} \to \R_{\geq 0}\).}
+%     \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{y \mid \vx}(\nu \mid
+%     \,\cdot\,)\).}
+%     \Function{DDIMSamplerConditionalDPS}{$\bar{\vx}_{\theta}, \nu, \sigma^2,
+%     (t_{\ell})_{\ell = 0}^{L}$}
+% 		\State{Initialize \(\hat{\vx}_{t_{L}} \sim\) approximate distribution of \(\vx_{t_{L}}\)} \Comment{VP \(\implies \dNorm(\vzero, \vI)\), VE \(\implies \dNorm(\vzero, t_{L}^{2}\vI)\).}
+% 		\For{\(\ell = L, L - 1, \dots, 1\)}
+% 		% \State{Compute
+% 		% 	\begin{equation*}
+%   %       \nabla_{\vxi}\left[ -\frac{1}{2\sigma^2} \norm*{h(
+%   %       \bar{\vx}_{\theta}(t_{\ell}, \vxi)
+%   %       ) - \vnu}_2^2 \right]\biggl|_{\vxi = \hat{\vx}_{t_{\ell}}}\biggr.
+% 		% 	\end{equation*}
+% 		% }
+% 		\State{Compute
+% 			\begin{equation*}
+% 				\hat{\vx}_{t_{\ell - 1}} := \frac{\sigma_{t_{\ell
+%         - 1}}}{\sigma_{t_{\ell}}}\hat{\vx}_{t_{\ell}} + \bp{\alpha_{t_{\ell
+%         - 1}} - \frac{\sigma_{t_{\ell
+%         - 1}}}{\sigma_{t_{\ell}}}\alpha_{t_{\ell}}}\left(
+%         \bar{\vx}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}})
+%         - \frac{\sigma_{t_{\ell}}^2}{2\alpha_{t_\ell}\sigma^2}
+%         \nabla_{\vxi}\left[ \norm*{h( \bar{\vx}_{\theta}(t_{\ell}, \vxi)
+%         ) - \vnu}_2^2 \right]\biggl|_{\vxi = \hat{\vx}_{t_{\ell}}}\biggr.
+%         \right)
+% 			\end{equation*}
+% 		}
+% 		\EndFor
+% 		\State{\Return{\(\hat{\vx}_{t_{0}}\)}}
+% 		\EndFunction
+% 	\end{algorithmic}
+% \end{algorithm}
 
 \begin{algorithm}
-  \caption{Conditional sampling with classification data, with an unconditional
-  denoiser and guidance.}
-	\label{alg:iterative_denoising_conditional_CG_CFG}
+  \caption{Conditional sampling with classification data, using classifier-free
+  guidance.}
+	\label{alg:iterative_denoising_conditional_CFG}
 	\begin{algorithmic}[1]
 		\Require{An ordered list of timesteps \(0 \leq t_{0} < \cdots < t_{L} \leq T\) to use for sampling.}
-    \Require{An unconditional denoiser \(\bar{\vx}_{\theta} \colon
-    \{t_{\ell}\}_{\ell = 1}^{L} \times \R^{D} \to \R^{D}\) for $p_{\vx}$.}
-    \Require{Measurement realization $\vnu$ of $\vy$ (\Cref{eq:measurement-matching-observation}) to condition on.}
-    \Require{Forward model $h : \bR^D \to \bR^d$ and measurement noise variance
-    $\sigma^2 > 0$.}
+    \Require{Class label $\nu \in \set{1, \dots, K}$ to condition on.}
+    \Require{A denoiser \(\bar{\vx}_{\theta} \colon
+    \{t_{\ell}\}_{\ell = 1}^{L} \times \R^{D} \times \set{1, \dots, K,
+    \varnothing} \to \R^{D}\) for $p_{\vx \mid y}$ and $p_{\vx}$ (input $\varnothing$ for
+    $p_{\vx}$).}
 		\Require{Scale and noise level functions \(\alpha, \sigma \colon \{t_{\ell}\}_{\ell = 0}^{L} \to \R_{\geq 0}\).}
-    \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{\vy \mid \vx}\).}
-    \Function{DDIMSamplerConditionalDPS}{$\bar{\vx}_{\theta}, \vnu, h, \sigma^2,
+    \Require{Guidance strength $\gamma > 0$ ($\gamma > 1$ preferred for
+    performance).}
+    \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{\vx \mid y}(\,\cdot\,
+    \mid \nu)\).}
+    \Function{DDIMSamplerConditionalCFG}{$\bar{\vx}_{\theta}, \nu, \gamma,
     (t_{\ell})_{\ell = 0}^{L}$}
 		\State{Initialize \(\hat{\vx}_{t_{L}} \sim\) approximate distribution of \(\vx_{t_{L}}\)} \Comment{VP \(\implies \dNorm(\vzero, \vI)\), VE \(\implies \dNorm(\vzero, t_{L}^{2}\vI)\).}
 		\For{\(\ell = L, L - 1, \dots, 1\)}
@@ -1560,12 +1609,10 @@ class-conditioned sampling with guidance in
 				\hat{\vx}_{t_{\ell - 1}} := \frac{\sigma_{t_{\ell
         - 1}}}{\sigma_{t_{\ell}}}\hat{\vx}_{t_{\ell}} + \bp{\alpha_{t_{\ell
         - 1}} - \frac{\sigma_{t_{\ell
-        - 1}}}{\sigma_{t_{\ell}}}\alpha_{t_{\ell}}}\left(
-        \bar{\vx}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}})
-        - \frac{\sigma_{t_{\ell}}^2}{2\alpha_{t_\ell}\sigma^2}
-        \nabla_{\vxi}\left[ \norm*{h( \bar{\vx}_{\theta}(t_{\ell}, \vxi)
-        ) - \vnu}_2^2 \right]\biggl|_{\vxi = \hat{\vx}_{t_{\ell}}}\biggr.
-        \right)
+        - 1}}}{\sigma_{t_{\ell}}}\alpha_{t_{\ell}}}\bigl(
+        (1 - \gamma) \bar{\vx}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}}, \varnothing)
+        + \gamma \bar{\vx}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}}, \nu)
+        \bigr)
 			\end{equation*}
 		}
 		\EndFor
@@ -1574,31 +1621,48 @@ class-conditioned sampling with guidance in
 	\end{algorithmic}
 \end{algorithm}
 
-\sdb{CFG generalizes previous schemes to perform conditional denoising, by
-directly training a conditional denoiser (what operators/architecture?), and
-modifying the sampling process with an additional hyperparameter $\gamma$ the
-guidance strength. How to understand these?
-The expression for the ideal conditional denoiser with classifier guidance in
-\Cref{eq:ideal-cfg-denoiser} demonstrates an interesting alternate geometric
-interpretation of the role guidance plays in shaping the conditional sampling
-process. $\gamma=1$ just uses the conditional denoiser.
-Other values of $\gamma > 0$ can be interpreted as an affine combination of
-these two denoisers. From a low-dimensional structure perspective, conditional
-and unconditional denoisers behave similarly near the support of the data
-distribution, which allows convergence! We will get more insight into this
-sampling-time effect, as well as the architecture question, by studying our
-running special case from ch3.}
+\textcite{Ho2022-ry} report strong empirical performance for class-conditional
+image generation with classifier-free guidance, and it has become a mainstay of
+the largest-scale practical diffusion models, such as Stable Diffusion
+\cite{rombach2022high}.
+At the same time, its derivation is rather opaque and empirically-motivated,
+giving little insight into the mechanisms behind its success.
+A number of theoretical works have studied this, providing explanations for some
+parts of the overall CFG methodology
+\cite{Bradley2024-jg,Li2025-li,Wu2024-js}---itself encompassing denoiser
+parameterization and training, as well as configuration of the guidance strength
+and performance at sampling time.
+We will give a rather complete interpretation in the simplifying setting of a Gaussian
+mixture model data distribution and denoiser, as we have considered in previous
+chapters, which will demonstrate an interesting connection to the rate
+reduction objective studied in chapters \Cref{ch:compression,ch:unrolling}, and
+thereby an insight into the \textit{parameterization} of the denoiser in the
+presence of such low-dimensional structures.
 
+% \sdb{CFG generalizes previous schemes to perform conditional denoising, by
+% directly training a conditional denoiser (what operators/architecture?), and
+% modifying the sampling process with an additional hyperparameter $\gamma$ the
+% guidance strength. How to understand these?
+% The expression for the ideal conditional denoiser with classifier guidance in
+% \Cref{eq:ideal-cfg-denoiser} demonstrates an interesting alternate geometric
+% interpretation of the role guidance plays in shaping the conditional sampling
+% process. $\gamma=1$ just uses the conditional denoiser.
+% Other values of $\gamma > 0$ can be interpreted as an affine combination of
+% these two denoisers. From a low-dimensional structure perspective, conditional
+% and unconditional denoisers behave similarly near the support of the data
+% distribution, which allows convergence! We will get more insight into this
+% sampling-time effect, as well as the architecture question, by studying our
+% running special case from ch3.}
 
 \begin{example}
   \sdb{TODO: CG and CFG in the context of the mixture of gaussian example...
   from Ch3... cite yuchen wu paper...}
 \end{example}
 
-\sdb{Cross attention connection: slight generalization of the previous
-``measurement'' example, relevant to CFG parameterization of networks. The
-previous example leads naturally into this discussion. This takes us into the
-next vignette (which is heuristic, but inspired by this).}
+\sdb{Connection between the $\Delta R$ connection in the mixture of Gaussian
+setting, and cross-attention operators, which are used in practical
+implementations of conditioning layers. Leads into the next vignette, of
+generalized conditioning layers.}
 
 % In practice, there are typically two situations:
 % one is that the observation function $h(\spcdot)$ is explicitly known,
