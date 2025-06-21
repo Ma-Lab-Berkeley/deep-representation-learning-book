@@ -17,6 +17,7 @@ In the previous chapters of this book, we have studied how to effectively and ef
 
 More generally, however, the universality and scalability of the theoretical and computational framework presented in this book have enabled us to learn the distribution of a variety of important real-world high-dimensional data such as natural languages, human poses, natural images, videos, and even 3D scenes. Once the intrinsic rich and low-dimensional structures of these real data can be learned and represented correctly, they start to enable a broad family of powerful, often seemingly miraculous, tasks. Hence, here onwards, we will start to show how to connect and tailor the general methods presented in previous chapters to learn useful representations for specific structured data distributions and for many popular tasks in modern practice of machine intelligence. 
 
+\section{Bayesian Inference and Constrained Optimization}
 \paragraph{Leveraging Low-dimensionality for Stable and Robust Inference.}
 Generally speaking, a good representation or autoencoding should enable us to utilize the learned low-dimensional distribution of the data $\x$ and its representation $\z$ for various subsequent classification, estimation, and generation tasks under different conditions. As we have alluded to earlier in Chapter \ref{ch:intro} Section \ref{sec:intro-low-dimensionality}, the importance of the {\em low-dimensionality} of the distribution is the key for us to conduct stable and robust inference related to the data $\x$, as illustrated by the few simple examples in Figure \ref{fig:low-dim-properties}, from incomplete, noisy, and even corrupted observations. As it turns out, the very same concept carries over to real-world high-dimensional data whose distributions have a low-dimensional support, such as natural images. 
 
@@ -26,19 +27,24 @@ Despite a dazzling variety of applications in the practice of machine learning w
 \end{equation}
 where $h(\cdot)$ represents measurements of a part of $\x$ or its certain observed attributes and $\vw$ represents some measurement noise and even (sparse) corruptions, solve the ``inverse problem'' of obtaining a most likely estimate $\hat \x(\y)$ of $\x$ or generating a sample $\hat{\x}$ that is at least consistent with the observation $\y \approx h(\hat{\x})$. 
 
-\paragraph{Statistical Interpretation.} Generally speaking, to accomplish such tasks well, we essentially need to get a hold of the conditional distribution $p(\x\mid \y)$. Either the maximal likelihood estimate (prediction): $$\hat{\x} = \arg\max_{\x} p(\x\mid \y),$$ the conditional estimate: $$\hat{\x} = \mathbb{E}(\x \mid \y),$$ or the conditional generation (sampling):  $$\hat{\x} \sim p(\x \mid \y)$$ can be inferred from the conditional distribution. 
+\paragraph{Statistical Interpretation via the Bayes' Rule.} Generally speaking, to accomplish such tasks well, we essentially need to get a hold of the conditional distribution $p(\x\mid \y)$. Either the maximal likelihood estimate (prediction): $$\hat{\x} = \arg\max_{\x} p(\x\mid \y),$$ the conditional expected estimate: $$\hat{\x} = \mathbb{E}(\x \mid \y) = \int \x p(\x\mid \y)~d \x,$$ or the conditional generation (sampling):  $$\hat{\x} \sim p(\x \mid \y)$$ can be inferred from the conditional distribution. 
 
-Notice that from the Bayes' rule, we have
+Notice that from the {\em Bayes' rule}, we have
 \begin{equation}
 p(\x\mid \y) = \frac{p(\y\mid \x) p(\x) }{p(\y)}.
 \end{equation} 
 For instance, the maximal likelihood estimate can be computed by solving the following (maximal log likelihood) program:
 \begin{equation}
-    \hat{\x} = \arg\max_{\x} \log p(\y\mid \x) + \log p(\x). 
+    \hat{\x} = \arg\max_{\x} \log p(\y\mid \x) + \log p(\x), 
 \end{equation}
-Computing the conditional distribution naturally depends on the low-dimensional distribution $p(\x)$ of the data $\x$ and the observation model $h(\cdot)$ that determines the conditional distribution $p(\y \mid \x)$. 
+say via gradient ascent:
+\begin{equation}
+    \x_{k+1} = \x_k + \alpha \cdot \big(\nabla_{\x} \log p(\y \mid \x) + \nabla_{\x} \log p(\x)\big).
+    \label{eqn:loglikelihoo-gradient-ascent}
+\end{equation}
+Efficiently computing the conditional distribution $p(\x \mid \y)$ naturally depends on how we learn and exploit the low-dimensional distribution $p(\x)$ of the data $\x$ and the observation model $\y = h(\x) + \vw$ that determines the conditional distribution $p(\y \mid \x)$. 
 
-\paragraph{Geometric Interpretation as Constrained Optimization}
+\paragraph{Geometric Interpretation as Constrained Optimization.}
 
 As the support of the distributions of $\x$ is low-dimensional, we may assume that there exist functions:
 \begin{equation}
@@ -65,11 +71,12 @@ p(\y\mid \x) \propto \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big), \quad
     p(\x) \propto \exp\Big( - \frac{\mu}{2}\|F(\x) - \vc\|_2^2\Big).
 \end{equation} As $\mu$ becomes large when enforcing the constraint via continuation, $\|\vc\|_2$ becomes increasingly small.
 
-The gradient of the above objective function takes the form:
+Notice that solving the above program via gradient ascent is equivalent to the above maximal likelihood estimate \eqref{eqn:loglikelihoo-gradient-ascent}, 
+in which the gradient  takes the form:
 \begin{equation}
-   \nabla_{\x} \log p(\x) +  \nabla_{\x} \log p(\y \mid \x) =  \mu J_F(\x) \big(\vc - F(\x)\big) +    J_h(\x)\big(\y - h(\x)\big),
+   \nabla_{\x} \log p(\y \mid \x) + \nabla_{\x} \log p(\x)   =  J_h(\x)\big(\y - h(\x)\big) + \mu J_F(\x) \big(\vc - F(\x)\big),
 \end{equation}
-where $J_F(\x), J_h(\x)$ are the Jacobian of $F(\x), h(\x)$, respectively. Notice that, the augmented Lagrange multiplier method that enforces the constraint $F(\x) = \boldsymbol{0}$ via gradient ascent is equivalent to use the score function of the probability density $p(\x)$ and measurement matching function of $p(\y\mid \x)$ (in the space of $\x$).
+where $J_h(\x), J_F(\x)$ are the Jacobian of $h(\x), F(\x)$, respectively. Notice that, the augmented Lagrange multiplier method that enforces the constraint $F(\x) = \boldsymbol{0}$ via gradient ascent is equivalent to use the score function of the probability density $p(\x)$ and conditional probability density $p(\y\mid \x)$ (in the space of $\x$).
 %One may view this as the geometric interpretation of the conditional generation score developed earlier in \eqref{eqn:conditional-denoising-score}. 
 
 
@@ -103,7 +110,7 @@ In this chapter, we will discuss general approaches to learn the desired distrib
 % In this chapter and the next, we show how to apply these methods to learn the distribution and representation of many practical data which facilitate many real tasks in increasingly more general and challenging settings. 
 
 
-\section{Conditional Estimation with a Known Data Distribution}
+\section{Conditional Inference with a Known Data Distribution}
 Notice that in the setting we have discussed in previous Chapters, the
 autoencoding network is trained to reconstruct a set of samples of the random vector $\x$. This would allow us to regenerate samples from  the learned (low-dimensional) distribution. In practice, the low-dimensionality of the distribution, once given or learned, can be exploited for stable and robust recovery, completion, or prediction tasks. That is, under rather mild conditions, one can recover $\x$, from highly compressive, partial, noisy or even corrupted measures of $x$ of the kind:
 \begin{equation}
@@ -119,7 +126,7 @@ f: \mathcal{P}_{\Omega}(\x) \mapsto \hat{\x},
 where $\mathcal{P}_{\Omega}(\spcdot)$ represents a masking operation
 (see \Cref{fig:matrix-completion} for an example).
 
-In this section and the next, we will study the completion task under two different scenarios: One is when the distribution of the data $\x$ of interest is already given a priori, even in a certain analytical form. This is the case that prevails in classic signal processing where the structures of the signals are assumed to be known, for example,  band-limited, sparse or low-rank. The other is when only raw samples of $\x$ are available and we need to learn the low-dimensional distribution from the samples in order to solve the completion task well. This is the case for the tasks of natural image completion or video frame prediction. As a precursor to the rest of the chapter, we start with the simplest case of image completion: when the image to be completed can be well modeled as a low-rank matrix. We will move on to increasingly more general cases and more challenging settings later.
+In this section and the next, we will study the completion task under two different scenarios: One is when the distribution of the data $\x$ of interest is already given {\em apriori}, even in a certain analytical form. This is the case that prevails in classic signal processing where the structures of the signals are assumed to be known, for example,  band-limited, sparse or low-rank. The other is when only raw samples of $\x$ are available and we need to learn the low-dimensional distribution from the samples in order to solve the completion task well. This is the case for the tasks of natural image completion or video frame prediction. As a precursor to the rest of the chapter, we start with the simplest case of image completion: when the image to be completed can be well modeled as a low-rank matrix. We will move on to increasingly more general cases and more challenging settings later.
 
 \paragraph{Low-rank Matrix Completion.}  
 The low-rank {\em matrix
@@ -233,8 +240,8 @@ additional corruption and distortion
 \end{equation}
 where $\tau$ is some unknown nonlinear distortion of the image and $\boldsymbol{E}$ is an unknown matrix that models some (sparse) occlusion and corruption. Again, interested readers may refer to \cite{Wright-Ma-2022} for a more detailed account.
 
-\section{Conditional Generation with a Learned Data Representation}
-In the previous subsection, the reason we can infer $\X$ from the partial observation $\Y$ is because (support of) the distribution of $\X$ is given, say as the set of all low-rank matrices. For many practical dataset, we do not have its distribution in an analytical form as the low-rank matrices, say the set to of all natural images. 
+\section{Conditional Inference with a Learned Data Representation}
+In the previous subsection, the reason we can infer $\x$ from the partial observation $\y$ is because (support of) the distribution of $\X$ is known or specified {\em apriori}, say as the set of all low-rank matrices. For many practical dataset, we do not have its distribution in an analytical form as the low-rank matrices, say the set to of all natural images. Nevertheless, if we have sufficient samples of the data $\x$, we should be able to learn its low-dimensional distribution first and leverage it for future inference tasks based on an observation $\y = h(\x) + \vw$. In this section, we assume the observation model $h(\cdot)$ is given and known. We will study the case when $h(\cdot)$ is not explicitly given in the next section.
 
 
 \subsection{Image Completion with Masked Auto-Encoding}
@@ -268,7 +275,7 @@ corresponding decoder layer \(g^{L - \ell}\).}
 %\vspace{-0.2in}
 \end{figure}
 
-One empirical approach is to find an encoding and decoding scheme by
+One empirical approach to the image completion task is to find an encoding and decoding scheme by
 solving the following {\em masked autoencoding} (MAE) program that
 minimizes the reconstruction loss:
 \begin{equation}\label{eq:mae_loss}
@@ -360,10 +367,10 @@ found in Chapter \ref{ch:applications}.
 %\yima{We now relax the requirement of sample-wise reconstruction to
 % distribution-wise.}
 
-The above (masked) autoencoding problems can be viewed to sample the learned low-dimensional distribution such that the generated samples are consistent with certain observations or conditions.
 
-But let us examine the image completion task studied in the previous
-section: Given the
+\subsection{Conditional Sampling with Measurement Matching}
+\label{sec:conditioned-decoding}
+The above (masked) autoencoding problem aims to generate a sample image that is consistent with certain observations or conditions. But let us examine the approach more closely: Given the
 visual part of an image $\X_v = \mathcal{P}_{\Omega}(\X)$, we try to
 estimate the masked part $\X_m = \mathcal{P}_{\Omega^c}(\X)$. For realizations
 $(\vXi_v, \vXi_m)$ of the random variable $\vX=(\vX_v, \vX_m)$, let
@@ -384,14 +391,14 @@ are a little blurry.
 For many practical purposes, we would like to learn (a representation
 of) the conditional distribution $p_{\X_m \mid \X_v}$, or equivalently
 $p_{\X \mid \X_v}$,
-and then sample this distribution directly. Notice that, when the
-distribution of $\X$ is low-dimensional, it is possible that if a
+and then get a clear (most likely) sample from this distribution directly. Notice that, when the distribution of $\X$ is low-dimensional, it is possible that if a
 sufficient part of $\X$, $\X_v$, is observed, it fully determines
 $\X$ hence the missing part $\X_m$. In other words, the distribution
 $p_{\X \mid \X_v}$ is a generalized function---if $\vX$ is fully determined by $\vX_v$ it is the delta function, and more generally one of its exotic cousins.
 
-Hence, instead of learning the representation directly for the completion task,  we should first learn their (low-dimensional) distribution of natural images $\X$. If we have sufficient samples of natural images, we can learn the distribution via a denoising process $\X_t$ described in Chapter \ref{ch:compression}. Then the problem of recovering $\X$ from its partial observation $\Y = \mathcal{P}_\Omega(\x) +\vw$ becomes a conditional generation problem -- to sample the distribution conditioned on the observation.
+Hence, instead of solving the completion task as a conditional estimation problem, we should address it as a conditional sampling problem. To that end, we should first learn the (low-dimensional) distribution of all natural images $\X$. If we have sufficient samples of natural images, we can learn the distribution via a denoising process $\X_t$ described in Chapter \ref{ch:compression}. Then the problem of recovering $\X$ from its partial observation $\Y = \mathcal{P}_\Omega(\x) +\vw$ becomes a conditional generation problem -- to sample the distribution conditioned on the observation.
 
+\paragraph{General Linear Measurements.} 
 In fact, we may even consider recovering $\X$ from a more general linear observation model:
 \begin{equation}
     \Y = \vA(\X_0),  \quad \X_t = \X_0 + \sigma_t \vG,  
@@ -408,9 +415,7 @@ satisfies the condition that:
     \X_{t-s} = \gamma_t \X_t + (1-\gamma_t) \mathbb{E}[\X_0 \mid \vA\X_t, \vA].
 \end{equation}
 This usually works very well in practice, say for many image restoration tasks, as shown in \cite{daras2023ambient}.   
-
-\subsection{Conditional Sampling with Measurement Matching}
-\label{sec:conditioned-decoding}
+\paragraph{General Nonlinear Measurements.}
 To generalize the above (image) completion problems and make things more rigorous, we may consider that a random vector $\vx \sim p$ is partially observed through a more
 general observation function:
 \begin{equation}\label{eq:measurement-matching-observation}
@@ -1220,7 +1225,7 @@ The ground-truth motion is compared with one output from EgoAllo that is consist
 
 Strictly speaking, the solution proposed in EgoAllo \cite{yi2024egoallo} does not enforce measurement matching using the techniques introduced above. Instead it heuristically enforces the condition by utilizing  the cross-attention mechanism in a transformer architecture. There is reason to believe that the cross-attention mechanism is in a way approximately realizing the conditional sampling of the denoising a posteriori. We believe the more principled techniques introduced here, if properly implemented, can lead to better methods that further improve the body pose and hand gesture estimation. 
 
-\section{Conditional Generation with Paired Data and Measurements}
+\section{Conditional Inference with Paired Data and Measurements}
 In many practical applications, we do not know either the distribution of the data $\x$ of interest nor the explicit relationship between the data and certain observed attributes $\y$ of the data. We only have  a (large) set of paired samples $(\X, \Y) = \{ (\x_1, \y_1), \ldots, (\x_N, \y_N) \}$ from which we need to infer the data distribution and a mapping that models their relationship:
 \begin{equation}
   h: \x \mapsto \y.
@@ -1773,8 +1778,8 @@ Jonathan Ho and Tim Salimans tried to simplify this by training the two matching
 
 
 
-\section{Conditional Generation with Measurement Self-Consistency}
-In this last section, we consider the more extreme, but actually ubiquitous, case for distribution learning in which we only have a set of observed samples $\Y = \{\y_1,\ldots, \y_N\}$ of the data $\x$. To make the problem well-defined, we do assume that the observation model between $\y$ and $\x$ is known to belong to a certain family of analytical models, denoted as $\y = h(\x, \theta)$, with $\theta$ either known or not known.
+\section{Conditional Inference with Measurement Self-Consistency}
+In this last section, we consider the more extreme, but actually ubiquitous, case for distribution learning in which we only have a set of observed samples $\Y = \{\y_1,\ldots, \y_N\}$ of the data $\x$, but no samples of $\x$ directly! To make the problem well-defined, we do assume that the observation model between $\y$ and $\x$ is known to belong to a certain family of analytical models, denoted as $\y = h(\x, \theta)$, with $\theta$ either known or not known.
 
 \subsection{Linear Measurement Models}
 First for simplicity, let us consider the measurement is a linear function of the data $\x$ of interest:
