@@ -1715,14 +1715,157 @@ low-dimensional structures.
 % running special case from ch3.}
 
 \begin{example}\label{example:denoising-gaussian-mixture-cfg}
-  \Cref{example:denoising_gaussian_mixture}
-  \sdb{The example may focus on comparing CFG with $\Delta R$ to give some
-  understanding of this methodology. Challenging to work in the parameterization
-  issue here...}
-\end{example}
+  Let us recall the low-rank mixture of Gaussians data generating process we studied in
+  \Cref{example:denoising_gaussian_mixture} (and specifically, the form in
+  \Cref{eq:MoG1}). Given $K \in \bN$ classes, we assume that
+  \begin{equation}\label{eq:MoG1-ch6}
+    \vx \sim \frac{1}{K}\sum_{k = 1}^{K}\dNorm(\vzero, \vU_{k}\vU_{k}^{\top}),
+  \end{equation}
+  where each \(\vU_{k} \in \O(D, P) \subseteq \R^{D \times P}\) is a matrix with
+  orthogonal columns, and $P \ll D$.
+  Moreover, we assume that the class label $y \in [K]$ is a deterministic
+  function of $\vx$ mapping an example to its corresponding mixture component.
+  Applying the analysis in \Cref{example:denoising_gaussian_mixture} (and the
+  subsequent analysis of the low-rank case, culminating in
+  \Cref{eq:gmm_lowrank_denoiser}), we obtain for the class-conditional optimal
+  denoisers
+  \begin{equation}\label{eq:gmm_lowrank_denoiser-ch6-classcond}
+    % \bar{\vx}^{\ast}(t, \vx_{t}, y)
+    \bE[ \vx \mid \vx_t = \vxi, y = \nu ]
+    = \frac{1}{1 + t^{2}}
+    \vU_{\nu}\vU_{\nu}^{\top}\vxi
+  \end{equation}
+  for each $\nu \in [K]$, and for the optimal unconditional denoiser, we obtain
+  \begin{equation}\label{eq:gmm_lowrank_denoiser-ch6-uncond}
+    % \bar{\vx}^{\ast}(t, \vx_{t}) 
+    \bE[ \vx \mid \vx_t = \vxi ]
+    = \frac{1}{1 + t^{2}}\sum_{k = 1}^{K}\frac{\exp\rp{\frac{1}{2t^{2}(1 + t^{2})}\norm{\vU_{k}^{\top}\vxi}_{2}^{2}}}{\sum_{i = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1 + t^{2})}\norm{\vU_{i}^{\top}\vxi}_{2}^{2}}}\vU_{k}\vU_{k}^{\top}\vxi.
+  \end{equation}
+  As a result, we can express the CFG denoiser with guidance strength $\gamma
+  > 1$ as
+  \begin{equation}\label{eq:cfg-denoiser-mog-low-rank}
+    \bar{\vx}^{\mathrm{CFG,\,ideal}}(t, \vx_t, y)
+    =
+    \frac{1}{1 + t^{2}}
+    \left(
+    (1 - \gamma) 
+    \sum_{k = 1}^{K}\frac{\exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\norm{\vU_{k}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+    = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}\vU_{k}\vU_{k}^{\top}
+    +
+    \gamma 
+    \vU_{y}\vU_{y}^{\top}
+    \right)
+    \vx_t.
+  \end{equation}
 
-\sdb{We can focus on giving some understanding of the parameterization issue in
-the next session? Not clear how to do it in the mixture of Gaussians case...}
+  We now perform a concrete analysis of the form of this guided denoiser in
+  order to make some inferences about the role of CFG. Many of these insights
+  will be relevant to \textit{general} data distributions with low-dimensional
+  geometric structure, as well.
+  First, notice that the CFG denoiser \eqref{eq:cfg-denoiser-mog-low-rank}
+  takes a simple form in the setting where $\vx_t$ correlates significantly more
+  strongly with a single subspace $\vU_y$ than any other $\vU_{y'}$. Indeed,
+  because the ratio of weights in the class-conditional denoiser is given by
+  \begin{equation}
+    \frac{
+      \exp\rp{\frac{1}{2t^{2}(1 + t^{2})}\norm{\vU_{y}^{\top}\vx_t}_{2}^{2}}
+    }{
+      \exp\rp{\frac{1}{2t^{2}(1 + t^{2})}\norm{\vU_{y'}^{\top}\vx_t}_{2}^{2}}
+    }
+    =
+    \exp\rp{
+      \frac{1}{2t^{2}(1 + t^{2})}\left(
+      \norm{\vU_{y}^{\top}\vx_t}_{2}^{2}
+      -
+      \norm{\vU_{y'}^{\top}\vx_t}_{2}^{2}
+      \right)
+    },
+  \end{equation}
+  a large separation between the correlation of $\vx_t$ with $\vU_{y}$ and other
+  subspaces $\vU_{y'}$ implies that the sum over $k$ concentrates on the $k=y$
+  summand, giving that \textit{the CFG denoiser remains equal to the
+  class-conditioned denoiser}. Moreover, when $t \approx 0$, the magnitude of
+  any such gap is amplified in the exponential, making this concentration on the
+  $k=y$ summand even stronger. In particular, for small times $t$ (i.e., near to
+  the support of the data distribution), CFG denoising is no different from
+  standard class-conditional denoising---implying that it will converge stably
+  once it has reached such a configuration.
+  Thus, the empirical benefits of CFG should be due to its behavior in cases
+  where $\vx_t$ is not unambiguously from a single class.
+
+  Next, we consider the problem of parameterizing a learnable denoiser
+  $\vx_{\theta}^{\mathrm{CFG}}$ to represent the optimal denoiser
+  \Cref{eq:cfg-denoiser-mog-low-rank}.
+  Here, it may initially seem that the setting of classification of a mixture
+  distribution is too much of a special case relative to learning practical data
+  distributions, as the ideal denoiser \Cref{eq:cfg-denoiser-mog-low-rank} has
+  in this setting the simple form of a \textit{hard assignment} of the
+  noisy signal $\vx_t$ to the (denoiser associated to) the subspace $\vU_y$
+  corresponding to the true class label $y$ of $\vx$, averaged with the
+  \textit{soft assignment} denoiser associated to all subspaces $\vU_k$, with
+  weights given by the correlations of $\vx_t$ with these different subspaces.
+  However, we can extract a more general form for the class-conditional denoiser
+  in this example which is relevant for practical parameterization using the
+  geometric structure of the mixture of Gaussians distribution, which actually
+  parallels the kinds of geometric structure common in real-world data.
+  More precisely, we add an additional assumption associated to the subspaces
+  $\vU_k$ being `distinguishable' from one another, which is natural in
+  practice: specifically, we assume that for any pair of indices $k, k' \in
+  [K]$ with $k \neq k'$, we can find a set of $K$ directions $\vv_{k} \in \bR^D$ such
+  that
+  \begin{equation}
+    \vU_{k}\vU_{k}^\top \vv_k = \vv_k, \quad
+    \vU_{k'}\vU_{k'}^\top \vv_k = \Zero, \enspace k' \neq k.
+  \end{equation}
+  This is a slightly stronger assumption than simple distinguishability, but it
+  should be noted that it is not overly restrictive: for example, it still
+  allows the subspaces $\vU_{k}$ to have significant correlations with one
+  another.\footnote{ More generally, this assumption is naturally formulated as an
+  \textit{incoherence condition} between the subspaces $\vU_{[K]}$, a familiar
+  notion from the theory of compressive sensing.}
+  These vectors $\vv_k$ can then be thought of as \textit{embeddings} of the
+  class label $y \in [K]$, and we can use them to define a more general operator
+  that can represent both the unconditional and class-conditional denoisers.
+  More precisely, consider the mapping
+  \begin{equation}
+    (\vx_t, \vv) \mapsto
+    \sum_{k = 1}^{K}\frac{
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_k \vU_k^\top \vv}
+    }
+    {
+      \sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_i \vU_i^\top \vv}
+    }
+    \vU_{k}\vU_{k}^{\top}.
+  \end{equation}
+  If we substitute $\vv = \vv_y$ for some $y \in [K]$, we get
+  \begin{align}
+    \sum_{k = 1}^{K}
+    \frac{
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_k \vU_k^\top \vv_y}
+    }
+    {
+      \sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_i \vU_i^\top \vv_y}
+    }
+    \vU_{k}\vU_{k}^{\top}
+    &=
+  \end{align}
+
+
+
+
+
+  % loosely parallels the structure of the rate reduction gradient ascent
+  % iteration we studied in the classification setting in \Cref{ch:unrolling}, in
+  % the special case where a single sample is used.
+\end{example}
 
 
 
@@ -1765,7 +1908,10 @@ the next session? Not clear how to do it in the mixture of Gaussians case...}
 
 
 \subsection{Caption Conditioned Image Generation}
-An vignette for image generation conditioned on a given caption. 
+An vignette for image generation conditioned on a given caption.  \sdb{TODO:
+Discuss the cross-attention-type operator here. Can get it by considering
+a joint denoising of $p(x, y)$, with Gaussian conditional models for $p(y \mid
+x)$ and $p(x \mid y)$...}
 
 \sdb{Align Visual Data with Texts such as CLIP, with other attribures ControlNet, ... discuss dhariwal and nichol (classifier aware guidance), then mention DALLE type architecture for
 text-conditioned image generation?} \yima{Actually the original work ``\href{https://arxiv.org/abs/2105.05233}{Diffusion Models Beat GANs on Image Synthesis}'', by Prafulla Dhariwal and Alex Nichol, proposed to compute the two matching functions proposed above. The follow-up work ``Classifer-Free Diffusion Guidance''  by
