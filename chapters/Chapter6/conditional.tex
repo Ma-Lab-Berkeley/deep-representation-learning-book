@@ -1176,7 +1176,7 @@ A system that estimates human body height, pose,  and hand parameters (middle), 
 
 \end{figure*}
 
-Notice that in this case, one only has the head pose  provided by the device and a very limited field of view for part of one's hands and upper limps. The pose of the rest of the body needs to ``inferred'' or ``completed'' based on such partial information. The only way one can estimate the body pose over time is by learning the joint distribution of the head and body pose sequences in advance and then sample this prior distribution conditioned on the real-time partial inputs. Figure \ref{fig:pose-method} outlines a system called EgoAllo \cite{yi2024egoallo} to solve this problem based on a learned conditional diffusion-denoising model. 
+Notice that in this case, one only has the head pose  provided by the device and a very limited field of view for part of one's hands and upper limbs. The pose of the rest of the body needs to ``inferred'' or ``completed'' based on such partial information. The only way one can estimate the body pose over time is by learning the joint distribution of the head and body pose sequences in advance and then sample this prior distribution conditioned on the real-time partial inputs. Figure \ref{fig:pose-method} outlines a system called EgoAllo \cite{yi2024egoallo} to solve this problem based on a learned conditional diffusion-denoising model. 
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\linewidth]{figs_chap6/pose-method.pdf}
@@ -1229,7 +1229,15 @@ The ground-truth motion is compared with one output from EgoAllo that is consist
 \label{fig:comparison}
 \end{figure}
 
-Strictly speaking, the solution proposed in EgoAllo \cite{yi2024egoallo} does not enforce measurement matching using the techniques introduced above. Instead it heuristically enforces the condition by utilizing  the cross-attention mechanism in a transformer architecture. There is reason to believe that the cross-attention mechanism is in a way approximately realizing the conditional sampling of the denoising a posteriori. We believe the more principled techniques introduced here, if properly implemented, can lead to better methods that further improve the body pose and hand gesture estimation. 
+Strictly speaking, the solution proposed in EgoAllo \cite{yi2024egoallo} does
+not enforce measurement matching using the techniques introduced above. Instead
+it heuristically enforces the condition by utilizing  the cross-attention
+mechanism in a transformer architecture. As we will describe with more precision
+in the paired data setting in \Cref{sub:text-cond}, there is reason to believe that the
+cross-attention mechanism is in a way approximately realizing the conditional
+sampling of the denoising a posteriori. We believe the more principled
+techniques introduced here, if properly implemented, can lead to better methods
+that further improve the body pose and hand gesture estimation. 
 
 \section{Conditional Inference with Paired Data and Measurements}
 In many practical applications, we do not know either the distribution of the data $\x$ of interest nor the explicit relationship between the data and certain observed attributes $\y$ of the data. We only have  a (large) set of paired samples $(\X, \Y) = \{ (\x_1, \y_1), \ldots, (\x_N, \y_N) \}$ from which we need to infer the data distribution and a mapping that models their relationship:
@@ -1694,7 +1702,7 @@ class-conditioned sampling with classifier-free guidance in
 \textcite{Ho2022-ry} report strong empirical performance for class-conditional
 image generation with classifier-free guidance, and it has become a mainstay of
 the largest-scale practical diffusion models, such as Stable Diffusion
-\cite{rombach2022high}.
+\cite{rombach2022high} and its derivatives.
 At the same time, its derivation is rather opaque and empirically-motivated,
 giving little insight into the mechanisms behind its strong performance.
 A number of theoretical works have studied this, providing explanations for some
@@ -1702,12 +1710,13 @@ parts of the overall CFG methodology
 \cite{Bradley2024-jg,Li2025-li,Wu2024-js}---itself encompassing denoiser
 parameterization and training, as well as configuration of the guidance strength
 and performance at sampling time.
-Below, we will give a rather complete interpretation in the simplifying setting
+Below, we will give an interpretation in the simplifying setting
 of a Gaussian mixture model data distribution and denoiser, which will
-demonstrate an interesting connection to the rate reduction objective studied in
-chapters \Cref{ch:compression,ch:unrolling}, and thereby an insight into the
-\textit{parameterization} of the denoiser in the presence of such
-low-dimensional structures.
+demonstrate %
+% an interesting connection to the rate reduction objective studied in
+% chapters \Cref{ch:compression,ch:unrolling}, and thereby 
+an insight into the \textit{parameterization} of the denoiser in the presence of
+such low-dimensional structures.
 
 % \sdb{CFG generalizes previous schemes to perform conditional denoising, by
 % directly training a conditional denoiser (what operators/architecture?), and
@@ -1769,8 +1778,96 @@ low-dimensional structures.
     \right)
     \vx_t.
   \end{equation}
+  This denoiser has a simple, interpretable form. The first term, corresponding
+  to the unconditional denoiser, performs denoising of the signal $\vx_t$
+  against an average of the denoisers associated to each subspace, weighted by
+  how correlated $\vx_t$ is to each subspace. The second term, corresponding to
+  the conditional denoiser, simply performs denoising with the conditioning
+  class's denoiser. The CFG scheme further averages these two denoisers:
+  the effect can be gleaned from the refactoring
+  \begin{equation*}\label{eq:cfg-denoiser-mog-low-rank-2}
+    \begin{split}
+      \bar{\vx}^{\mathrm{CFG,\,ideal}}(t, \vx_t, y)
+      =
+      \frac{1}{1 + t^{2}}
+      &\Biggl(
+      \left[\gamma + (1 - \gamma) 
+      \frac{\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{y}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}
+      \right]
+      \vU_{y}\vU_{y}^{\top}
+      \\
+      &\quad+
+      (1 - \gamma) 
+      \sum_{k \neq y}\frac{\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{k}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}\vU_{k}\vU_{k}^{\top}
+      \Biggr)
+      \vx_t.
+    \end{split}
+  \end{equation*}
+  We have
+  \begin{equation}
+    \sum_{k=1}^K
+    \frac{\exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\norm{\vU_{k}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+    = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}
+    = 1,
+  \end{equation}
+  and each summand is nonnegative, hence also bounded above by $1$.
+  So we can conclude two regimes for the terms in
+  \Cref{eq:cfg-denoiser-mog-low-rank-2}: 
+  % which corresponding to the conditioning
+  % variable $y$ with contributions from both denoisers:
+  \begin{enumerate}
+    \item \textbf{Well-correlated regime:} If $\vx_t$ correlates well with
+      $\vU_y$, then the normalized weight corresponding to the $k=y$ summand in
+      the unconditional denoiser is near to $1$. 
+      Then 
+      \begin{equation}
+        \gamma + (1 - \gamma) 
+      \frac{\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{y}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}
+        \approx 1,
+      \end{equation}
+      all other weights are necessarily near to zero, and the CFG denoiser
+      is approximately equal to the denoiser associated to the conditioning
+      class $y$.
+    \item \textbf{Poorly-correlated regime:} In contrast, if $\vx_t$
+      \textit{does not} correlate well with $\vU_y$ (say because $t$ is large),
+      then the normalized weight corresponding to the $k=y$ summand in the
+      unconditional denoiser is near to $0$. As a result, 
+      \begin{equation}
+        \gamma + (1 - \gamma) 
+      \frac{\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{y}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}
+        \approx \gamma,
+      \end{equation}
+      and thus the guidance strength $\gamma \gg 1$ places a large positive
+      weight on the denoiser associated to $y$.
+      Meanwhile, in the second term of \Cref{eq:cfg-denoiser-mog-low-rank-2},
+      any classes $k \neq y$ that are well-correlated with $\vx_t$ 
+      receive a large \textit{negative} weight from the $1 - \gamma$
+      coefficient.
+      This simultaneously has the effect of making the denoised signal vastly
+      more correlated with the conditioning class $y$, and making it negatively
+      correlated with the previous iterate (i.e., the iterate before denoising).
+      In other words, CFG steers the iterative denoising process towards the
+      conditioning class and away from the previous iterate, a different
+      dynamics from purely conditional sampling (i.e., the case $\gamma = 1$).
+  \end{enumerate}
+  \sdb{The above could easily be repackaged into an exercise, which would be
+  a more rigorous version of this calculation.}
 
-  We now perform a concrete analysis of the form of this guided denoiser in
+  We now perform a further analysis of the form of this guided denoiser in
   order to make some inferences about the role of CFG. Many of these insights
   will be relevant to \textit{general} data distributions with low-dimensional
   geometric structure, as well.
@@ -1807,10 +1904,10 @@ low-dimensional structures.
 
   Next, we consider the problem of parameterizing a learnable denoiser
   $\vx_{\theta}^{\mathrm{CFG}}$ to represent the optimal denoiser
-  \Cref{eq:cfg-denoiser-mog-low-rank}.
+  \eqref{eq:cfg-denoiser-mog-low-rank}.
   Here, it may initially seem that the setting of classification of a mixture
   distribution is too much of a special case relative to learning practical data
-  distributions, as the ideal denoiser \Cref{eq:cfg-denoiser-mog-low-rank} has
+  distributions, as the ideal denoiser \eqref{eq:cfg-denoiser-mog-low-rank} has
   in this setting the simple form of a \textit{hard assignment} of the
   noisy signal $\vx_t$ to the (denoiser associated to) the subspace $\vU_y$
   corresponding to the true class label $y$ of $\vx$, averaged with the
@@ -1917,7 +2014,7 @@ low-dimensional structures.
 % superior performance.
 
 
-\subsection{Caption Conditioned Image Generation}
+\subsection{Caption Conditioned Image Generation}\label{sub:text-cond}
 An vignette for image generation conditioned on a given caption.  \sdb{TODO:
 Discuss the cross-attention-type operator here. Can get it by considering
 a joint denoising of $p(x, y)$, with Gaussian conditional models for $p(y \mid
