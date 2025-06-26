@@ -804,11 +804,12 @@ The supervised classification setting in which the ReduNet was derived is also s
 
 % \pw{TODO: By unifying rate reduction, denoising and diffusion, and transformers, we derive  \href{https://arxiv.org/abs/2306.01129}{the white-box transformer CRATE}.}
 
-We consider a general learning setup associated with real-world signals. Let \(\X = \mat{\x_{1}, \dots, \x_{N}} \in \bR^{D \times N}\) denote random variables representing our data source, where each \(\x_{i} \in \bR^{D}\) is interpreted as a \textit{token}\footnote{For language transformers, tokens roughly correspond to words~\cite{vaswani2017attention}, while for vision transformers, tokens correspond to image patches~\cite{dosovitskiy2020image}.} and the \(\x_{i}\)'s may have arbitrary correlation structures. We use \(\Z = \mat{\z_{1}, \dots, \z_{N}} \in \bR^{d \times N}\) to denote the random variables that defines our representations. Each \(\z_{i} \in \bR^{d}\) is the representation of the corresponding token \(\x_i \in \bR^{D}\). 
-We are given \(B \geq 1\) i.i.d.~samples \(\X_{1}, \dots, \X_{B} \sim \X\), whose tokens are \(\x_{i, b}\). The representations of our samples are denoted \(\Z_{1}, \dots, \Z_{B} \sim \Z\) and those of our tokens are \(\z_{i, b}\). Finally, for a given network, we use \(\Z^{\ell}\) to denote the output of the first \(\ell\) layers when given \(\X\) as input. Correspondingly, the sample outputs are \(\Z_{i}^{\ell}\) and the token outputs are \(\z_{i, b}^{\ell}\).
+We consider a general learning setup associated with real-world signals. Let \(\X = \mat{\x_{1}, \dots, \x_{N}} \in \bR^{D \times N}\) denote random variables representing our data source. In vision tasks, each \(\x_{i} \in \bR^{D}\) is interpreted as a \textit{token}, typically corresponding to an image patch. In language tasks, each \(\x_{i} \in \bR^{D}\) is interpreted as an \textit{token embedding}, i.e., a continuous vector representation of a discrete token such as a word or subword.\footnote{With a slight abuse of terminology, we refer to both the discrete tokens and their associated embeddings simply as tokens throughout this chapter for convenience.}  % \footnote{For language transformers, tokens roughly correspond to words~\cite{vaswani2017attention}, while for vision transformers, tokens correspond to image patches~\cite{dosovitskiy2020image}.} and 
+The \(\x_{i}\)'s may have arbitrary correlation structures. We use \(\Z = \mat{\z_{1}, \dots, \z_{N}} \in \bR^{d \times N}\) to denote the random variables that defines our representations, where \(\z_{i} \in \bR^{d}\) is the representation of the corresponding token \(\x_i \in \bR^{D}\).% We are given \(B \geq 1\) i.i.d.~samples \(\X_{1}, \dots, \X_{B} \sim \X\), whose tokens are \(\x_{i, b}\). The representations of our samples are denoted \(\Z_{1}, \dots, \Z_{B} \sim \Z\) and those of our tokens are \(\z_{i, b}\). Finally, For a given network, we use \(\Z^{\ell}\) to denote the output of the first \(\ell\) layers when given \(\X\) as input. Correspondingly, the sample outputs are \(\Z_{i}^{\ell}\) and the token outputs are \(\z_{i, b}^{\ell}\).
 
 \begin{remark}
-    In transformers, each input sample is typically converted into a sequence of tokens. The definition of a token depends on the domain: in natural language processing, tokens typically correspond to words, subwords, or characters; in computer vision, tokens often represent image patches; and in time-series or graph data, tokens can be time points or nodes, respectively. A token representation is a vector that encodes the semantic or structural information of a token, typically produced by the intermediate or final layers of a transformer. These representations are designed to capture meaningful features of the input that are useful for downstream tasks such as classification, generation, or regression.
+    In transformers, each input sample is typically converted into a sequence of {\em tokens}. A token is a basic unit of information derived from the raw input: in natural language processing, tokens are typically words or subwords; in computer vision, they correspond to image patches; and in other modalities, they may represent time steps, spatial locations, or other domain-specific units. A {\em token embedding} is a continuous vector representation of a token that serves as the input to a transformer. It maps each token to a point in a high-dimensional space, enabling the model to process symbolic inputs using numerical computation.
+    A {\em token representation} is a vector that encodes the semantic or structural information of a token, typically produced by the intermediate or final layers of a transformer. These representations are designed to capture meaningful features of the input that are useful for downstream tasks such as classification, generation, or regression. Please refer to \Cref{sec:contrastive_learning} for more details about these concepts in implementations. 
 \end{remark}
 
 
@@ -817,10 +818,10 @@ We are given \(B \geq 1\) i.i.d.~samples \(\X_{1}, \dots, \X_{B} \sim \X\), whos
 \paragraph{Objective for Learning a Structured and Compact Representation.}
 Following the framework of rate reduction \Cref{sec:chap4-white-box-model-via-unrolling}, we contend
 that the goal of representation learning is to find a feature mapping \(f
-\colon \X \in \bR^{D \times N} \to \Z\in \bR^{d \times N}\) which transforms input token representations \(\X \in \bR^{D \times N}\) with a potentially nonlinear and multi-modal distribution to a (piecewise) \textit{linearized and compact} feature representation \(\Z \in \bR^{d \times N}\). While the joint distribution of tokens \(\{\z_{i}\}_{i = 1}^{N}\) in \(\Z\) may be sophisticated (and task-specific), we further contend that it is reasonable and practical to
-require that the target marginal distribution of individual token representations \(\z_{i}\) should be highly compressed and structured, amenable for compact coding. Particularly, we require the distribution to be \textit{a mixture of low-dimensional (say \(K\)) Gaussian
+\colon \X \in \bR^{D \times N} \to \Z\in \bR^{d \times N}\) which transforms input  \(\X \in \bR^{D \times N}\) with a potentially nonlinear and multi-modal distribution to a (piecewise) \textit{linearized and compact} feature representation \(\Z \in \bR^{d \times N}\). While the joint distribution of tokens representations \(\{\z_{i}\}_{i = 1}^{N}\) in \(\Z\) may be sophisticated (and task-specific), we further contend that it is reasonable and practical to
+require that the target marginal distribution of individual token representations should be highly compressed and structured, amenable for compact coding. Particularly, we require the distribution to be \textit{a mixture of low-dimensional (say \(K\)) Gaussian
 distributions}, such that the \(k\)-th Gaussian has mean \(\Zero \in \bR^{d}\), covariance \(\vSigma_{k} \succeq \Zero \in \bR^{d \times d}\), and support spanned by the orthonormal basis \(\vU_{k} \in \bR^{d \times p}\). 
-We denote $\vU_{[K]} = \{\vU_k\}_{k=1}^K$ to be the set of bases of all Gaussians. Hence, to maximize the \textit{information gain} \cite{ma2022principles} for the final token representation, we wish to maximize the rate reduction (see \Cref{subsec:MCR2}) of the tokens, i.e., 
+We denote $\vU_{[K]} = \{\vU_k\}_{k=1}^K$ to be the set of bases of all Gaussians. Hence, to maximize the \textit{information gain} \cite{ma2022principles} for the final token representations, we wish to maximize their rate reduction (see \Cref{subsec:MCR2}), i.e., 
 \begin{align}\label{eq:rate reduction}
     \mathrm{max}\ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) = R_{\epsilon}(\Z) - R^c_{\epsilon}(\Z \mid \vU_{[K]}.
 \end{align}
@@ -840,7 +841,7 @@ The second term $R_{\epsilon}^c$ is an estimate of the lossy coding rate under t
 \end{equation}
 
 \begin{remark}
-    The expression \eqref{eq:def-mcr-Rc} for the coding rate can be viewed as a generalization of the coding rate \(R_\epsilon^{c}\) used in the original rate reduction objective \eqref{eq:MCRc}. In particular, the original objective is defined with respect to a set of known membership labels \(\{\vPi_{k}\}\) specific to the particular data realization \(\vX\). In contrast, the current objective is defined with respect to subspaces \(\vU_{[K]}\), which are independent of any particular realization but are assumed to support the distribution of token features. Suppose that a token representation $\bm z_i$ belongs to a subspace $\bm U_k$ and these subspaces are approximately orthogonal to each other, i.e., $\bm U_k^\top \bm U_l \approx \bm 0$ for all $k \neq l$. Then, one can verify that the projections $\bm U_k\bm U_k^\top \bm z_i  = \bm z_i$ and  $\bm U_l\bm U_l^\top \bm z_i \approx \bm 0$ for all $l \neq k$. These orthogonal projections effectively serve as implicit membership labels, identifying the subspace to which each token representation belongs. 
+    The expression \eqref{eq:def-mcr-Rc} for the coding rate can be viewed as a generalization of the coding rate \(R_\epsilon^{c}\) used in the original rate reduction objective \eqref{eq:MCRc}. In particular, the original objective is defined with respect to a set of known membership labels \(\{\vPi_{k}\}\) specific to the particular data realization \(\vX\). In contrast, the current objective is defined with respect to subspaces \(\vU_{[K]}\), which are independent of any particular realization but are assumed to support the distribution of token representations. Suppose that a token representation $\bm z_i$ belongs to a subspace $\bm U_k$ and these subspaces are approximately orthogonal to each other, i.e., $\bm U_k^\top \bm U_l \approx \bm 0$ for all $k \neq l$. Then, one can verify that the projections $\bm U_k\bm U_k^\top \bm z_i  = \bm z_i$ and  $\bm U_l\bm U_l^\top \bm z_i \approx \bm 0$ for all $l \neq k$. These orthogonal projections effectively serve as implicit membership labels, identifying the subspace to which each token representation belongs. 
 \end{remark}
 
 % \begin{figure}
@@ -863,12 +864,10 @@ The second term $R_{\epsilon}^c$ is an estimate of the lossy coding rate under t
 \paragraph{Sparse Rate Reduction.} Note that the rate reduction objective \eqref{eq:rate reduction} is invariant to arbitrary joint rotations of the representations and subspaces. In particular, optimizing the rate reduction objective may not naturally lead to axis-aligned (i.e., \textit{sparse}) representations. {For instance, consider the three sets of learned representations in \Cref{fig:sparse-rate-reduction-diagram}. The coding rate reduction increases from (a) to (b), but because it is invariant under rotations, remains the same from (b) to (c).} Therefore, we would like to transform the representations (and their supporting subspaces) so that the features $\vZ$ eventually become sparse\footnote{Concretely, having few nonzero entries.} with respect to the standard coordinates of the resulting representation space {as in \Cref{fig:sparse-rate-reduction-diagram}(c)}. Therefore, to ensure the final representations are amenable to more compact coding, we would like to transform the representations (and their supporting subspaces) so that they become \textit{sparse} with respect to the standard coordinates of the resulting representation space.\footnote{That is, having the fewest nonzero entries.} Computationally, we may combine the above two goals into a unified objective for optimization:
 \vspace{0.05in}
 \begin{equation}
-\begin{aligned}
-   \max_{f \in \mathcal{F}}\ \mathbb{E}_{\Z}\big[ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) - \lambda \|\bm{Z}\|_0 \big] \qquad \text{s.t.}\ \Z = f(\X),
+   \max_{f \in \mathcal{F}}\ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) - \lambda \|\bm{Z}\|_0 \qquad \text{s.t.}\ \Z = f(\X),
    \label{eq:sparse-rr}
-\end{aligned}
 \end{equation}
-where $\mathcal{F}$ denotes a general function class and the $\ell_0$-norm $\|\Z\|_0$ promotes the sparsity of the final token representations \(\Z = f(\X)\).\footnote{To simplify the notation, we will discuss the objective for one sample $\X$ at a time with the understanding that we always mean to optimize the expectation.} We call this objective \textit{sparse rate reduction}. 
+where $\mathcal{F}$ denotes a general function class and the $\ell_0$-norm $\|\Z\|_0$ promotes the sparsity of the final token representations \(\Z = f(\X)\).% \footnote{To simplify the notation, we will discuss the objective for one sample $\X$ at a time with the understanding that we always mean to optimize the expectation.} We call this objective \textit{sparse rate reduction}. 
 % \yima{A figure to illustrate the sparse rate reduction objective...} 
 % \yaodong{Added the figure below and the comparison with MCR$^2$.}
 
@@ -879,7 +878,7 @@ where $\mathcal{F}$ denotes a general function class and the $\ell_0$-norm $\|\Z
 In practice, the $\ell_0$-norm is often relaxed to the $\ell_1$-norm to improve computational traceability and enable convex optimization techniques \cite{Wright-Ma-2022}. Motivated by this, we relax Problem \eqref{eq:sparse-rr} accordingly, leading to a formulation that remains faithful to the original sparsity objective while being more amenable to efficient algorithms as follow:  
 \begin{equation}
 \begin{aligned}
-   \max_{f \in \mathcal{F}}\ \mathbb{E}_{\Z}\big[ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) - \lambda \|\bm{Z}\|_1 \big] \qquad \text{s.t.}\ \Z = f(\X),
+   \max_{f \in \mathcal{F}}\    \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) - \lambda \|\bm{Z}\|_1  \qquad \text{s.t.}\ \Z = f(\X),
    \label{eq:sparse-rr-1}
 \end{aligned}
 \end{equation}
@@ -919,7 +918,7 @@ In the following, we provide technical details for each of the two steps above a
 
 
 
-\paragraph{Self-Attention as Gradient Descent on Coding Rate of Tokens.} For the first step \eqref{eq:Z l+1/2}, the gradient of the coding rate \(\nabla_{\bm Z} R^c_\epsilon\) is costly to compute, as it involves \(K\) separate matrix inverses, one for each of the \(K\) subspaces with basis \(\vU_{k}^{\ell}\):
+\paragraph{Self-Attention as Gradient Descent on Coding Rate of Token Representations.} For the first step \eqref{eq:Z l+1/2}, the gradient of the coding rate \(\nabla_{\bm Z} R^c_\epsilon\) is costly to compute, as it involves \(K\) separate matrix inverses, one for each of the \(K\) subspaces with basis \(\vU_{k}^{\ell}\):
 \begin{equation}
     \nabla_{\bm Z} R_{\epsilon}^c(\vZ \mid \vU_{[K]})
     = \frac{p}{N\epsilon^2}\sum_{k=1}^K \vU_k\vU_k^\top\vZ\Big(\I +
@@ -965,7 +964,7 @@ Substituting \eqref{eq:grad Rc} into \eqref{eq:Z l+1/2} yields that it can natur
 
 
 
-\paragraph{MLP as Proximal Gradient Descent for Sparse Coding of Tokens.} For the second step of alternating minimization, we need to minimize the problem $\lambda \norm{\vZ}_{1} - R_{\epsilon}(\vZ)$. Note that the gradient \(\nabla R(\vZ)\) involves a matrix inverse, and thus naive proximal gradient (see \Cref{subsec:pgd}) to optimize this problem becomes intractable on large-scale problems. % However, this problem is highly nonsmooth and nonconvex, which is difficult to optimize. 
+\paragraph{MLP as Proximal Gradient Descent for Sparse Coding of Token Representations.} For the second step of alternating minimization, we need to minimize $\lambda \norm{\vZ}_{1} - R_{\epsilon}(\vZ)$. Note that the gradient \(\nabla R_{\epsilon}(\vZ)\) involves a matrix inverse, and thus naive proximal gradient (see \Cref{subsec:pgd}) to optimize this problem becomes intractable on large-scale problems. % However, this problem is highly nonsmooth and nonconvex, which is difficult to optimize. 
 We therefore take a different, simplifying approach to trading off between representational diversity and sparsification: we posit a (complete) incoherent or orthogonal dictionary $\vD^{\ell} \in \bR^{d \times d}$, and ask to sparsify the intermediate iterates $\vZ^{\ell + 1/2}$ with respect to \(\vD^{\ell}\). That is, $\vZ^{\ell + 1/2} \approx \vD^{\ell} \vZ^{\ell + 1}$ where $\vZ^{\ell + 1}$ is more sparse; that is, it is a \textit{sparse encoding} of \(\vZ^{\ell + 1/2}\). The dictionary \(\vD^{\ell}\) is used to sparsify all tokens simultaneously. 
 By the incoherence assumption, we have $(\vD^{\ell})^\top(\vD^{\ell}) \approx \vI$. Thus from \eqref{eq:coding_rate} we have 
 \begin{equation}
@@ -984,7 +983,7 @@ In our implementation, we also add a non-negative constraint to $\vZ^{\ell + 1}$
     \vZ^{\ell + 1} \approx \argmin_{\vZ \geq \bm 0} \left[\lambda\norm{\vZ}_1 + \frac{1}{2}\norm{\vZ^{\ell + 1/2} - \vD^{\ell} \vZ}_{F}^{2}\right].
     \label{eq:sparse-nonnegative}
 \end{equation}
-Then, We incrementally optimize \Cref{eq:sparse-nonnegative} by performing an unrolled {\em proximal gradient descent} step, known as an ISTA step \citep{beck2009fast}, to give the update:
+Then, we incrementally optimize \Cref{eq:sparse-nonnegative} by performing an unrolled {\em proximal gradient descent} step, known as an ISTA step \citep{beck2009fast}, to give the update:
 \begin{align}\label{eq:ista-block}
     \vZ^{\ell + 1} 
     &= \mathrm{ISTA}({\vZ^{\ell + 1/2} \mid \vD^{\ell}}), \\
@@ -1045,7 +1044,7 @@ we can get the following rate-reduction-based transformer layer, illustrated in 
     \qquad 
     \vZ^{\ell+1}\doteq \texttt{ISTA}(\vZ^{\ell+1/2} \mid \bm D^\ell).
 \end{equation}
-Composing multiple such layers following the incremental construction of our representation in \eqref{eq:incremental}, we obtain a white-box transformer architecture that transforms the data tokens towards a compact and sparse union of incoherent subspaces, where $f^{\pre}: \bR^{D \times N} \rightarrow \bR^{d \times N}$ is the pre-processing mapping that transforms the input token set $\vX \in \bR^{D \times N}$ to a first-layer representation $\vZ^{1} \in \bR^{d \times N}$. An overall flow of this architecture was shown in \Cref{fig:crate-diagram}.
+Composing multiple such layers following the incremental construction of our representation in \eqref{eq:incremental}, we obtain a white-box transformer architecture that transforms the data tokens towards a compact and sparse union of incoherent subspaces, where $f^{\pre}: \bR^{D \times N} \rightarrow \bR^{d \times N}$ is the pre-processing mapping that transforms the input tokens $\vX \in \bR^{D \times N}$ to first-layer representations $\vZ^{1} \in \bR^{d \times N}$. An overall flow of this architecture was shown in \Cref{fig:crate-diagram}.
 
 \begin{figure}[t!]
      \centering
@@ -1135,7 +1134,7 @@ when pre-trained on ImageNet-1K. For ImageNet-1K/ImageNet-1K ReaL, we directly e
 
 \section{Variants of Deep Architectures by Design} \label{sec:chap4-derive-white-box-transformer-variants}
 
-So far, we wish we have provided  compelling evidence that the role of (popular) deep networks is to realize certain optimization algorithms for minimizing the coding rate (or maximizing the information gain) of the learned representation. However, readers who are familiar with optimization methods might have  noticed that the above architectures (the ReduNet or the CRATE) correspond to rather basic optimization techniques. They may have plenty of room for improvement in efficiency or effectiveness. Moreover, if we believe the proposed theoretical framework for interpreting deep networks is correct, it should not only help explain existing architectures, it should guide us develop more efficient and effective architectures. In this section, we show this could be the case: the resulting new architectures are not only fully interpretable but also with guaranteed correctness and improved efficiency. 
+So far, we wish that we have provided compelling evidence that the role of (popular) deep networks is to realize certain optimization algorithms for minimizing the coding rate (or maximizing the information gain) of the learned representations. However, readers who are familiar with optimization methods might have noticed that the above architectures (the ReduNet or the CRATE) correspond to rather basic optimization techniques. They may have plenty of room for improvement in efficiency or effectiveness. Moreover, if we believe the proposed theoretical framework for interpreting deep networks is correct, it should not only help explain existing architectures, it should guide us develop more efficient and effective architectures. In this section, we show this could be the case: the resulting new architectures are not only fully interpretable but also with guaranteed correctness and improved efficiency. 
 
 % \pw{New variants of the CRATE networks that are more efficient or more effective; add more comments}  
 
@@ -1145,7 +1144,9 @@ So far, we wish we have provided  compelling evidence that the role of (popular)
 
 \subsection{Attention-Only Transformer Architecture} \label{sub:aot}
 
-In this subsection, we assume that the initial token representations $\bm Z^{(1)}$ are sampled from a mixture of low-rank Gaussians as follows: 
+In this subsection, we propose a minimalistic transformer architecture consisting of interpretable layers based on the MSSA operator. To derive a fully interpretable transformer architecture with only necessary components,
+we contend that the goal of representation learning is to compress a set of noisy initial token representations towards a mixture of low-dimensional subspaces. % To compress these noisy token representations, an associated denoising operation naturally takes the form of an MSSA operator (see \eqref{eq:Multi-Head-SSA}). By unrolling such iterative denoising operations into a deep network, we arrive at a highly compact architecture that consists of only self-attention operators with skip connections at each layer. 
+Here, we assume that the initial token representations $\bm Z^{(1)}$ are sampled from a mixture of low-rank Gaussians perturbed by noise as follows: 
 \begin{definition}\label{def:MoG}
 Let $C_1,\dots,C_K$ be a partition of the index set $[N]$ and $\bm U_k \in \mathcal{O}^{d \times p_k}$ denote the orthonormal basis of the $k$-th subspace for each $k \in [K]$. We say that the token representations $\{\bm z_i \}_{i=1}^N \subseteq \R^d$ are sampled from a mixture of noisy low-rank Gaussian distributions if for each $k \in [K]$,
 \begin{align}\label{eq:MoG}
@@ -1244,12 +1245,12 @@ Generally speaking, the standard decoder-only transformer architecture is compos
 
 \subsection{Linear-Time Attention: Token Statistics Transformer}\label{sub:tost} 
 
-In this section, we propose a new transformer attention operator whose computational complexity scales linearly with the number of tokens. We derive our network architecture by extending prior work which has shown that a transformer style architecture naturally arises by ``white-box'' architecture design, where each layer of the network is designed to implement an incremental optimization step of a maximal coding rate reduction objective MCR$^2$. Specifically, we derive a novel variational form of the MCR$^2$ objective and show that the architecture that results from unrolled gradient descent of this variational objective leads to a new attention module called Token Statistics Self-Attention (\texttt{TSSA}). \texttt{TSSA} has {\em linear computational and memory complexity} and radically departs from the typical attention architecture that computes pairwise similarities between tokens. 
+In this subsection, we propose a new transformer attention operator whose computational complexity scales linearly with the number of tokens based on the coding rate reduction objective.  Specifically, we derive a novel variational form of the MCR$^2$ objective and show that the architecture that results from unrolled gradient descent of this variational objective leads to a new attention module called Token Statistics Self-Attention (\texttt{TSSA}). \texttt{TSSA} has {\em linear computational and memory complexity} and radically departs from the typical attention architecture that computes pairwise similarities between tokens.  Recall from \eqref{eq:MCR pi} that $\bm \Pi = [\bm \pi_1, \ldots, \bm \pi_K] \in \R^{N \times K}$ denotes a stochastic ``group assignment'' matrix (i.e., $\bm \Pi \bm 1 = \bm 1$ and $\Pi_{ik} \geq 0, \  \forall (i,k) \in [N] \times [K]$ ), where $\pi_{ik}$ denotes the probability of assigning the $i$-th token to the $k$-th group. 
 
-Recall that  \(\X = [\x_{1}, \dots, \x_{N}] \in \R^{D \times N}\) is typically
-a matrix-valued variable and the transformer seeks to find
-a \textit{representation mapping}, or a mapping of the tokens $f \colon
- \R^{D \times N} \to \R^{d \times N}$ such that the features $\Z = f(\X) = [\z_1, \ldots, \z_N] \in \R^{d \times N}$ are appropriate for the task at hand. In MCR$^2$, the tokens are assumed to belong to an underlying set of \(K\) groups, which may (for example) represent different modes within the population of tokens, and the MCR$^2$ objective seeks to find token features of each group which are \textit{compressed} within a group while the set of all token features is as expansive as possible (see \eqref{eq:MCR pi}). Recall from \eqref{eq:MCR pi} that $\bm \Pi = [\bm \pi_1, \ldots, \bm \pi_K] \in \R^{N \times K}$ denotes a stochastic ``group assignment'' matrix (i.e., $\bm \Pi \bm 1 = \bm 1$ and $\pi_{ik} \geq 0, \  \forall (i,k) \in [N] \times [K]$ ), where $\pi_{ik}$ denotes the probability of assigning the $i$-th token to the $k$-th group. 
+% Recall that  \(\X = [\x_{1}, \dots, \x_{N}] \in \R^{D \times N}\) is typically
+% a matrix-valued variable and the transformer seeks to find
+% a \textit{representation mapping}, or a mapping of the tokens $f \colon
+%  \R^{D \times N} \to \R^{d \times N}$ such that the features $\Z = f(\X) = [\z_1, \ldots, \z_N] \in \R^{d \times N}$ are appropriate for the task at hand. In MCR$^2$, the tokens are assumed to belong to an underlying set of \(K\) groups, which may (for example) represent different modes within the population of tokens, and the MCR$^2$ objective seeks to find token features of each group which are \textit{compressed} within a group while the set of all token features is as expansive as possible (see \eqref{eq:MCR pi}). 
  
 %  In particular, let $\bm \Pi = [\bm \pi_1, \ldots, \bm \pi_K] \in \R^{N \times K}$ be a stochastic ``group assignment'' matrix (i.e., $\bm \Pi \bm 1 = \bm 1$ and $\Pi_{ik} \geq 0, \  \forall (i,k) \in [N] \times [K]$ ) that assigns a group membership probability to each token (i.e., the $i^\text{th}$ row of $\bm\Pi$ is a probability vector for group membership for the $i^\text{th}$ token).  Then, letting $\epsilon > 0$ and $N_k \doteq \langle \bm\pi_k, \bm 1 \rangle$ for each \(k \in [K]\), the MCR$^2$ objective, denoted as $\Delta R(\bm Z,\bm \Pi)$, is:
 % \begin{equation}
