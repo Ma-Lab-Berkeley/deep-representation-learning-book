@@ -1936,7 +1936,7 @@ such low-dimensional structures.
   class label $y \in [K]$, and we can use them to define a more general operator
   that can represent both the unconditional and class-conditional denoisers.
   More precisely, consider the mapping
-  \begin{equation}
+  \begin{equation}\label{eq:mog-conditional-denoising-unified-operator}
     (\vx_t, \vv) \mapsto
     \sum_{k = 1}^{K}\frac{
       \exp\rp{\frac{1}{2t^{2}(1
@@ -1951,6 +1951,7 @@ such low-dimensional structures.
   \end{equation}
   If we substitute $\vv = \vv_y$ for some $y \in [K]$, we get
   \begin{align}
+    \begin{split}
     \sum_{k = 1}^{K}
     \frac{
       \exp\rp{\frac{1}{2t^{2}(1
@@ -1963,18 +1964,109 @@ such low-dimensional structures.
     }
     \vU_{k}\vU_{k}^{\top}\vx_t
     &=
+    \frac{
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vv_y}
+    }
+    {
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vv_y}
+      + K-1
+    }
+    \vU_{y}\vU_{y}^{\top}\vx_t
+    \\
+    &\quad+
+    \sum_{k \neq y}
+    \frac{
+      1
+    }
+    {
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vv_y}
+      + K-1
+    }
+    \vU_{k}\vU_{k}^{\top}\vx_t.
+    \end{split}
   \end{align}
-
-
-
-
-
-  % loosely parallels the structure of the rate reduction gradient ascent
-  % iteration we studied in the classification setting in \Cref{ch:unrolling}, in
-  % the special case where a single sample is used.
+  Now, because $\vx_t = \alpha_t \vx + \sigma_t \vg$, if the subspace dimension
+  $P$ is sufficiently large---for example, if we consider a large-scale,
+  asymptotic regime where $P, D \to \infty$ with their ratio $P/D$ converging to
+  a fixed constant---we have for $t \approx 0$ that $\norm{\vx_t}_2$ is close to
+  $\sqrt{P}$, by the concentration of measure phenomenon\footnote{One of the few
+  \textit{blessings of dimensionality}---see \textcite{Wright-Ma-2022}.}. Then
+  by the argument in the previous paragraph, we have in this regime that for
+  \textit{almost all} realizations of $\vx_t$, the following approximation
+  holds:
+  \begin{equation}
+    \sum_{k = 1}^{K}
+    \frac{
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_k \vU_k^\top \vv_y}
+    }
+    {
+      \sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_i \vU_i^\top \vv_y}
+    }
+    \vU_{k}\vU_{k}^{\top}\vx_t
+    \approx
+    \vU_{y}\vU_{y}^{\top}\vx_t.
+  \end{equation}
+  This argument shows that the operator
+  \eqref{eq:mog-conditional-denoising-unified-operator} is, with overwhelming
+  probability, \textit{equal to the optimal class-conditional denoiser
+  \eqref{eq:gmm_lowrank_denoiser-ch6-classcond} for $y$
+  when $\vv = \vv_y$}! In intuitive terms, at small noise levels $t \approx
+  0$---corresponding to the structure-enforcing portion of the denoising
+  process---plugging in the embedding for a given class $y$ to the second
+  argument of the operator \eqref{eq:mog-conditional-denoising-unified-operator}
+  leads the resulting function of $\vx_t$ to well-approximate the optimal
+  class-conditional denoiser \eqref{eq:gmm_lowrank_denoiser-ch6-classcond} for
+  $y$. Moreover, it is evident that plugging in $\vv = \vx_t$ to the operator
+  \eqref{eq:mog-conditional-denoising-unified-operator} yields (exactly) the
+  optimal unconditional denoiser \eqref{eq:gmm_lowrank_denoiser-ch6-uncond} for $\vx_t$.
+  Thus, this operator provides a unified way to parameterize the constituent
+  operators in the optimal denoiser for $\vx$ \textit{within a single
+  `network'}: it is enough to add the output of an instantiation of
+  \eqref{eq:mog-conditional-denoising-unified-operator} with input $(\vx_t,
+  \vx_t)$ to an instantiation with input $(\vx_t, \vv_y$). The resulting
+  operator is a function of $(\vx_t, y)$, and computationally, the subspaces
+  $(\vU_k)_{k=1}^K$ and embeddings $y \mapsto \vv_y$ become its learnable
+  parameters.
 \end{example}
 
-
+\Cref{example:denoising-gaussian-mixture-cfg} shows that in the special case of
+a low-rank mixture of Gaussians data distribution for $\vx$ with incoherent
+components, operators of the form
+\begin{equation}\label{eq:operator-for-parameterizing-cfg-denoiser-mog}
+  (\vx_t, \vv) \mapsto
+  \sum_{k = 1}^{K}\frac{
+    \exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\vx_t^\top \vU_k \vU_k^\top \vv}
+  }
+  {
+    \sum_{i
+    = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\vx_t^\top \vU_i \vU_i^\top \vv}
+  }
+  \vU_{k}\vU_{k}^{\top}\vx_t
+\end{equation}
+provide a sufficiently rich class of operators to parameterize the MMSE-optimal
+denoiser for noisy observations $\vx_t$ of $\vx$, in the setting of
+classifier-free guidance where one network is to be used to represent both the
+unconditional and class-conditional denoisers for $\vx_t$. For such operators,
+the auxiliary input $\vv$ can be taken as either $\vx_t$ or a suitable embedding
+of the class label $y \mapsto \vv_y$ in order to realize such a denoiser.
+Based on the framework in \Cref{ch:unrolling}, which develops deep network
+architectures suitable for transforming more general data distributions to
+structured representations using the low-rank mixture of Gaussians model as
+a primitive, it is natural to imagine that operators of the type
+\eqref{eq:operator-for-parameterizing-cfg-denoiser-mog} may be leveraged in
+denoisers for
+general data distributions $\vx$ with low-dimensional geometrically-structured
+components that are sufficiently distinguishable (say, incoherent) from one
+another.
+The next section demonstrates that this is indeed the case.
 
 % In practice, there are typically two situations:
 % one is that the observation function $h(\spcdot)$ is explicitly known,
