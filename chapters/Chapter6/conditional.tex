@@ -4,6 +4,8 @@
 \begin{document}
 
 \chapter{Inference with Low-Dimensional Distributions}
+\label{ch:conditional-inference}
+
 \begin{quote}
 
 \hfill    ``{\em Mathematics is the art of giving the same name to different things}.''
@@ -17,20 +19,71 @@ In the previous chapters of this book, we have studied how to effectively and ef
 
 More generally, however, the universality and scalability of the theoretical and computational framework presented in this book have enabled us to learn the distribution of a variety of important real-world high-dimensional data such as natural languages, human poses, natural images, videos, and even 3D scenes. Once the intrinsic rich and low-dimensional structures of these real data can be learned and represented correctly, they start to enable a broad family of powerful, often seemingly miraculous, tasks. Hence, here onwards, we will start to show how to connect and tailor the general methods presented in previous chapters to learn useful representations for specific structured data distributions and for many popular tasks in modern practice of machine intelligence. 
 
+\section{Bayesian Inference and Constrained Optimization}
 \paragraph{Leveraging Low-dimensionality for Stable and Robust Inference.}
-Generally speaking, a good representation or autoencoding should enable us to utilize the learned low-dimensional distribution of the data $\x$ and its representation $\z$ for various subsequent classification, estimation, and generation tasks under different conditions. As we have alluded to earlier in Chapter \ref{ch:intro} Section \ref{sec:intro-low-dimensionality}, the importance of the {\em low-dimensionality} of the distribution is the key for us to conduct stable and robust inference related to the data $\x$, as illustrated by the few simple examples in Figure \ref{fig:low-dim-properties}, from incomplete, noisy, and even corrupted observations. As it turns out, the very same concept carries over to real high-dimensional data with a low-dimensional support, say a nonlinear submanifold. 
+Generally speaking, a good representation or autoencoding should enable us to utilize the learned low-dimensional distribution of the data $\x$ and its representation $\z$ for various subsequent classification, estimation, and generation tasks under different conditions. As we have alluded to earlier in Chapter \ref{ch:intro} Section \ref{sec:intro-low-dimensionality}, the importance of the {\em low-dimensionality} of the distribution is the key for us to conduct stable and robust inference related to the data $\x$, as illustrated by the few simple examples in Figure \ref{fig:low-dim-properties}, from incomplete, noisy, and even corrupted observations. As it turns out, the very same concept carries over to real-world high-dimensional data whose distributions have a low-dimensional support, such as natural images. 
 
 Despite a dazzling variety of applications in the practice of machine learning with data such as languages, images, videos and many other modalities, almost all practical applications can be viewed as a special case of the following inference problem: given an observation $\y$ that depends on $\x$, say
 \begin{equation}
     \y = h(\x) + \boldsymbol{w},
 \end{equation}
-where $h(\cdot)$ represents measurements of a part of $\x$ or its certain observed attributes and $\vw$ represents some measurement noise and even (sparse) corruptions, solve the ``inverse problem'' of obtaining a good estimate $\hat \x(\y)$ of $\x$ or generating a sample $\hat{\x}$ that is consistent with the observation $\y \approx h(\hat{\x})$. 
+where $h(\cdot)$ represents measurements of a part of $\x$ or its certain observed attributes and $\vw$ represents some measurement noise and even (sparse) corruptions, solve the ``inverse problem'' of obtaining a most likely estimate $\hat \x(\y)$ of $\x$ or generating a sample $\hat{\x}$ that is at least consistent with the observation $\y \approx h(\hat{\x})$. 
 
-Generally speaking, to accomplish such tasks well, we essentially need to get a hold of the conditional distribution $p(\x\mid \y)$. Both the conditional estimate $\hat{\x} = \mathbb{E}(\x \mid \y)$ and conditional generation $\hat{\x} \sim p(\x \mid \y)$ (or sampling or prediction) can be inferred from the conditional distribution. Notice that from the Bayes' rule, we have
+\paragraph{Statistical Interpretation via the Bayes' Rule.} Generally speaking, to accomplish such tasks well, we essentially need to get a hold of the conditional distribution $p(\x\mid \y)$. Either the maximal likelihood estimate (prediction): $$\hat{\x} = \arg\max_{\x} p(\x\mid \y),$$ the conditional expected estimate: $$\hat{\x} = \mathbb{E}(\x \mid \y) = \int \x p(\x\mid \y)~d \x,$$ or the conditional generation (sampling):  $$\hat{\x} \sim p(\x \mid \y)$$ can be inferred from the conditional distribution. 
+
+Notice that from the {\em Bayes' rule}, we have
 \begin{equation}
 p(\x\mid \y) = \frac{p(\y\mid \x) p(\x) }{p(\y)}.
 \end{equation} 
-Computing the conditional distribution naturally depends on the (low-dimensional) distribution $p(\x)$ of the data $\x$ and the observation model $h(\cdot)$ that determines $p(\y \mid \x)$. 
+For instance, the maximal likelihood estimate can be computed by solving the following (maximal log likelihood) program:
+\begin{equation}
+    \hat{\x} = \arg\max_{\x} \log p(\y\mid \x) + \log p(\x), 
+\end{equation}
+say via gradient ascent:
+\begin{equation}
+    \x_{k+1} = \x_k + \alpha \cdot \big(\nabla_{\x} \log p(\y \mid \x) + \nabla_{\x} \log p(\x)\big).
+    \label{eqn:loglikelihoo-gradient-ascent}
+\end{equation}
+Efficiently computing the conditional distribution $p(\x \mid \y)$ naturally depends on how we learn and exploit the low-dimensional distribution $p(\x)$ of the data $\x$ and the observation model $\y = h(\x) + \vw$ that determines the conditional distribution $p(\y \mid \x)$. 
+
+\paragraph{Geometric Interpretation as Constrained Optimization.}
+
+As the support of the distributions of $\x$ is low-dimensional, we may assume that there exist functions:
+\begin{equation}
+F(\x) = \boldsymbol{0}
+\end{equation}
+such that $\mathcal{S}_{\x} \doteq \{\x \mid F((\x)) = \va\}$ is the low-dimensional support of the distribution $p(\x)$. Geometrically, one natural choice of $F(\x)$ is the ``distance function'' to the support $\mathcal{S}_{\x}$:\footnote{Notice that, in reality, we only have discrete samples on the support of the distribution. In the same spirit of continuation, through diffusion or lossy coding studied in Chapter \ref{ch:compression},  we may approximate the distance function as $    F(\x) = \min_{\x_p \in \mathcal{S}_{\x}} \|\x - \x_p\|_2$ where $\mathcal{S}_{\x}$ is replaced by an $\epsilon$-tabular neighborhood of the set of samples, or a covering of the samples with $\epsilon$-balls. }
+\begin{equation}
+    F(\x) = \min_{\x_p \in \mathcal{S}_{\x}} \|\x - \x_p\|_2. 
+\end{equation}
+Now given $\y = h(\x) +\vw$, to solve for $\x$, we can solve the following constrained optimization problem:
+\begin{equation}
+    \max_{\x} - \frac{1}{2}\|h(\x) - \y\|_2^2 \quad \mbox{s.t.} \quad F(\x) = \boldsymbol{0}. 
+\end{equation}
+Using augmented Lagrange multiplier method, we can solve the following unconstrained program:
+\begin{equation}
+   \max_{\x} -\frac{1}{2}\|h(\x) - \y\|_2^2  + \vlambda^T F(\x) - \frac{\mu}{2} \|F(\x)\|_2^2
+\end{equation}
+for some constant Lagrange multipliers $\vlambda$.
+This is equivalent to the following program:
+\begin{equation}
+\max_{\x} \log \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big) + \log \exp\Big( - \frac{\mu}{2} \big\|F(\x) - \vlambda/\mu\big\|_2^2\Big),   
+\end{equation} where $\vc \doteq {\vlambda}/{\mu}$ can be viewed as a ``mean.'' 
+
+We may view the first term as the conditional probability of $\y$ given $\x$, and the second term as a probability density for $\x$:
+\begin{equation}
+p(\y\mid \x) \propto \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big), \quad 
+    p(\x) \propto \exp\Big( - \frac{\mu}{2}\|F(\x) - \vc\|_2^2\Big).
+\end{equation} As $\mu$ becomes large when enforcing the constraint via continuation, $\|\vc\|_2$ becomes increasingly small.
+
+Notice that solving the above program via gradient ascent is equivalent to the above maximal likelihood estimate \eqref{eqn:loglikelihoo-gradient-ascent}, 
+in which the gradient  takes the form:
+\begin{equation}
+   \nabla_{\x} \log p(\y \mid \x) + \nabla_{\x} \log p(\x)   =  J_h(\x)^*\big(\y - h(\x)\big) + \mu J_F(\x)^* \big(\vc - F(\x)\big),
+\end{equation}
+where $J_h(\x), J_F(\x)$ are the Jacobian of $h(\x), F(\x)$, respectively. Notice that, the augmented Lagrange multiplier method that enforces the constraint $F(\x) = \boldsymbol{0}$ via gradient ascent is equivalent to use the score function of the probability density $p(\x)$ and conditional probability density $p(\y\mid \x)$ (in the space of $\x$).
+%One may view this as the geometric interpretation of the conditional generation score developed earlier in \eqref{eqn:conditional-denoising-score}. 
+
 
 \paragraph{Several Representative Practical Settings.} 
 In practice, however, initial information about the distributions of $\x$ and the relationship between $\x$ and $\y$ can be given in many different ways or forms. In general, they can mostly be categorized into four cases, which are, conceptually, increasingly more challenging:
@@ -62,15 +115,15 @@ In this chapter, we will discuss general approaches to learn the desired distrib
 % In this chapter and the next, we show how to apply these methods to learn the distribution and representation of many practical data which facilitate many real tasks in increasingly more general and challenging settings. 
 
 
-\section{Conditional Estimation with a Known Data Distribution}
+\section{Conditional Inference with a Known Data Distribution}
 Notice that in the setting we have discussed in previous Chapters, the
-autoencoding network is trained to reconstruct a set of complete samples of the random vector $\x$. This would allow us to generate samples of the learned (low-dimensional) distribution. In practice, however, the low-dimensionality of the distribution, once given or known, can be exploited for stable and robust recovery, completion, or prediction tasks. That is, under rather mild conditions, one can recover $\x$, from highly compressive, partial, noisy or even corrupted measures of $x$ of the kind:
+autoencoding network is trained to reconstruct a set of samples of the random vector $\x$. This would allow us to regenerate samples from  the learned (low-dimensional) distribution. In practice, the low-dimensionality of the distribution, once given or learned, can be exploited for stable and robust recovery, completion, or prediction tasks. That is, under rather mild conditions, one can recover $\x$, from highly compressive, partial, noisy or even corrupted measures of $x$ of the kind:
 \begin{equation}
     \y = h(\x) + \vw,
 \end{equation}
-where $\y$ is typically of much lower dimension that $\x$ and $\vw$ can be random noise or sparse gross corruptions. This is a class of problems that have been extensively studied in the classical signal processing literature. Interested readers may see \cite{Wright-Ma-2022} for a complete exposition of this topic.
+where $\y$ is typically an observation of $\x$ that is of much lower dimension that $\x$ and $\vw$ can be random noise or even sparse gross corruptions. This is a class of problems that have been extensively studied in the classical signal processing literature, for low-dimensional structures such as sparse vectors, low-rank matrices, and beyond. Interested readers may see \cite{Wright-Ma-2022} for a complete exposition of this topic.
 
-Here to put the classic work in a more general modern setting, we illustrate the basic idea and facts through the arguably simplest task of data completion. That, we consider the problem of recovering a sample $\x$ when parts of it are missing (or even corrupted). That is, we want to recover or predict the rest of $\x$
+Here to put the classic work in a more general modern setting, we illustrate the basic idea and facts through the arguably simplest task of data (and particularlly image)  completion. That is, we consider the problem of recovering a sample $\x$ when parts of it are missing (or even corrupted). We want to recover or predict the rest of $\x$
 from observing only a fraction of it:
 \begin{equation}
 f: \mathcal{P}_{\Omega}(\x) \mapsto \hat{\x},
@@ -78,28 +131,26 @@ f: \mathcal{P}_{\Omega}(\x) \mapsto \hat{\x},
 where $\mathcal{P}_{\Omega}(\spcdot)$ represents a masking operation
 (see \Cref{fig:matrix-completion} for an example).
 
-In this section and the next, we will study the completion task under two different conditions: one is when the distribution of the data $\x$ is already given, either learned or known a priori (even in certain analytical form); one is when only raw samples of $\x$ are available and we need to learn the low-dimensional distribution from the samples in order to solve the completion task well.
+In this section and the next, we will study the completion task under two different scenarios: One is when the distribution of the data $\x$ of interest is already given {\em apriori}, even in a certain analytical form. This is the case that prevails in classic signal processing where the structures of the signals are assumed to be known, for example,  band-limited, sparse or low-rank. The other is when only raw samples of $\x$ are available and we need to learn the low-dimensional distribution from the samples in order to solve the completion task well. This is the case for the tasks of natural image completion or video frame prediction. As a precursor to the rest of the chapter, we start with the simplest case of image completion: when the image to be completed can be well modeled as a low-rank matrix. We will move on to increasingly more general cases and more challenging settings later.
 
-\subsection{Low-rank Matrix Completion}
+\paragraph{Low-rank Matrix Completion.}  
 The low-rank {\em matrix
-completion} problem is a classical problem for data completion when its distribution is low-dimensional and known. Consider a random vector $\x \in \mathbb{R}^m$
-which is distributed according to a low-rank Gaussian (or
-low-dimensional subspace) of rank $r < m$. Suppose we have drawn $n >
-r$ independent samples from this distribution and form a matrix $\X_o =
-[\x_1, \ldots, \x_n] \in \mathbb{R}^{m\times n}$. Obviously, the rank
+completion} problem is a classical problem for data completion when its distribution is low-dimensional and known. Consider a  random sample of a matrix $\X_o =
+[\x_1, \ldots, \x_n] \in \mathbb{R}^{m\times n}$ from the space of all matrices of rank $r$. In general, we assume the rank
 of the matrix is
 \begin{equation}
 \mbox{rank}(\X_o) = r < \min\{m, n\}.
 \end{equation}
-Now let $\Omega$ indicate a set indices of observed entries of the
-matrix $\X_o$. Let the observed entries to be:
+So it is clear that locally the intrinsic dimension of the space of all matrix of rank $r$ is much lower than the ambient space $mn$.
+
+Now, let $\Omega$ indicate a set indices of observed entries of the matrix $\X_o$. Let the observed entries to be:
 \begin{equation}
 \Y = \mathcal{P}_{\Omega}(\X_o).
 \end{equation}
 The remaining entries supported on $\Omega^c$ are unobserved or
 missing. The problem is whether we can recover from $\Y$ the missing
-entries correctly.  Figure \ref{fig:matrix-completion} shows one
-example of matrix completion.
+entries of $\X$ correctly and efficiently.  Figure \ref{fig:matrix-completion} shows one
+example of completing such a matrix.
 % \begin{figure}
 %     \centering
 %     \includegraphics[width=0.8\linewidth]{figures/Matrix-Completion.png}
@@ -122,12 +173,9 @@ image $\Y$; middle: the mask $\Omega$; right: the completed image $\hat \X$.}
 \label{fig:matrix-completion}
 \end{figure}
 
-Notice that the fundamental reason why such a matrix can be completed
-is because columns and rows of the matrix are highly correlated and
+Notice that the fundamental reason why such a matrix can be completed is because columns and rows of the matrix are highly correlated and
 they all lie on a low-dimensional subspace. For the example shown in
-Figure \ref{fig:matrix-completion}, the dimension or the rank of the
-matrix completed is only two. Hence the fundamental idea to recover
-such a matrix is to seek a matrix that has the lowest rank among all
+Figure \ref{fig:matrix-completion}, the dimension or the rank of the matrix completed is only two. Hence the fundamental idea to recover such a matrix is to seek a matrix that has the lowest rank among all
 matrices that have entries agreeing with the observed ones:
 \begin{equation}
 \min_{\X} \mbox{rank}(\X) \quad \mbox{subject to}
@@ -135,9 +183,8 @@ matrices that have entries agreeing with the observed ones:
 \Y = \mathcal{P}_{\Omega}(\X).
 \label{eqn:rank-min}
 \end{equation}
-This is known as the {\em low-rank matrix completion} problem.
-However, as the rank function is discontinuous and rank minimization
-is in general an NP-hard problem, we often like to relax it with
+This is known as the {\em low-rank matrix completion} problem. See \cite{Wright-Ma-2022} for a full characterization of the space of all low-rank matrices. As the rank function is discontinuous and rank minimization
+is in general an NP-hard problem, we like to relax it with
 something easier to optimize.
 
 Based on our knowledge about compression from Chapter
@@ -157,10 +204,8 @@ solved via gradient descent. As one can show, the gradient descent
 operator for the $\log\det$ objective is precisely minimizing a close
 surrogate of the rank of the matrix $\X\X^\top$.
 
-The rate distortion function is a nonlinear function, and its gradient
-descent does not always guarantee finding the correct solution.
-However, since the underlying structure sought for $\X$ is linear,
-the rank function admits a rather effective convex relaxation: the
+The rate distortion function is a nonconvex function, and its gradient
+descent does not always guarantee finding the globally optimal solution. Nevertheless, since the underlying structure sought for $\X$ is piecewise linear, the rank function admits a rather effective convex relaxation: the
 nuclear norm---the sum of all singular values of the matrix $\X$. As
 shown in the compressive sensing literature, under fairly
 broad conditions,\footnote{Typically, such conditions specify the
@@ -200,7 +245,9 @@ additional corruption and distortion
 \end{equation}
 where $\tau$ is some unknown nonlinear distortion of the image and $\boldsymbol{E}$ is an unknown matrix that models some (sparse) occlusion and corruption. Again, interested readers may refer to \cite{Wright-Ma-2022} for a more detailed account.
 
-\section{Conditional Generation by Learning a Data Representation}
+\section{Conditional Inference with a Learned Data Representation}
+In the previous subsection, the reason we can infer $\x$ from the partial observation $\y$ is because (support of) the distribution of $\X$ is known or specified {\em apriori}, say as the set of all low-rank matrices. For many practical dataset, we do not have its distribution in an analytical form as the low-rank matrices, say the set to of all natural images. Nevertheless, if we have sufficient samples of the data $\x$, we should be able to learn its low-dimensional distribution first and leverage it for future inference tasks based on an observation $\y = h(\x) + \vw$. In this section, we assume the observation model $h(\cdot)$ is given and known. We will study the case when $h(\cdot)$ is not explicitly given in the next section.
+
 
 \subsection{Image Completion with Masked Auto-Encoding}
 For a general image $\vX$ such as the one shown on the left of Figure
@@ -233,7 +280,7 @@ corresponding decoder layer \(g^{L - \ell}\).}
 %\vspace{-0.2in}
 \end{figure}
 
-One natural approach is to find an encoding and decoding scheme by
+One empirical approach to the image completion task is to find an encoding and decoding scheme by
 solving the following {\em masked autoencoding} (MAE) program that
 minimizes the reconstruction loss:
 \begin{equation}\label{eq:mae_loss}
@@ -325,10 +372,10 @@ found in Chapter \ref{ch:applications}.
 %\yima{We now relax the requirement of sample-wise reconstruction to
 % distribution-wise.}
 
-The above (masked) autoencoding problems can be viewed to sample the learned low-dimensional distribution such that the generated samples are consistent with certain observations or conditions.
 
-But let us examine the image completion task studied in the previous
-section: Given the
+\subsection{Conditional Sampling with Measurement Matching}
+\label{sec:conditioned-decoding}
+The above (masked) autoencoding problem aims to generate a sample image that is consistent with certain observations or conditions. But let us examine the approach more closely: Given the
 visual part of an image $\X_v = \mathcal{P}_{\Omega}(\X)$, we try to
 estimate the masked part $\X_m = \mathcal{P}_{\Omega^c}(\X)$. For realizations
 $(\vXi_v, \vXi_m)$ of the random variable $\vX=(\vX_v, \vX_m)$, let
@@ -349,16 +396,34 @@ are a little blurry.
 For many practical purposes, we would like to learn (a representation
 of) the conditional distribution $p_{\X_m \mid \X_v}$, or equivalently
 $p_{\X \mid \X_v}$,
-and then sample this distribution directly. Notice that, when the
-distribution of $\X$ is low-dimensional, it is possible that if a
+and then get a clear (most likely) sample from this distribution directly. Notice that, when the distribution of $\X$ is low-dimensional, it is possible that if a
 sufficient part of $\X$, $\X_v$, is observed, it fully determines
 $\X$ hence the missing part $\X_m$. In other words, the distribution
 $p_{\X \mid \X_v}$ is a generalized function---if $\vX$ is fully determined by $\vX_v$ it is the delta function, and more generally one of its exotic cousins.
 
-\subsection{Conditional Sampling with Measurement Matching}
-\label{sec:conditioned-decoding}
-To generalize the above (image) completion problems, we may consider
-that a random vector $\vx \sim p$ is partially observed through a more
+Hence, instead of solving the completion task as a conditional estimation problem, we should address it as a conditional sampling problem. To that end, we should first learn the (low-dimensional) distribution of all natural images $\X$. If we have sufficient samples of natural images, we can learn the distribution via a denoising process $\X_t$ described in Chapter \ref{ch:compression}. Then the problem of recovering $\X$ from its partial observation $\Y = \mathcal{P}_\Omega(\x) +\vw$ becomes a conditional generation problem -- to sample the distribution conditioned on the observation.
+
+\paragraph{General Linear Measurements.} 
+In fact, we may even consider recovering $\X$ from a more general linear observation model:
+\begin{equation}
+    \Y = \vA(\X_0),  \quad \X_t = \X_0 + \sigma_t \vG,  
+\end{equation}
+where $\vG \sim \mathcal{N}(\boldsymbol{0}, \vI)$. The masking operator $\mathcal{P}_{\Omega}(\cdot)$ in the image completion task is one example of such a linear model. Then it has been shown by \cite{daras2023ambient} that 
+\begin{equation}
+    \hat{\X}_* = \argmin \mathbb{E}[\|\vA(\hat{\X}(\vA\X_t, \vA) - \X_0)\|^2]
+\end{equation}
+satisfies the condition that:
+\begin{equation}
+    \vA (\hat{\X}_*(\vA(\X_t), \vA)) = \vA (\mathbb{E}[\X_0 \mid \vA \X_t, \vA]).
+\end{equation} Notice that in the special case when $\vA$ is of  full column rank, we have $ \mathbb{E}[\X_0 \mid \vA\X_t, \vA] = \mathbb{E}[\X_0 \mid \X_t]$. Hence, in the more general case, it has been suggested by \cite{daras2023ambient} that one could still use the so obtained $\mathbb{E}[\X_0 \mid \vA(\X_t), \vA]$ to replace the $\mathbb{E}[\X_0 \mid \X_t]$ in the normal denoising process for $\X_t$:
+\begin{equation}
+    \X_{t-s} = \gamma_t \X_t + (1-\gamma_t) \mathbb{E}[\X_0 \mid \vA\X_t, \vA].
+\end{equation}
+This usually works very well in practice, say for many image restoration tasks, as shown in \cite{daras2023ambient}. Compared to the blurry images recovered from MAE, the images recovered by the above method are much sharper as it leverages a learned distribution of natural image and sample a (sharp) image from the distribution that is consistent with the measurement.
+
+
+\paragraph{General Nonlinear Measurements.}
+To generalize the above (image) completion problems and make things more rigorous, we may consider that a random vector $\vx \sim p$ is partially observed through a more
 general observation function:
 \begin{equation}\label{eq:measurement-matching-observation}
 \vy = h(\vx) + \vw,
@@ -466,7 +531,8 @@ in the usual denoising-diffusion process, together with the measurement $\vy$.
 Because our assumed observation model \eqref{eq:measurement-matching-observation}
 implies that $\vx_t$ and $\vy$ are independent conditioned on $\vx$, we have for
 any realization $\vnu$ of $\vy$
-\begin{align*}
+\begin{equation}\label{eq:conditional-denoising-conditioning-order-irrelevant}
+  \begin{split}
   p_{\posteriorsample_t\mid \vy}(\spcdot \mid \vnu)
   &= \int
   \underbrace{p_{\posteriorsample_t \mid \posteriorsample}(\spcdot\mid \vxi)}_{=
@@ -483,7 +549,8 @@ any realization $\vnu$ of $\vy$
   \int p_{\vx_t, \vx \mid \vy}(\spcdot, \vxi \mid \vnu) \odif \vxi
   \\
   &= p_{\vx_t \mid \vy}(\spcdot\mid \vnu).
-\end{align*}
+  \end{split}
+\end{equation}
 Above, the first line recognizes an equivalence between the distributions
 arising in \Cref{fig:posterior-sampling-cds} (a,b); the second line applies this
 together with conditional independence of $\vx_t$ and $\vy$ given $\vx$; the
@@ -520,6 +587,7 @@ The conditional score function then satisfies, for any realization $(\vxi,
   \underbrace{\nabla_{\vxi} \log p_t(\vxi)}_{\text{score matching}}
   +
   \underbrace{\nabla_{\vxi} \log p_{\vy \mid \vx_t}(\vnu \mid \vxi)}_{\text{measurement matching}},
+  \label{eqn:conditional-denoising-score}
 \end{equation}
 giving (by Tweedie's formula) our proposed denoisers as
 \begin{align*}
@@ -539,6 +607,7 @@ so-called ``measurement matching'' term) enforces consistency with the
 observations $\vy$. The reader should take care to note to which argument the
 gradient operators are applying in the above score functions in order to fully
 grasp the meaning of this operator.
+\yima{Can we simply replace $\log p(\y \mid \x_t)$ with the measurement constraint $\|\y - h(\x_t)\|^2$ and use its gradient to replae the second term in the above equation?}
 
 The key remaining issue in making this procedure computational is to prescribe
 how to compute the measurement matching correction, since in general we do not
@@ -959,6 +1028,7 @@ of the entire process, continuing from those we have developed in
   % \end{equation}
 \end{example}
 
+
 \Cref{example:denoising-conditional-gaussian} suggests a convenient
 approximation for the measurement matching term
 \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx},
@@ -1050,7 +1120,7 @@ requires only
     \Require{Forward model $h : \bR^D \to \bR^d$ and measurement noise variance
     $\sigma^2 > 0$.}
 		\Require{Scale and noise level functions \(\alpha, \sigma \colon \{t_{\ell}\}_{\ell = 0}^{L} \to \R_{\geq 0}\).}
-    \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{\vy \mid \vx}\).}
+    \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{\vx \mid \vy}\).}
     \Function{DDIMSamplerConditionalDPS}{$\bar{\vx}_{\theta}, \vnu, h, \sigma^2,
     (t_{\ell})_{\ell = 0}^{L}$}
 		\State{Initialize \(\hat{\vx}_{t_{L}} \sim\) approximate distribution of \(\vx_{t_{L}}\)} \Comment{VP \(\implies \dNorm(\vzero, \vI)\), VE \(\implies \dNorm(\vzero, t_{L}^{2}\vI)\).}
@@ -1094,6 +1164,8 @@ modifications to extend to a general noising process, as in
 $t_{\ell} = T\ell / L$, as for \Cref{eq:denoising-iteration-basic} in
 \Cref{sub:compression_denoising}).
 
+
+
 \subsection{Body Pose Generation Conditioned on Head and Hands} The type of conditional estimation or generation problems arise rather naturally in many practical applications. 
 A typical problem of this kind is how to estimate and generate body pose and hand gesture conditioned on a given head pose and egocentric images, as illustrated in Figure \ref{fig:pose-teaser}. This is often the problem we need to solve when one is wearing a head-mounted device such as the Vision-pro from Apple or the Project Aria from Meta. The pose of the whole body and the gesture of the hands need to be inferred so that we can use the information to control virtual objects that the person interacts with.
 \begin{figure*}[t]
@@ -1106,7 +1178,7 @@ A system that estimates human body height, pose,  and hand parameters (middle), 
 
 \end{figure*}
 
-Notice that in this case, one only has the head pose  provided by the device and a very limited field of view for part of one's hands and upper limps. The pose of the rest of the body needs to ``inferred'' or ``completed'' based on such partial information. The only way one can estimate the body pose over time is by learning the joint distribution of the head and body pose sequences in advance and then sample this prior distribution conditioned on the real-time partial inputs. Figure \ref{fig:pose-method} outlines a system called EgoAllo \cite{yi2024egoallo} to solve this problem based on a learned conditional diffusion-denoising model. 
+Notice that in this case, one only has the head pose  provided by the device and a very limited field of view for part of one's hands and upper limbs. The pose of the rest of the body needs to ``inferred'' or ``completed'' based on such partial information. The only way one can estimate the body pose over time is by learning the joint distribution of the head and body pose sequences in advance and then sample this prior distribution conditioned on the real-time partial inputs. Figure \ref{fig:pose-method} outlines a system called EgoAllo \cite{yi2024egoallo} to solve this problem based on a learned conditional diffusion-denoising model. 
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\linewidth]{figs_chap6/pose-method.pdf}
@@ -1159,9 +1231,17 @@ The ground-truth motion is compared with one output from EgoAllo that is consist
 \label{fig:comparison}
 \end{figure}
 
-Strictly speaking, the solution proposed in EgoAllo \cite{yi2024egoallo} does not enforce measurement matching using the techniques introduced above. Instead it heuristically enforces the condition by utilizing  the cross-attention mechanism in a transformer architecture. There is reason to believe that the cross-attention mechanism is in a way approximately realizing the conditional sampling of the denoising a posteriori. We believe the more principled techniques introduced here, if properly implemented, can lead to better methods that further improve the body pose estimation. 
+Strictly speaking, the solution proposed in EgoAllo \cite{yi2024egoallo} does
+not enforce measurement matching using the techniques introduced above. Instead
+it heuristically enforces the condition by utilizing  the cross-attention
+mechanism in a transformer architecture. As we will describe with more precision
+in the paired data setting in \Cref{sub:text-cond}, there is reason to believe that the
+cross-attention mechanism is in a way approximately realizing the conditional
+sampling of the denoising a posteriori. We believe the more principled
+techniques introduced here, if properly implemented, can lead to better methods
+that further improve the body pose and hand gesture estimation. 
 
-\section{Conditional Generation with Paired Data}
+\section{Conditional Inference with Paired Data and Measurements}
 In many practical applications, we do not know either the distribution of the data $\x$ of interest nor the explicit relationship between the data and certain observed attributes $\y$ of the data. We only have  a (large) set of paired samples $(\X, \Y) = \{ (\x_1, \y_1), \ldots, (\x_N, \y_N) \}$ from which we need to infer the data distribution and a mapping that models their relationship:
 \begin{equation}
   h: \x \mapsto \y.
@@ -1240,8 +1320,9 @@ data setting
 \begin{equation}\label{eq:conditional-denoising-mmse-denoiser-paired-data}
   \bE[ \vx \mid \vx_t=\vxi, y=\nu]
   =
-  \bE[\vx \mid \vx_t=\vxi] + \frac{\sigma_t^2}{\alpha_t} \nabla_{\vxi}\log p_{y \mid \vx_t}(\nu\mid
-  \vxi).
+  \bE[\vx \mid \vx_t=\vxi] 
+  + \frac{\sigma_t^2}{\alpha_t} 
+  \nabla_{\vxi}\log p_{y \mid \vx_t}(\nu\mid \vxi).
 \end{equation}
 A natural ideal is then to directly implement the likelihood correction term in
 \eqref{eq:conditional-denoising-mmse-denoiser-paired-data} using a deep network
@@ -1294,6 +1375,9 @@ $\theta_{\mathrm{d}}$, on a denoising loss. Such an approach to conditional
 sampling was already recognized and exploited to perform conditional sampling in
 pioneering early works on diffusion models, notably those by
 \citet{Sohl-Dickstein2015} and by \citet{song2020score}.
+% To use \eqref{eq:conditional-denoising-mmse-denoiser-paired-data-approx} at
+% sampling time, it suffices to substitute
+% \eqref{eq:conditional-denoising-mmse-denoiser-paired-data-approx} for the 
 
 % the network maps noisy data samples $\vx_t$ to a probability distribution over
 % measurements $\vy$, then one evaluates its gradient with respect to $\vx_t$
@@ -1342,7 +1426,6 @@ resulting conditional denoiser as having incorporated ``classifier guidance''
 \end{equation}
 with the case $\gamma = 1$ coinciding with
 \eqref{eq:conditional-denoising-mmse-denoiser-paired-data-approx}.
-At sampling time, \sdb{ADD CG ALGO}
 \citet{Dhariwal2021-hg} found that a setting $\gamma > 1$ performed best empirically.
 One possible interpretation for this is as follows: note that, in the context of
 the \textit{true} likelihood term
@@ -1419,24 +1502,185 @@ due to the need for it to work well on noisy inputs $\vx_t$ and incorporate
 other empirically-motivated architecture modifications.
 In particular, \citet{Dhariwal2021-hg} found that it was necessary to explicitly
 design the architecture of the deep network implementing the classifier to match
-that of the denoiser. This motivated \citet{Ho2022-ry} to propose a more
-empirically pragmatic methodology, known as classifier-free guidance (CFG).
-\sdb{CFG...}
+that of the denoiser.
+Moreover, from a purely practical perspective---trying to obtain the best
+possible performance from the resulting sampler---the best-performing
+configuration of classifier guidance-based sampling departs even further from
+the idealized and conceptually sound framework we have presented above.
+To obtain the best performance, \citet{Dhariwal2021-hg} found it
+necessary to provide the class label $y$ as an additional input to the denoiser
+$\bar{\vx}_{\theta_{\mathrm{d}}}$. As a result, the idealized classifier-guided
+denoiser \eqref{eq:conditional-denoising-mmse-denoiser-paired-data-approx-cg},
+derived by \citet{Dhariwal2021-hg} as we have done above from the conditional
+posterior denoiser decomposition
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data}, is not exactly
+reflective of the best-performing denoiser in practice---such a denoiser
+actually combines a \textit{conditional} denoiser for $\vx_t$ given $y$ with an
+additional guidance signal from an auxiliary classifier!
+
+This state of affairs, empirically-motivated as it is, led \citet{Ho2022-ry} in
+subsequent work to propose a more empirically pragmatic methodology, known as
+classifier-free guidance (CFG). Instead of representing the conditional denoiser
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data} as a weighted sum
+of an unconditional denoiser for $\vx_t$ with a log-likelihood correction term
+(with possibly modified weights, as in classifier guidance), they accept the
+apparent necessity of training a conditional denoiser for $\vx_t$ given $y$, as
+demonstrated by the experimental results of \citet{Dhariwal2021-hg}, and replace 
+the log-likelihood gradient term with a correctly-weighted sum of this
+conditional denoiser with an \textit{unconditional} denoiser for $\vx$ given
+$\vx_t$.\footnote{That said, \textcite{Ho2022-ry} actually proposed to use
+a different weighting than what we present here, based on the fact that
+\textcite{Dhariwal2021-hg} heuristically replaced the unconditional denoiser in
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data} with
+a conditional denoiser. In fact, the weighting we derive and present here
+reflects modern practice, and in particular is used in state-of-the-art
+diffusion models such as StableDiffusion 3.5
+\cite{DBLP:conf/icml/EsserKBEMSLLSBP24}.} To see how this structure arises, we
+begin with an `idealized' version of the classifier guidance denoiser
+$\bar{\vx}_{\theta}^{\mathrm{CG}}$ defined in
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data-approx-cg},
+for which the denoiser $\bar{\vx}_{\theta_{\mathrm{d}}}$ and the classifier
+$f_{\theta_{\mathrm{c}}}$ perfectly approximate their targets, via
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data}:
+\begin{equation}\label{eq:conditional-denoising-mmse-denoiser-paired-data-exact-cg}
+  \bar{\vx}_{\theta}^{\mathrm{CG,\,ideal}}(t, \vxi, \nu)
+  =
+  \bE[\vx \mid \vx_t=\vxi]
+  + \gamma\frac{\sigma_t^2}{\alpha_t}
+  \nabla_{\vxi}\log p_{y \mid \vx_t}(\nu\mid \vxi).
+\end{equation}
+We then use Bayes' rule, in the form
+\begin{equation}
+  \log p_{y \mid \vx_t}
+  =
+  \log p_{\vx_t \mid y} + \log p_{y} - \log p_{\vx_t},
+\end{equation}
+together with Tweedie's formula (\Cref{thm:tweedie}, modified as in
+\Cref{eq:gen_tweedie}) to convert between score functions and denoisers,
+to obtain
+\begin{align*}
+  \bar{\vx}_{\theta}^{\mathrm{CG,\,ideal}}(t, \vxi, \nu)
+  &=
+  % \bE[\vx \mid \vx_t=\vxi]
+  % + \gamma\frac{\sigma_t^2}{\alpha_t}
+  % \nabla_{\vxi}\log p_{y \mid \vx_t}(\nu\mid \vxi).
+  \frac{1}{\alpha_t} \vxi 
+  + (1-\gamma) \frac{\sigma_t^2}{\alpha_t} 
+  \nabla_{\vxi}\log p_{\vx_t}(\vxi)
+  + \gamma \frac{\sigma_t^2}{\alpha_t} 
+  \nabla_{\vxi}\log p_{\vx_t \mid y}(\vxi \mid \nu)
+  \\
+  &=
+  (1 - \gamma) \bE[\vx \mid \vx_t=\vxi]
+  +
+  \gamma \bE[\vx \mid \vx_t=\vxi, y=\nu],
+  \labelthis\label{eq:ideal-cfg-denoiser}
+\end{align*}
+where in the last line, we apply
+\Cref{eq:conditional-denoising-conditioning-order-irrelevant}.
+Now, \Cref{eq:ideal-cfg-denoiser} suggests a natural approximation strategy: we
+combine a learned unconditional denoiser for $\vx$ given $\vx_t$, as previously,
+with a learned \textit{conditional} denoiser for $\vx$ given $\vx_t$ and $y$.
+
+%\yima{Following the geometric interpretation of the conditional generation, how effective the above approaches are to utilize the conditional probability $p(y\mid \x)$ depends on whether the conditional probability is given in a form of an effective constraint on $\x$.}
+
+However, following \textcite{Ho2022-ry} and the common practice of training deep network
+denoisers, it is standard to use the \textit{same} deep network to represent
+both the conditional and unconditional denoisers, by introducing an additional
+label, which we will denote by $\varnothing$, to denote the ``unconditional''
+case.
+This leads to the form of the CFG denoiser:
+\begin{equation}\label{eq:conditional-denoising-mmse-denoiser-paired-data-approx-cfg}
+  \bar{\vx}_{\theta}^{\mathrm{CFG}}(t, \vx_t, y)
+  =
+  (1 - \gamma) \bar{\vx}_{\theta}(t, \vx_t, \varnothing)
+  +
+  \gamma \bar{\vx}_{\theta}(t, \vx_t, y).
+\end{equation}
+To train a denoiser $\bar{\vx}_{\theta}(t, \vx_t, y^+)$ for use with
+classifier-free guidance sampling, where $y^+ \in
+\set{1, \dots, K, \varnothing}$, we proceed almost identically to the
+unconditional training procedure in \Cref{alg:learning_denoiser}, but with two
+modifications:
+\begin{enumerate}
+  \item When we sample from the dataset, we sample a pair $(\vx, y)$ rather than
+    just a sample $\vx$.
+  \item Every time we sample a pair from the dataset, we sample the augmented
+    label $y^+$ via
+    \begin{equation}
+      y^+ = \begin{cases}
+        \varnothing & \text{with probability } p_{\mathrm{uncond}}; \\
+        y & \text{else}.
+      \end{cases}
+    \end{equation}
+    Here, $p_{\mathrm{uncond}} \in [0, 1]$ is a new hyperparameter.
+\end{enumerate}
+In this way, we train a conditional denoiser suitable for use in classifier-free
+guidance sampling. We summarize the overall sampling process for
+class-conditioned sampling with classifier-free guidance in
+\Cref{alg:iterative_denoising_conditional_CFG}.
+
+% \sdb{I think it makes sense just to present the algorithm box for CFG.}
+% \begin{algorithm}
+%   \caption{Conditional sampling with classification data, with an unconditional
+%   denoiser and guidance.}
+% 	\label{alg:iterative_denoising_conditional_CG}
+% 	\begin{algorithmic}[1]
+% 		\Require{An ordered list of timesteps \(0 \leq t_{0} < \cdots < t_{L} \leq T\) to use for sampling.}
+%     \Require{An unconditional denoiser \(\bar{\vx}_{\theta} \colon
+%     \{t_{\ell}\}_{\ell = 1}^{L} \times \R^{D} \to \R^{D}\) for $p_{\vx}$.}
+%     \Require{Class label $\nu \in \set{1, \dots, K}$ to condition on.}
+%     \Require{Forward model $h : \bR^D \to \bR^d$ and measurement noise variance
+%     $\sigma^2 > 0$.}
+% 		\Require{Scale and noise level functions \(\alpha, \sigma \colon \{t_{\ell}\}_{\ell = 0}^{L} \to \R_{\geq 0}\).}
+%     \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{y \mid \vx}(\nu \mid
+%     \,\cdot\,)\).}
+%     \Function{DDIMSamplerConditionalDPS}{$\bar{\vx}_{\theta}, \nu, \sigma^2,
+%     (t_{\ell})_{\ell = 0}^{L}$}
+% 		\State{Initialize \(\hat{\vx}_{t_{L}} \sim\) approximate distribution of \(\vx_{t_{L}}\)} \Comment{VP \(\implies \dNorm(\vzero, \vI)\), VE \(\implies \dNorm(\vzero, t_{L}^{2}\vI)\).}
+% 		\For{\(\ell = L, L - 1, \dots, 1\)}
+% 		% \State{Compute
+% 		% 	\begin{equation*}
+%   %       \nabla_{\vxi}\left[ -\frac{1}{2\sigma^2} \norm*{h(
+%   %       \bar{\vx}_{\theta}(t_{\ell}, \vxi)
+%   %       ) - \vnu}_2^2 \right]\biggl|_{\vxi = \hat{\vx}_{t_{\ell}}}\biggr.
+% 		% 	\end{equation*}
+% 		% }
+% 		\State{Compute
+% 			\begin{equation*}
+% 				\hat{\vx}_{t_{\ell - 1}} := \frac{\sigma_{t_{\ell
+%         - 1}}}{\sigma_{t_{\ell}}}\hat{\vx}_{t_{\ell}} + \bp{\alpha_{t_{\ell
+%         - 1}} - \frac{\sigma_{t_{\ell
+%         - 1}}}{\sigma_{t_{\ell}}}\alpha_{t_{\ell}}}\left(
+%         \bar{\vx}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}})
+%         - \frac{\sigma_{t_{\ell}}^2}{2\alpha_{t_\ell}\sigma^2}
+%         \nabla_{\vxi}\left[ \norm*{h( \bar{\vx}_{\theta}(t_{\ell}, \vxi)
+%         ) - \vnu}_2^2 \right]\biggl|_{\vxi = \hat{\vx}_{t_{\ell}}}\biggr.
+%         \right)
+% 			\end{equation*}
+% 		}
+% 		\EndFor
+% 		\State{\Return{\(\hat{\vx}_{t_{0}}\)}}
+% 		\EndFunction
+% 	\end{algorithmic}
+% \end{algorithm}
 
 \begin{algorithm}
-  \caption{Conditional sampling with classification data, with an unconditional
-  denoiser and guidance.}
-	\label{alg:iterative_denoising_conditional_CG_CFG}
+  \caption{Conditional sampling with classification data, using class-conditioned denoiser.}
+	\label{alg:iterative_denoising_conditional_CFG}
 	\begin{algorithmic}[1]
 		\Require{An ordered list of timesteps \(0 \leq t_{0} < \cdots < t_{L} \leq T\) to use for sampling.}
-    \Require{An unconditional denoiser \(\bar{\vx}_{\theta} \colon
-    \{t_{\ell}\}_{\ell = 1}^{L} \times \R^{D} \to \R^{D}\) for $p_{\vx}$.}
-    \Require{Measurement realization $\vnu$ of $\vy$ (\Cref{eq:measurement-matching-observation}) to condition on.}
-    \Require{Forward model $h : \bR^D \to \bR^d$ and measurement noise variance
-    $\sigma^2 > 0$.}
+    \Require{Class label $\nu \in \set{1, \dots, K}$ to condition on.}
+    \Require{A denoiser \(\bar{\vx}_{\theta} \colon
+    \{t_{\ell}\}_{\ell = 1}^{L} \times \R^{D} \times \set{1, \dots, K,
+    \varnothing} \to \R^{D}\) for $p_{\vx \mid y}$ and $p_{\vx}$ (input $\varnothing$ for
+    $p_{\vx}$).}
 		\Require{Scale and noise level functions \(\alpha, \sigma \colon \{t_{\ell}\}_{\ell = 0}^{L} \to \R_{\geq 0}\).}
-    \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{\vy \mid \vx}\).}
-    \Function{DDIMSamplerConditionalDPS}{$\bar{\vx}_{\theta}, \vnu, h, \sigma^2,
+    \Require{Guidance strength $\gamma \geq 0$ ($\gamma > 1$ preferred for
+    performance).}
+    \Ensure{A sample \(\hat{\vx}\), approximately from \(p_{\vx \mid y}(\,\cdot\,
+    \mid \nu)\).}
+    \Function{DDIMSamplerConditionalCFG}{$\bar{\vx}_{\theta}, \nu, \gamma,
     (t_{\ell})_{\ell = 0}^{L}$}
 		\State{Initialize \(\hat{\vx}_{t_{L}} \sim\) approximate distribution of \(\vx_{t_{L}}\)} \Comment{VP \(\implies \dNorm(\vzero, \vI)\), VE \(\implies \dNorm(\vzero, t_{L}^{2}\vI)\).}
 		\For{\(\ell = L, L - 1, \dots, 1\)}
@@ -1452,12 +1696,10 @@ empirically pragmatic methodology, known as classifier-free guidance (CFG).
 				\hat{\vx}_{t_{\ell - 1}} := \frac{\sigma_{t_{\ell
         - 1}}}{\sigma_{t_{\ell}}}\hat{\vx}_{t_{\ell}} + \bp{\alpha_{t_{\ell
         - 1}} - \frac{\sigma_{t_{\ell
-        - 1}}}{\sigma_{t_{\ell}}}\alpha_{t_{\ell}}}\left(
-        \bar{\vx}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}})
-        - \frac{\sigma_{t_{\ell}}^2}{2\alpha_{t_\ell}\sigma^2}
-        \nabla_{\vxi}\left[ \norm*{h( \bar{\vx}_{\theta}(t_{\ell}, \vxi)
-        ) - \vnu}_2^2 \right]\biggl|_{\vxi = \hat{\vx}_{t_{\ell}}}\biggr.
-        \right)
+        - 1}}}{\sigma_{t_{\ell}}}\alpha_{t_{\ell}}}\bigl(
+        (1 - \gamma) \bar{\vx}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}}, \varnothing)
+        + \gamma \bar{\vx}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}}, \nu)
+        \bigr)
 			\end{equation*}
 		}
 		\EndFor
@@ -1466,21 +1708,374 @@ empirically pragmatic methodology, known as classifier-free guidance (CFG).
 	\end{algorithmic}
 \end{algorithm}
 
+\textcite{Ho2022-ry} report strong empirical performance for class-conditional
+image generation with classifier-free guidance, and it has become a mainstay of
+the largest-scale practical diffusion models, such as Stable Diffusion
+\cite{rombach2022high} and its derivatives.
+At the same time, its derivation is rather opaque and empirically-motivated,
+giving little insight into the mechanisms behind its strong performance.
+A number of theoretical works have studied this, providing explanations for some
+parts of the overall CFG methodology
+\cite{Bradley2024-jg,Li2025-li,Wu2024-js}---itself encompassing denoiser
+parameterization and training, as well as configuration of the guidance strength
+and performance at sampling time.
+Below, we will give an interpretation in the simplifying setting
+of a Gaussian mixture model data distribution and denoiser, which will
+demonstrate %
+% an interesting connection to the rate reduction objective studied in
+% chapters \Cref{ch:compression,ch:unrolling}, and thereby 
+an insight into the \textit{parameterization} of the denoiser in the presence of
+such low-dimensional structures.
 
-\sdb{A graf about the fact that CFG is practically-motivated (as the derivation
-shows), and rigorous theory that tries to study them may be too high-resolution
-given this. We propose an understanding based on the rate reduction from ch4...}
+% \sdb{CFG generalizes previous schemes to perform conditional denoising, by
+% directly training a conditional denoiser (what operators/architecture?), and
+% modifying the sampling process with an additional hyperparameter $\gamma$ the
+% guidance strength. How to understand these?
+% The expression for the ideal conditional denoiser with classifier guidance in
+% \Cref{eq:ideal-cfg-denoiser} demonstrates an interesting alternate geometric
+% interpretation of the role guidance plays in shaping the conditional sampling
+% process. $\gamma=1$ just uses the conditional denoiser.
+% Other values of $\gamma > 0$ can be interpreted as an affine combination of
+% these two denoisers. From a low-dimensional structure perspective, conditional
+% and unconditional denoisers behave similarly near the support of the data
+% distribution, which allows convergence! We will get more insight into this
+% sampling-time effect, as well as the architecture question, by studying our
+% running special case from ch3.}
 
+\begin{example}\label{example:denoising-gaussian-mixture-cfg}
+  Let us recall the low-rank mixture of Gaussians data generating process we studied in
+  \Cref{example:denoising_gaussian_mixture} (and specifically, the form in
+  \Cref{eq:MoG1}). Given $K \in \bN$ classes, we assume that
+  \begin{equation}\label{eq:MoG1-ch6}
+    \vx \sim \frac{1}{K}\sum_{k = 1}^{K}\dNorm(\vzero, \vU_{k}\vU_{k}^{\top}),
+  \end{equation}
+  where each \(\vU_{k} \in \O(D, P) \subseteq \R^{D \times P}\) is a matrix with
+  orthogonal columns, and $P \ll D$.
+  Moreover, we assume that the class label $y \in [K]$ is a deterministic
+  function of $\vx$ mapping an example to its corresponding mixture component.
+  Applying the analysis in \Cref{example:denoising_gaussian_mixture} (and the
+  subsequent analysis of the low-rank case, culminating in
+  \Cref{eq:gmm_lowrank_denoiser}), we obtain for the class-conditional optimal
+  denoisers
+  \begin{equation}\label{eq:gmm_lowrank_denoiser-ch6-classcond}
+    % \bar{\vx}^{\ast}(t, \vx_{t}, y)
+    \bE[ \vx \mid \vx_t = \vxi, y = \nu ]
+    = \frac{1}{1 + t^{2}}
+    \vU_{\nu}\vU_{\nu}^{\top}\vxi
+  \end{equation}
+  for each $\nu \in [K]$, and for the optimal unconditional denoiser, we obtain
+  \begin{equation}\label{eq:gmm_lowrank_denoiser-ch6-uncond}
+    % \bar{\vx}^{\ast}(t, \vx_{t}) 
+    \bE[ \vx \mid \vx_t = \vxi ]
+    = \frac{1}{1 + t^{2}}\sum_{k = 1}^{K}\frac{\exp\rp{\frac{1}{2t^{2}(1 + t^{2})}\norm{\vU_{k}^{\top}\vxi}_{2}^{2}}}{\sum_{i = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1 + t^{2})}\norm{\vU_{i}^{\top}\vxi}_{2}^{2}}}\vU_{k}\vU_{k}^{\top}\vxi.
+  \end{equation}
+  As a result, we can express the CFG denoiser with guidance strength $\gamma
+  > 1$ as
+  \begin{equation}\label{eq:cfg-denoiser-mog-low-rank}
+    \bar{\vx}^{\mathrm{CFG,\,ideal}}(t, \vx_t, y)
+    =
+    \frac{1}{1 + t^{2}}
+    \left(
+    (1 - \gamma) 
+    \sum_{k = 1}^{K}\frac{\exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\norm{\vU_{k}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+    = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}\vU_{k}\vU_{k}^{\top}
+    +
+    \gamma 
+    \vU_{y}\vU_{y}^{\top}
+    \right)
+    \vx_t.
+  \end{equation}
+  This denoiser has a simple, interpretable form. The first term, corresponding
+  to the unconditional denoiser, performs denoising of the signal $\vx_t$
+  against an average of the denoisers associated to each subspace, weighted by
+  how correlated $\vx_t$ is to each subspace. The second term, corresponding to
+  the conditional denoiser, simply performs denoising with the conditioning
+  class's denoiser. The CFG scheme further averages these two denoisers:
+  the effect can be gleaned from the refactoring
+  \begin{equation}\label{eq:cfg-denoiser-mog-low-rank-2}
+    \begin{split}
+      \bar{\vx}^{\mathrm{CFG,\,ideal}}(t, \vx_t, y)
+      =
+      \frac{1}{1 + t^{2}}
+      &\Biggl(
+      \left[\gamma + (1 - \gamma) 
+      \frac{\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{y}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}
+      \right]
+      \vU_{y}\vU_{y}^{\top}
+      \\
+      &\quad+
+      (1 - \gamma) 
+      \sum_{k \neq y}\frac{\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{k}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}\vU_{k}\vU_{k}^{\top}
+      \Biggr)
+      \vx_t.
+    \end{split}
+  \end{equation}
+  We have
+  \begin{equation}
+    \sum_{k=1}^K
+    \frac{\exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\norm{\vU_{k}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+    = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}
+    = 1,
+  \end{equation}
+  and each summand is nonnegative, hence also bounded above by $1$.
+  So we can conclude two regimes for the terms in
+  \Cref{eq:cfg-denoiser-mog-low-rank-2}: 
+  % which corresponding to the conditioning
+  % variable $y$ with contributions from both denoisers:
+  \begin{enumerate}
+    \item \textbf{Well-correlated regime:} If $\vx_t$ correlates well with
+      $\vU_y$, then the normalized weight corresponding to the $k=y$ summand in
+      the unconditional denoiser is near to $1$. 
+      Then 
+      \begin{equation}
+        \gamma + (1 - \gamma) 
+      \frac{\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{y}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}
+        \approx 1,
+      \end{equation}
+      all other weights are necessarily near to zero, and the CFG denoiser
+      is approximately equal to the denoiser associated to the conditioning
+      class $y$.
+    \item \textbf{Poorly-correlated regime:} In contrast, if $\vx_t$
+      \textit{does not} correlate well with $\vU_y$ (say because $t$ is large),
+      then the normalized weight corresponding to the $k=y$ summand in the
+      unconditional denoiser is near to $0$. As a result, 
+      \begin{equation}
+        \gamma + (1 - \gamma) 
+      \frac{\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{y}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}
+        \approx \gamma,
+      \end{equation}
+      and thus the guidance strength $\gamma \gg 1$ places a large positive
+      weight on the denoiser associated to $y$.
+      Meanwhile, in the second term of \Cref{eq:cfg-denoiser-mog-low-rank-2},
+      any classes $k \neq y$ that are well-correlated with $\vx_t$ 
+      receive a large \textit{negative} weight from the $1 - \gamma$
+      coefficient.
+      This simultaneously has the effect of making the denoised signal vastly
+      more correlated with the conditioning class $y$, and making it negatively
+      correlated with the previous iterate (i.e., the iterate before denoising).
+      In other words, CFG steers the iterative denoising process towards the
+      conditioning class and away from the previous iterate, a different
+      dynamics from purely conditional sampling (i.e., the case $\gamma = 1$).
+  \end{enumerate}
+  \sdb{The above could easily be repackaged into an exercise, which would be
+  a more rigorous version of this calculation.}
 
-\begin{example}
-  \sdb{TODO: CG and CFG in the context of the mixture of gaussian example...
-  from Ch3... cite yuchen wu paper...}
+  We now perform a further analysis of the form of this guided denoiser in
+  order to make some inferences about the role of CFG. Many of these insights
+  will be relevant to \textit{general} data distributions with low-dimensional
+  geometric structure, as well.
+  First, notice that the CFG denoiser \eqref{eq:cfg-denoiser-mog-low-rank}
+  takes a simple form in the setting where $\vx_t$ correlates significantly more
+  strongly with a single subspace $\vU_y$ than any other $\vU_{y'}$. Indeed,
+  because the ratio of weights in the class-conditional denoiser is given by
+  \begin{equation}
+    \frac{
+      \exp\rp{\frac{1}{2t^{2}(1 + t^{2})}\norm{\vU_{y}^{\top}\vx_t}_{2}^{2}}
+    }{
+      \exp\rp{\frac{1}{2t^{2}(1 + t^{2})}\norm{\vU_{y'}^{\top}\vx_t}_{2}^{2}}
+    }
+    =
+    \exp\rp{
+      \frac{1}{2t^{2}(1 + t^{2})}\left(
+      \norm{\vU_{y}^{\top}\vx_t}_{2}^{2}
+      -
+      \norm{\vU_{y'}^{\top}\vx_t}_{2}^{2}
+      \right)
+    },
+  \end{equation}
+  a large separation between the correlation of $\vx_t$ with $\vU_{y}$ and other
+  subspaces $\vU_{y'}$ implies that the sum over $k$ concentrates on the $k=y$
+  summand, giving that \textit{the CFG denoiser remains equal to the
+  class-conditioned denoiser}. Moreover, when $t \approx 0$, the magnitude of
+  any such gap is amplified in the exponential, making this concentration on the
+  $k=y$ summand even stronger. In particular, for small times $t$ (i.e., near to
+  the support of the data distribution), CFG denoising is no different from
+  standard class-conditional denoising---implying that it will converge stably
+  once it has reached such a configuration.
+  Thus, the empirical benefits of CFG should be due to its behavior in cases
+  where $\vx_t$ is not unambiguously from a single class.
+
+  Next, we consider the problem of parameterizing a learnable denoiser
+  $\vx_{\theta}^{\mathrm{CFG}}$ to represent the optimal denoiser
+  \eqref{eq:cfg-denoiser-mog-low-rank}.
+  Here, it may initially seem that the setting of classification of a mixture
+  distribution is too much of a special case relative to learning practical data
+  distributions, as the ideal denoiser \eqref{eq:cfg-denoiser-mog-low-rank} has
+  in this setting the simple form of a \textit{hard assignment} of the
+  noisy signal $\vx_t$ to the (denoiser associated to) the subspace $\vU_y$
+  corresponding to the true class label $y$ of $\vx$, averaged with the
+  \textit{soft assignment} denoiser associated to all subspaces $\vU_k$, with
+  weights given by the correlations of $\vx_t$ with these different subspaces.
+  However, we can extract a more general form for the class-conditional denoiser
+  in this example which is relevant for practical parameterization using the
+  geometric structure of the mixture of Gaussians distribution, which actually
+  parallels the kinds of geometric structure common in real-world data.
+  More precisely, we add an additional assumption associated to the subspaces
+  $\vU_k$ being `distinguishable' from one another, which is natural in
+  practice: specifically, we assume that for any pair of indices $k, k' \in
+  [K]$ with $k \neq k'$, we can find a set of $K$ directions $\vv_{k} \in \bR^D$ such
+  that
+  \begin{equation}
+    \vU_{k}\vU_{k}^\top \vv_k = \vv_k, \quad
+    \vU_{k'}\vU_{k'}^\top \vv_k = \Zero, \enspace k' \neq k.
+  \end{equation}
+  This is a slightly stronger assumption than simple distinguishability, but it
+  should be noted that it is not overly restrictive: for example, it still
+  allows the subspaces $\vU_{k}$ to have significant correlations with one
+  another.\footnote{ More generally, this assumption is naturally formulated as an
+  \textit{incoherence condition} between the subspaces $\vU_{[K]}$, a familiar
+  notion from the theory of compressive sensing.}
+  These vectors $\vv_k$ can then be thought of as \textit{embeddings} of the
+  class label $y \in [K]$, and we can use them to define a more general operator
+  that can represent both the unconditional and class-conditional denoisers.
+  More precisely, consider the mapping
+  \begin{equation}\label{eq:mog-conditional-denoising-unified-operator}
+    (\vx_t, \vv) \mapsto
+    \sum_{k = 1}^{K}\frac{
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_k \vU_k^\top \vv}
+    }
+    {
+      \sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_i \vU_i^\top \vv}
+    }
+    \vU_{k}\vU_{k}^{\top}\vx_t.
+  \end{equation}
+  If we substitute $\vv = \vv_y$ for some $y \in [K]$, we get
+  \begin{align}
+    \begin{split}
+    \sum_{k = 1}^{K}
+    \frac{
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_k \vU_k^\top \vv_y}
+    }
+    {
+      \sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_i \vU_i^\top \vv_y}
+    }
+    \vU_{k}\vU_{k}^{\top}\vx_t
+    &=
+    \frac{
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vv_y}
+    }
+    {
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vv_y}
+      + K-1
+    }
+    \vU_{y}\vU_{y}^{\top}\vx_t
+    \\
+    &\quad+
+    \sum_{k \neq y}
+    \frac{
+      1
+    }
+    {
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vv_y}
+      + K-1
+    }
+    \vU_{k}\vU_{k}^{\top}\vx_t.
+    \end{split}
+  \end{align}
+  Now, because $\vx_t = \alpha_t \vx + \sigma_t \vg$, if the subspace dimension
+  $P$ is sufficiently large---for example, if we consider a large-scale,
+  asymptotic regime where $P, D \to \infty$ with their ratio $P/D$ converging to
+  a fixed constant---we have for $t \approx 0$ that $\norm{\vx_t}_2$ is close to
+  $\sqrt{P}$, by the concentration of measure phenomenon\footnote{One of the few
+  \textit{blessings of dimensionality}---see \textcite{Wright-Ma-2022}.}. Then
+  by the argument in the previous paragraph, we have in this regime that for
+  \textit{almost all} realizations of $\vx_t$, the following approximation
+  holds:
+  \begin{equation}
+    \sum_{k = 1}^{K}
+    \frac{
+      \exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_k \vU_k^\top \vv_y}
+    }
+    {
+      \sum_{i
+      = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+      + t^{2})}\vx_t^\top \vU_i \vU_i^\top \vv_y}
+    }
+    \vU_{k}\vU_{k}^{\top}\vx_t
+    \approx
+    \vU_{y}\vU_{y}^{\top}\vx_t.
+  \end{equation}
+  This argument shows that the operator
+  \eqref{eq:mog-conditional-denoising-unified-operator} is, with overwhelming
+  probability, \textit{equal to the optimal class-conditional denoiser
+  \eqref{eq:gmm_lowrank_denoiser-ch6-classcond} for $y$
+  when $\vv = \vv_y$}! In intuitive terms, at small noise levels $t \approx
+  0$---corresponding to the structure-enforcing portion of the denoising
+  process---plugging in the embedding for a given class $y$ to the second
+  argument of the operator \eqref{eq:mog-conditional-denoising-unified-operator}
+  leads the resulting function of $\vx_t$ to well-approximate the optimal
+  class-conditional denoiser \eqref{eq:gmm_lowrank_denoiser-ch6-classcond} for
+  $y$. Moreover, it is evident that plugging in $\vv = \vx_t$ to the operator
+  \eqref{eq:mog-conditional-denoising-unified-operator} yields (exactly) the
+  optimal unconditional denoiser \eqref{eq:gmm_lowrank_denoiser-ch6-uncond} for $\vx_t$.
+  Thus, this operator provides a unified way to parameterize the constituent
+  operators in the optimal denoiser for $\vx$ \textit{within a single
+  `network'}: it is enough to add the output of an instantiation of
+  \eqref{eq:mog-conditional-denoising-unified-operator} with input $(\vx_t,
+  \vx_t)$ to an instantiation with input $(\vx_t, \vv_y$). The resulting
+  operator is a function of $(\vx_t, y)$, and computationally, the subspaces
+  $(\vU_k)_{k=1}^K$ and embeddings $y \mapsto \vv_y$ become its learnable
+  parameters.
 \end{example}
 
-\sdb{Cross attention connection: slight generalization of the previous
-``measurement'' example, relevant to CFG parameterization of networks. The
-previous example leads naturally into this discussion. This takes us into the
-next vignette (which is heuristic, but inspired by this).}
+\Cref{example:denoising-gaussian-mixture-cfg} shows that in the special case of
+a low-rank mixture of Gaussians data distribution for $\vx$ with incoherent
+components, operators of the form
+\begin{equation}\label{eq:operator-for-parameterizing-cfg-denoiser-mog}
+  (\vx_t, \vv) \mapsto
+  \sum_{k = 1}^{K}\frac{
+    \exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\vx_t^\top \vU_k \vU_k^\top \vv}
+  }
+  {
+    \sum_{i
+    = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+    + t^{2})}\vx_t^\top \vU_i \vU_i^\top \vv}
+  }
+  \vU_{k}\vU_{k}^{\top}\vx_t
+\end{equation}
+provide a sufficiently rich class of operators to parameterize the MMSE-optimal
+denoiser for noisy observations $\vx_t$ of $\vx$, in the setting of
+classifier-free guidance where one network is to be used to represent both the
+unconditional and class-conditional denoisers for $\vx_t$. For such operators,
+the auxiliary input $\vv$ can be taken as either $\vx_t$ or a suitable embedding
+of the class label $y \mapsto \vv_y$ in order to realize such a denoiser.
+Based on the framework in \Cref{ch:unrolling}, which develops deep network
+architectures suitable for transforming more general data distributions to
+structured representations using the low-rank mixture of Gaussians model as
+a primitive, it is natural to imagine that operators of the type
+\eqref{eq:operator-for-parameterizing-cfg-denoiser-mog} may be leveraged in
+denoisers for
+general data distributions $\vx$ with low-dimensional geometrically-structured
+components that are sufficiently distinguishable (say, incoherent) from one
+another.
+The next section demonstrates that this is indeed the case.
 
 % In practice, there are typically two situations:
 % one is that the observation function $h(\spcdot)$ is explicitly known,
@@ -1520,24 +2115,150 @@ next vignette (which is heuristic, but inspired by this).}
 % superior performance.
 
 
-\subsection{Caption Conditioned Image Generation}
-An vignette for image generation conditioned on a given caption. 
+\subsection{Caption Conditioned Image Generation}\label{sub:text-cond}
 
-\sdb{Align Visual Data with Texts such as CLIP, with other attribures ControlNet, ... discuss dhariwal and nichol (classifier aware guidance), then mention DALLE type architecture for
-text-conditioned image generation?} \yima{Actually the original work ``\href{https://arxiv.org/abs/2105.05233}{Diffusion Models Beat GANs on Image Synthesis}'', by Prafulla Dhariwal and Alex Nichol, proposed to compute the two matching functions proposed above. The follow-up work ``Classifer-Free Diffusion Guidance''  by
-Jonathan Ho and Tim Salimans tried to simplify this by training the two matching functions together with one network with different condition inputs. We should feature those works here. However, we can mention that the large-scale realization DALLE, with a learned joint image-text binding by CLIP, adopts a somewhat heuristic way to realize the conditioning. So were many other follow-up works such as the ControlNet etc. ...}
+In the previous subsection, we have formulated denoisers for class-conditional
+denoising with classifier-free guidance, a ubiquitous practical methodology used
+in the largest-scale diffusion models, and shown how to parameterize them (in
+\Cref{example:denoising-gaussian-mixture-cfg}) in the special case of a low-rank
+Gaussian mixture model data distribution.
+One interesting byproduct of this example is that it highlights the crucial role
+of \textit{embeddings} of the class label $y$ into a common space with $\vx$ in
+order to provide a concise and unified scheme for parameterizing the optimal
+denoisers (conditional and unconditional).
 
 
 
-\section{Conditional Generation with Measurement Self-Consistency}
-In this last section, we consider the more extreme, but actually ubiquitous, case for distribution learning in which we only have a set of observed samples $\Y = \{\y_1,\ldots, \y_N\}$ of the data $\x$. To make the problem well-defined, we do assume that the observation model between $\y$ and $\x$ is known to belong to a certain family of analytical models, denoted as $\y = h(\x, \theta)$, with $\theta$ either known or not known.
+An vignette for image generation conditioned on a given caption.  \sdb{TODO:
+Discuss the cross-attention-type operator here. Can get it by considering
+a joint denoising of $p(x, y)$, with Gaussian conditional models for $p(y \mid
+x)$ and $p(x \mid y)$...}
 
-\subsection{Visual World Model from Image Pairs and Sequences}
-A typical problem of this kind is actually behind how we can learn a working model of the external world from the  images perceived, say through our eyes,  telescopes or microscopes. In particular, humans and animals are able to build a model of the 3D world ((or 4D for a dynamical world) through a sequence of its 2D projections -- a sequence of 2D images (or stereo image pairs). The mathematical or geometric model of the projection is generally known:
+% \sdb{Align Visual Data with Texts such as CLIP, with other attribures ControlNet, ... discuss dhariwal and nichol (classifier aware guidance), then mention DALLE type architecture for
+% text-conditioned image generation?} \yima{Actually the original work ``\href{https://arxiv.org/abs/2105.05233}{Diffusion Models Beat GANs on Image Synthesis}'', by Prafulla Dhariwal and Alex Nichol, proposed to compute the two matching functions proposed above. The follow-up work ``Classifer-Free Diffusion Guidance''  by
+% Jonathan Ho and Tim Salimans tried to simplify this by training the two matching functions together with one network with different condition inputs. We should feature those works here. However, we can mention that the large-scale realization DALLE, with a learned joint image-text binding by CLIP, adopts a somewhat heuristic way to realize the conditioning. So were many other follow-up works such as the ControlNet etc. ...}
+
+
+
+\section{Conditional Inference with Measurement Self-Consistency}
+\label{sec:measurement-self-consistency}
+In this last section, we consider the more extreme, but actually ubiquitous, case for distribution learning in which we only have a set of observed samples $\Y = \{\y_1,\ldots, \y_N\}$ of the data $\x$, but no samples of $\x$ directly! In general, the observation $\y \in \mathbb{R}^d$ is of lower dimension that $\x \in \mathbb{R}^D$. To make the problem well-defined, we do assume that the observation model between $\y$ and $\x$ is known to belong to a certain family of analytical models, denoted as $\y = h(\x, \theta) +\vw$, with $\theta$ either known or not known. 
+
+Let us first try to understand the problem conceptually with the simple case when the measurement function $h$ is known and the observed $\y = h(\x) + \vw$ is informative about $\x$. That is, we assume that $h$ is surjective from the space of $\x$ to that of $\y$ and the support of the distribution $\y_0 = h(\x_0)$ is low-dimensional. This typically requires the dimension $d$ of $\y$ is higher than the intrinsic dimension of the support of the distribution of $\x$. Without loss of generality, we may assume that there exist functions:
 \begin{equation}
-    \y_i = h(\x, \theta_i) +\vw, 
+F(\x) = \boldsymbol{0},\quad     G(\y) = \boldsymbol{0}.
 \end{equation}
-where $h(\cdot)$ represents a  (perspective) projection of the 3D (or 4D) scene from a certain camera view at time $t_i$ to a 2D image (or a stereo pair) and $\vw$ is some possibly additive small measurement noise. Figure \ref{fig:projection-2D} illustrates this relationship. A full exposition of geometry related to multiple 2D views of a 3D scene is beyond the scope of this book. Interested readers may refer to the book \cite{MASKS}. For now, all we need to proceed is that such projections are well understood and multiple images of a scene contains sufficient information about the scene.
+Notice that here we may assume that we know $G(\y)$ but not $F(\x)$. Let $\mathcal{S}_{\y} \doteq \{\y \mid G(\y) = \boldsymbol{0}\}$ be the support of $p(\y)$.  In general, $h^{-1}(\mathcal{S}_{\y}) = \{\x \mid G(h(\x)) = \boldsymbol{0}\}$ is a super set of $\mathcal{S}_{\x} \doteq \{\x \mid F(\x) = \boldsymbol{0}\}$. That is, we have $h(\mathcal{S}_{\x}) \subseteq \mathcal{S}_{\y}$.
+
+% \paragraph{Geometric Interpretation via Constrained Optimization.}
+% Now given $\vnu = h(\x) + \vw$, to solve for $\x$, we can solve the following constrained optimization problem:
+% \begin{equation}
+%     \max_{\x} - \frac{1}{2}\|h(\x) - \vnu\|_2^2 \quad \mbox{s.t.} \quad G(h(\x)) = \boldsymbol{0}. 
+% \end{equation}
+% Using augmented Lagrange multiplier method, we can solve the following unconstrained program:
+% \begin{equation}
+%    \max_{\x} -\frac{1}{2}\|h(\x) - \vnu\|_2^2  + \vlambda^TG(h(\x)) -  \frac{\mu}{2} \|G(h(\x)) \|_2^2,
+% \end{equation}
+% for some Lagrange multipliers. This is equivalent to the following program:
+% \begin{equation}
+% \max_{\x} = \log\exp\Big(- \frac{1}{2}\|h(\x) - \vnu\|_2^2\Big)  + \log \exp\Big( - \frac{\mu}{2} \|G(h(\x)) - \vlambda/\mu\|_2^2\Big),
+% \end{equation}
+% for some vector $\vc = \vlambda/\mu$. That is, the augmented Lagrange multiplier method that enforces the constraint $G(\y) = \boldsymbol{0}$ is equivalent to use the score function of the probability density:
+% \begin{equation}
+%     p(\y) = \exp\Big( - \frac{\mu}{2}\|G(\y) - \vc\|_2^2\Big).
+% \end{equation}
+
+
+\subsection{Linear Measurement Models}
+First, for simplicity, let us consider the measurement is a linear function of the data $\x$ of interest:
+\begin{equation}
+    \y = \vA\x.
+\end{equation}
+Here the matrix $\vA \in \mathbb{R}^{m\times n}$ is of full row rank and $m$ is typically smaller than $n$. We assume $\vA$ is known for now. We are interested in how to learn the distribution of $\x$ from such measurements. Since we no longer have direct samples of $\x$, we wonder whether we can still develop a denoiser for $\x$ with observations $\y$. Let us consider the following diffusion process:
+\begin{equation}
+    \y_t = \y_0 + \sigma_t \vg, \quad \y_0 = \vA(\x_0), 
+\end{equation}
+where $\vg \sim \mathcal{N}(\boldsymbol{0}, \vI)$. 
+
+% \paragraph{Having access to the diffusion process $\x_t$.}
+% Let us first consider the following diffusion process:
+% \begin{equation}
+%     \x_t = \x_0 + \sigma_t \vg, \quad \y_t = \vA(\x_t), 
+% \end{equation}
+% where $\vg \sim \mathcal{N}(\boldsymbol{0}, \vI)$. 
+% Then one show that 
+% \begin{equation}
+%     \hat{\x}_* = \argmin \mathbb{E}[\|\vA(\hat{\x}(\vA\x_t, \vA) - \x_0)\|^2]
+% \end{equation}
+% satisfies the condition that:
+% \begin{equation}
+%     \vA \hat{\x}_*(\vA\x_t, \vA) = \vA \mathbb{E}[\x_0 \mid \vA \x_t, \vA].
+% \end{equation} Notice that in the special case when $\vA$ is of  full column rank, we have $ \mathbb{E}[\x_0 \mid \vA\x_t, \vA] = \mathbb{E}[\x_0 \mid \x_t]$. Hence, in the more general case, it was suggested in the work \cite{daras2023ambient} that one could still use the so obtained $\mathbb{E}[\x_0 \mid \vA\x_t, \vA]$ to replace the $\mathbb{E}[\x_0 \mid \x_t]$ in the normal denoising process. This usually works very well in practice, say for many image restoration tasks.
+
+% However, one should notice that the above process relies on the assumption that we have access to samples of the diffused distribution of $\x_t$, in an order to learn the denoiser $\mathbb{E}[\x_0 \mid \vA\x_t, \vA]$. That is often not the case in practice when we only have samples of the measurement $\y$ and its diffusion process $\y_t$. 
+% \yima{Druv, actually, I think the above so-called ambient diffusion is more related to the measurement matching case studied in Subsection 2, where we train a masked auto-encoder...}
+
+Without loss of generality, we assume $\vA$ is of full row rank, i.e., under-determined. Let us define the corresponding process $\x_t$ as one that satisfies:
+\begin{equation}
+\y_t = \vA \x_t.   
+\end{equation}
+
+From the denoising process of $\y_t$, we have
+\begin{equation}
+    \y_{t-s} =  \y_t + st \nabla \log p_t(\y_t).
+\end{equation}
+Then we have:
+\begin{equation}
+    \vA\x_{t-s} =   \vA\x_t + st \nabla \log p_t(\vA \x_t),
+\end{equation}
+for a small $s >0$. So $\x_{t-s}$ and $\x_t$ need to satisfy:
+\begin{equation}
+    \vA(\x_{t-s} - \x_t) = st \nabla \log p_t(\vA\x_t). 
+\end{equation}
+Among all $\x_{t_s}$ that satisfy the above constraint, we choose the one that minimizes the distance $\|\x_{t-s} - \x_t\|_2^2$. Therefore, we obtain a ``denoising'' process for $\x_t$:
+\begin{equation}
+    \x_{t-s}  = \x_t + st\vA^\dagger \nabla \log p_t(\vA\x_t). 
+\label{eqn:denoising-projection}
+\end{equation}
+
+% \paragraph{Inference.}
+% Notice that the above process is trying to enforce the constraints learned for the low-dimensional distribution of $\y$. Given a specific observation of $\y = \vnu$, to solve the inverse problem of inferring $\x$, we also want to enforce the measurement constraint $\vnu = \vA \x$, say through the gradient descent of $\frac{1}{2} \|\vA \x_t - \vnu\|_2^2$:
+% \begin{equation}
+%     \x_{t-s} = \x_t + s \vA^\dagger (\vnu - \vA \x_t).
+% \end{equation}
+% Combining the two terms we obtain an iterative process for $\x_t$:
+% \begin{equation}
+%     \x_{t-s} = \x_t + s \vA^\dagger\big[t \nabla \log p_t(\vA \x_t) +  (\vnu - \vA \x_t)\big].
+% \end{equation}
+
+% \paragraph{The Over-determined Case.}
+% Now let us consider the case when $\vA$ is over-determined. We may define the process $\x_t$ by 
+% \begin{equation}
+% \x_t = \argmin_{\x} \|\vA \x - \y_t\|^2 = \vA^\dagger \y_t.
+% \end{equation}
+% From the denoising process for $\y_t$, we have
+% \begin{equation}
+%    \vA^\dagger \y_{t-s} =  \vA^\dagger\y_t + st \vA^\dagger \nabla \log p_t(\y_t).
+% \end{equation}
+% Since $\x_t = \vA^\dagger \y_t$ and $\vA \x_t = \vA\vA^\dagger \y_t$, we have
+% \begin{equation}
+%     \x_{t-s}  \approx \x_t + st\vA^\dagger \nabla \log p_t(\vA\x_t),
+% \label{eqn:denoising-lifting}
+% \end{equation}
+% where for the score function $\nabla \log p_t(\y_t)$, we only care about how to denoise $\y_t$ in the range of $\vA$.
+
+% We may consider the following estimate
+% \begin{equation}
+%     \hat{\x}_*(\y_t) = \argmin \mathbb{E}[\|\y_t - \vA\x_0)\|^2]
+% \end{equation}
+
+
+\subsection{3D Visual Model from Calibrated Image Pairs}
+In practice, the measurement model is often nonlinear or only partially known. A typical problem of this kind is actually behind how we can learn a working model of the external world from the  images perceived, say through our eyes,  telescopes or microscopes. In particular, humans and animals are able to build a model of the 3D world ((or 4D for a dynamical world) through a sequence of its 2D projections -- a sequence of 2D images (or stereo image pairs). The mathematical or geometric model of the projection is generally known:
+\begin{equation}
+    \y^i = h(\x, \theta^i) +\vw, 
+\end{equation}
+where $h(\cdot)$ represents a  (perspective) projection of the 3D (or 4D) scene from a certain camera view at time $t_i$ to a 2D image (or a stereo pair) and $\vw$ is some possibly additive small measurement noise. Figure \ref{fig:projection-2D} illustrates this relationship. A full exposition of geometry related to multiple 2D views of a 3D scene is beyond the scope of this book. Interested readers may refer to the book \cite{MaY2003}. For now, all we need to proceed is that such projections are well understood and multiple images of a scene contains sufficient information about the scene.
 \begin{figure}[t]
     \centering
     \includegraphics[width=0.7\linewidth]{figs_chap6/3D-2D-projection.png}
@@ -1547,12 +2268,11 @@ where $h(\cdot)$ represents a  (perspective) projection of the 3D (or 4D) scene 
 
 In general, we would like to learn the distribution $p(\x)$ of the 3D (or 4D) world scene $\x$\footnote{Here by abuse of notation, we use $\x$ to represent either a point in 3D or a sample of an entire 3D object or a scene which consists of many points.} from the perceived 2D images of the world so far. The primary function of such a (visual) world model is to allow us to recognize places where we had been before or predict what the current scene would look alike in a future time at a new viewpoint. 
 
-\paragraph{Stereopsis.}
-Let us first examine the special but important case of stereo vision. In this case, we have two (calibrated) views of the 3D scene $\x$:
+Let us first examine the special but important case of stereo vision. In this case, we have two calibrated views of the 3D scene $\x$:
 \begin{equation}
     \y^0 = h(\x, \theta^0) +\vw^0, \quad \y^1 = h(\x, \theta^1) +\vw^1, 
 \end{equation}
-where $\theta_0$ and $\theta_1$ can be assumed to be known. $\y^0$ and $\y^1$ are two 2D-projections of the 3D scene $\x$. We may also assume that they have the same marginal distribution $p(\y)$ and we have learned a diffusion and denoising model for it. That, we know the denoiser:
+where parameters $\theta_0$ and $\theta_1$ for the view poses can be assumed to be known. $\y^0$ and $\y^1$ are two 2D-projections of the 3D scene $\x$. We may also assume that they have the same marginal distribution $p(\y)$ and we have learned a diffusion and denoising model for it. That, we know the denoiser:
 \begin{equation}
   \bE[\vy \mid \vy_t=\vnu] =
   \vnu + t^2 \nabla_{\vnu}\log p_t(\vnu). 
@@ -1570,32 +2290,112 @@ The main question now is: How to learn (a representation for) the distribution o
 % where we have $\vnu^0 = h(\vxi, \theta^0)$ and $\vnu^1 = h(\vxi, \theta^1)$.
 People might question the rationale for doing this: why this is necessary if the function $h(\cdot)$ is largely invertible? That is, the observation $\y$ can largely determine the unknown $\x$, which is kind of the case for stereo -- in general, two (calibrated) images contain sufficient information about the scene depth, from the given vintage point. However, 2D images are far from the most compact representation of the 3D scene as the same scene can produce infinite many (highly correlated) 2D images or image pairs. In fact, a good representation of a 3D scene should be invariant to the view point. Hence, a correct representation of the distribution of 3D scenes should be much more compact and structured than the distribution of 2D images, stereo pairs, or image-depth pairs. 
 
-Consider the denoising processing for $\y_t$ in \eqref{eq:y-posterior-sampling-denoiser}. We define a corresponding process $\x_t$ that satisfies: 
+Consider the (inverse) denoising processing for the diffusion: $\y_t = \y + t\vg $ in \eqref{eq:y-posterior-sampling-denoiser}, where $\vg$ is standard Gaussian. From the denoising process of \eqref{eq:y-posterior-sampling-denoiser}, we have
 \begin{equation}
-    \y_t = h(\x_t) + \vw_t,
+    \y_{t-s} =  \y_t + st \nabla_{\y} \log p_t(\y_t).
 \end{equation}
-where $\vw_t$ is some small error. In general, we know if $t \rightarrow 0$ and $\vw_t \rightarrow \mathbf{0}$, we would expect $\y_t \rightarrow \y$ and $\x_t \rightarrow \x$ in distribution. 
+We try to find a corresponding ``denoising" process of $\x_t$ such that $\x$ is related to $y$ as:
+\begin{equation}
+    \y =  h(\x).
+\end{equation}
 
 Then we have:
 \begin{equation}
-    h(\x_{t-s}) \approx h(\x_t) + st \nabla \log p_t(h(\x_t)),
+    h(\x_{t-s}) \approx  h(\x_t) + st \nabla_{\y} \log p_t(h(\x_t)),
 \end{equation}
-for a small $s >0$. We then can iteratively solve for $\x_{t-s}$ from
+for a small $s >0$. 
+% We then can iteratively solve for $\x_{t-s}$ from
+% \begin{equation}
+%     \hat{\x}_{t-s} = \argmin_{\z} \|h(\z) - h(\x_t) - st \nabla \log p_t(h(\x_t))\|_2^2.
+% \end{equation}
+Suppose $\x_{t-s} = \x_t + s \vv$ for some vector $\vv$ and small increment $s$. We have
 \begin{equation}
-    \hat{\x}_{t-s} = \argmin_{\z} \|h(\z) - h(\x_t) - st \nabla \log p_t(h(\x_t))\|_2^2.
+    h(\x_{t-s}) \approx h(\x_t) + \frac{\partial h}{\partial \x}\bigg\rvert_{\x_t} \vv s \doteq h(\x_t) + \vA(\x_t) \vv s. 
 \end{equation}
-Suppose $\z = \x_t + \vv$ for some small increment $\vv$. We have
+Hence, we have
 \begin{equation}
-    h(\z) \approx h(\x_t) + \frac{\partial h}{\partial \x}\mid_{\x_t} \vv \doteq h(\x_t) + \vA(\x_t) \vv. 
+    \vA(\x_t) \vv = t \nabla_{\y} \log p_t(h(\x_t)).
+    \label{eqn:pushforward}
 \end{equation}
-Hence, we can solve for $\hat{\x}_{t-s}$ approximately as:
+Geometrically the vector $\vv$ in the domain of $\x$ can be viewed as the pullback of the vector field $t \nabla \log p_t(\y)$ under the map $\y = h(\x)$. In general, we may choose $\vv$ to be the minimum 2-norm vector that satisfies the pullback relationship. Hence, we can express  $\hat{\x}_{t-s}$ approximately as:
 \begin{equation}
-    \hat{\x}_{t-s} = \x_t + st\vA(\x_t)^\dagger \nabla \log p_t(h(\x_t)).  
+    \hat{\x}_{t-s} \approx \x_t + st\vA(\x_t)^\dagger \nabla_{\y} \log p_t(h(\x_t)). 
+\label{eqn:pullback-denoise}
 \end{equation}
-In general, we may expect that the so defined process would converge to the distribution of $\x$. 
 
-\paragraph{Uncalibrated image sequences.}
-In the above derivation, we have assumed that the poses (and calibration) of the camera views are known, hence the map $h(\cdot)$ is fully known. In practice, at least some of the poses or calibration of the given images are unknown or only partially known. How can we generalize the problem of learning the distribution of 3D scenes to this more general setting? In fact, without specifying the view of an image pair, it might lead to a more compact representation of the 3D scene that is invariant to the viewpoint (if the camera views are specified with respect to some canonical reference frame of the scene). 
+
+\begin{remark}[Parallel Sensing and Distributed Denoising.]
+{There is something very interesting about the above equation \eqref{eqn:pullback-denoise}. It seems to suggest we could try to learn the distribution of $\x$ through a process that coupled with (many of) its (partial) observations:
+\begin{equation}
+\y^i = h^i(\x) +\vw^i, i =1, \ldots, K.
+\end{equation} In this case, we obtain a set of equations that the vector field $\vv$ in the domain of $\x$ should satisfy:
+\begin{equation}
+    \vA^i(\x_t) \vv = t \nabla_{\y^i} \log p_t(h^i(\x_t)),
+\label{eqn:federated-pushforward}
+\end{equation}
+where $\vA^i(\x_t) = \frac{\partial h^i}{\partial \x}\rvert_{\x_t}$. The final $\vv$ can be chosen as a ``centralized'' solution that satisfies all the above equations, or it could be chosen as a certain (stochastically) ``aggregated'' version of all $\vv^i$:
+\begin{equation}
+    \vv^i = t\vA^i(\x_t)^\dagger \big[\nabla_{\y^i} \log p_t(h^i(\x_t))\big], \quad i = 1, \ldots, K,
+\end{equation}
+that are computed in a parallel and distributed fashion? An open question here is, exactly what the so-defined ``denoising'' process for $\x_t$ converges to, even in the linear measurement model case? When would it converges to a  distribution that has the same low-dimensional support as the original $\x_0$, as $\y_t$ converges to $\y = h(\x_0)$? }
+\end{remark}
+
+% \paragraph{Inference.}
+% Notice that the above process is to enforce the low-dimensional constraint for the support of $\y$. In the case when we like to conduct inference of $\x$ from an observation $\y = h(\x)$, we also need to enforce constraint on the measurement, say through gradient descent on $\frac{1}{2} \|h(\x) - \y\|_2^2$:
+% \begin{equation}
+%     \hat{\x}_{t-s} = \x_t + s \vA(\x_t)^\dagger (\y - h(\x_t)). 
+% \end{equation}
+% Hence together, we have the following iterative process for inferring $\x$:
+% \begin{eqnarray}
+%  \hat{\x}_{t-s} = \x_t + s \vA(\x_t)^\dagger\big[t \nabla_{\y} \log p_t(h(\x_t)) +  (\y - h(\x_t)) \big].   
+% \end{eqnarray}
+% Notice that when $h$ is linear, the above approximation reduces to the same form that we have obtained in the previous subsection. 
+
+
+\subsection{Visual World Model from Uncalibrated Image Sequences}
+
+\paragraph{Seeking Invariant Representations.}
+In the above derivation, we have assumed that the measurement model $h(\cdot)$ is fully known. In the case of stereo vision, this is rather reasonable as the relative pose (and calibration) of the two camera views (or two eyes\footnote{The relative pose of our two eyes is well known to our brain.}) are usually known in advance. Hence, through the stereo image pairs, in principle we should be able to learn the distribution of 3D scenes, at least the ego-centric distribution of 3D scenes. However, the low-dimensional structures of the so-called learned distribution contains variation caused by changing the viewpoints. That is, the appearance of the stereo images varies when we change our viewpoints with respect to the same 3D scene. For many practical vision tasks (such as localization and navigation), it is important if we can decouple this variation of viewpoints from an invariant representation of (the distribution of) 3D scenes.\footnote{Note that this goal aligns well with Klein's Erlangen Program for modern geometry, which is to study invariants of a manifold under a group of transformations. Here, we may view the manifold of interest as the distribution of ego-centric representations of 3D scenes. We have learned that it admits a group of three-dimensional rigid-body motion acting on it. It is remarkable that our brain has learned to effectively decouple such transformations from the observed 3D world.} Notice that we have studied learning representations that are invariant to translation and rotation in a limited setting in Chapter \ref{ch:representation}. We know that the associated compression operators take the necessary form of convolution. Nevertheless, operators that lead to compression or denoising with respect to more general transformations remain elusive to characterize.  
+
+For the 3D vision problem, we know the change of our viewpoints can be well modeled as a rigid-body motion. However, the exact relative motion of our eyes between different viewpoints is usually not known. More generally, there could also be objects (e.g., cars, humans, hands) moving in the scene and we normally do not know their motion either. How can we generalize the problem of learning the distribution of 3D scenes with calibrated stereo pairs to such more general settings? More precisely, we want to learn a compact representation of the 3D scenes that is invariant to the camera/eye motions. Once such a representation is learned, we could sample and generate a 3D scene and render images or stereo pairs from arbitrary poses. 
+
+% In fact, without specifying the ego-centric frame as the reference for each stereo pair, it might lead to a more compact representation of the 3D scene that is invariant to the ego-centric viewpoint (say, if the camera views are specified with respect to some canonical world frame of the scene). In fact, our brain seems to be able to learn such a representation that decouples objects in a 3D scene and the motion of the observer or the objects.
+
+To this end, not that we can model a sequence of stereo pairs as:
+\begin{equation}
+    \y^k = h(\x^k, \theta^k), \quad k=1, \ldots, K,
+\end{equation}
+where $h(\cdot)$ represents the projection map from 3D to 2D. $\theta^k$ denotes the rigid-body motion parameters of the $k$th view, with respect to some canonical frame in the world. $\x^k$ represents the 3D scene at time $k$. If the scene is static, $\x^k$ should all be the same $\x^k = \x$. To simplify the notation, we may denote the set of $k$ equations as one:
+\begin{equation}
+    \Y = H(\x,\Theta). 
+\end{equation}
+We may assume that we are given many samples of such stereo image sequences $\{\Y_i\}$. The problem is how to recover the associated motion sequence $\{\Theta_i\}$ and learn the distribution of the scene $\x$ (that is invariant to the motion).
+
+Now suppose we have learned the distribution $p(\y)$ of the ego-centric stereo pairs $\y$ via a denoisng process $\y_t \sim p_t$. Similar as before, we associate a process $(\x_t, \Theta)$ with $\Y_t$ as:
+\begin{equation}
+    \Y_t \approx H(\x_t, \Theta). 
+\end{equation}
+
+Heuristically, we then can iteratively solve for $\x_{t-s}$ from
+\begin{equation}
+    (\hat{\x}_{t-s}) = \argmin_{\z} \|H(\z, \Theta) - H(\x_t, \Theta) - st \nabla \log p_t(H(\x_t,\Theta))\|_2^2.
+\end{equation}
+Suppose $\z = \x_t + \Delta \x$ for some small increment. We have
+\begin{equation}
+    H(\z, \Theta) \approx H(\x_t, \Theta) + \frac{\partial H}{\partial \z}\bigg\rvert_{\x_t, \Theta} \Delta \x  \doteq H(\x_t,\Theta) + \vA \Delta \x. 
+\end{equation}
+Given an estimate of $\x_t$, we also would like to enforce better measurement consistency by optimizing $\Theta$ through
+\begin{equation}
+    \min_{\Theta} \frac{1}{2}\|H(\x_t, \Theta) - \Y\|_2^2.
+\end{equation}
+
+Hence, we can solve for $\hat{\X}_{t-s}, \hat{\Theta}_{t-s}$ in an iterative and alternating fashion:
+\begin{eqnarray}
+    \hat{\Theta}_{t-s} &\approx& \Theta_t +  s \vB^\dagger\big[\Y - H(\x_{t}, \Theta_t)\big], \quad \quad \quad \vB = \frac{\partial H}{\partial\Theta}\bigg\rvert_{\x_t, \Theta_t},\\
+    \hat{\x}_{t-s} &\approx& \x_t + s \vA^\dagger\big[t  \nabla \log p_t(H(\x_t, \Theta_{t-s}))  \big], \quad \vA = \frac{\partial H}{\partial \z}\bigg\rvert_{\x_t, \Theta_{t-s}}.
+\end{eqnarray}
+\yima{Under what conditions, the learned denoiosing process for $\x$ can be invariant to the motions of the viewpoints?}
+
 
 \section{Summary and Notes}
 \paragraph{Measurement matching without clean samples.} In our development of

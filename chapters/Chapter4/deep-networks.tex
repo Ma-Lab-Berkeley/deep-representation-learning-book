@@ -32,9 +32,9 @@ How to deal with nonlinearity has a long history across different disciplines su
 More recently, deep neural networks have achieved remarkable success across a wide range of data and applications. A neural network
 \begin{equation}
   f(\cdot, \bm \theta) \colon \x
-  \xrightarrow{\hspace{1mm} f^0 \hspace{1mm}} \x^0 \rightarrow \cdots
-  \rightarrow \x^\ell \xrightarrow{\hspace{1mm} f^\ell \hspace{1mm}}
-  \x^{\ell+1} \rightarrow  \cdots \to \x^L = \z.
+  \xrightarrow{\hspace{1mm} f^0 \hspace{1mm}} \z^0 \rightarrow \cdots
+  \rightarrow \z^\ell \xrightarrow{\hspace{1mm} f^\ell \hspace{1mm}}
+  \z^{\ell+1} \rightarrow  \cdots \to \z^L = \z.
 \end{equation}
 can learn effective features/representations for downstream applications. For example, a trained deep neural network $f(\cdot, \bm \theta)$ can be applied to map images to representation vectors, that is, $\bm{z}_i = f(\bm{x}_i,\bm \theta)$, while a linear classifier can be learned on top of such representations $\{\bm{z}_i\}$. One notable breakthrough is AlexNet~\cite{krizhevsky2012imagenet}, a deep convolutional neural network trained with more than a million natural images, outperforming all previous approaches that were based on hand-crafted features. One of the key differences between AlexNet and previous approaches is \textit{learning parameters of the nonlinear transformation from massive data} trained with back propagation (BP) \cite{Back-Prop}, as detailed in Section \ref{app:BP-section} of Appendix \ref{app:optimization}. 
 
@@ -118,18 +118,17 @@ Now, if we agree that maximizing the rate reduction or information gain leads to
 In the previous chapter, we presented the rate reduction objective \eqref{eqn:maximal-rate-reduction} as a principled objective for learning linear discriminative representations of the data. We have, however, not specified the architecture of the feature mapping $\z = f(\x, \bm \theta)$ for extracting such representations from input data $\x$. 
 A straightforward choice is to use a conventional deep network, such as ResNet, for implementing $f(\x, \bm \theta)$. As we have seen in Example \ref{eg:Rate-Reduction-CIFAR10}, such a choice often leads to decent performance empirically. Nonetheless, there remain several unanswered problems with adopting an arbitrary deep network. Although the learned feature representation is now more interpretable, the network itself is still {\em not}. It is unclear why any chosen ``black-box'' network is able to optimize the desired MCR$^2$ objective at all. The good empirical results (say with a ResNet) do not necessarily justify the particular choice in architectures and operators of the network: Why is a deep layered model even necessary; what do additional layers try to improve or simplify; how wide and deep is adequate; or is there any rigorous justification for the convolutions (in a popular multi-channel form) and nonlinear operators (e.g. ReLU or softmax) used? 
 
-In this chapter, we show that using gradient ascent to maximize rate reduction $\Delta R(\Z )$ naturally leads to a ``white-box'' deep network that realizes the desired mapping. All network layered architecture, linear/nonlinear operators, and parameters are {\em explicitly constructed in a purely forward propagation fashion}. 
+In this chapter, we show that using gradient ascent to maximize rate reduction $\Delta R_{\epsilon}(\Z \mid \bm \Pi)$ as defined in \eqref{eqn:maximal-rate-reduction} naturally leads to a ``white-box'' deep network that realizes the desired mapping. All network layered architecture, linear/nonlinear operators, and parameters are {\em explicitly constructed in a purely forward propagation fashion}. 
 
 \paragraph{Gradient Ascent for Coding Rate Reduction.} From the previous chapter, we see that to seek a linear discriminative representation (LDR), mathematically, we are essentially seeking a continuous mapping $f(\cdot): \x \mapsto \z$ from the data $\X = [\x_1, \ldots, \x_N] \in \Re^{D \times N}$ (or initial features extracted from the data\footnote{As we will see the necessity of such a feature extraction in the next section.}) to an optimal representation $\Z = [\z_1, \ldots, \z_N] \in \Re^{d \times N}$ that maximizes the following coding rate reduction objective:
 \begin{equation}\label{eq:mcr-formulation}
 \begin{split}
-\Delta R_{\epsilon}(\Z \mid \bm{\Pi}) &= R_\epsilon(\Z) - R_{\epsilon}^c(\Z \mid  \bm{\Pi})\\
-&\doteq \underbrace{\frac{1}{2}\log\det \Big(\I + {\alpha} \Z \Z^{\top} \Big)}_{R_{\epsilon}(\Z)} \;-\; \underbrace{\sum_{j=1}^{k}\frac{\gamma_{j}}{2} \log\det\Big(\I + {\alpha_{j}} \Z \bm{\Pi}_{j} \Z^{\top} \Big)}_{R_{\epsilon}^c(\Z \mid\bm \Pi)},
+\Delta R_{\epsilon}(\Z \mid \bm{\Pi}) \doteq \underbrace{\frac{1}{2}\log\det \Big(\I + {\alpha} \Z \Z^{\top} \Big)}_{R_{\epsilon}(\Z)} \;-\; \underbrace{\sum_{k=1}^{K}\frac{\gamma_{k}}{2} \log\det\Big(\I + {\alpha_{k}} \Z \bm{\Pi}_{k} \Z^{\top} \Big)}_{R_{\epsilon}^c(\Z \mid \bm \Pi)},
 \end{split}
 \end{equation}
 where $\epsilon > 0$ is a prescribed quantization error and for simplicity we denote\footnote{Notice our use of slightly simplified notation compared to \Cref{ch:compression}.}
 \begin{align*}
-    \alpha=\frac{d}{N\epsilon^2},\ \alpha_{j}=\frac{d}{\mathrm{tr}(\bm{\Pi}_{j})\epsilon^2},\ \gamma_{j}=\frac{\mathrm{tr}(\bm{\Pi}_{j})}{N},\ \text{for}\ j = 1,\ldots, k.
+    \alpha := \frac{d}{N\epsilon^2},\ \alpha_{k} := \frac{d}{\mathrm{tr}(\bm{\Pi}_{k})\epsilon^2},\ \gamma_{k} := \frac{\mathrm{tr}(\bm{\Pi}_{k})}{N},\ \text{for}\ k = 1,\ldots, K.
 \end{align*}
 
 The question really boils down to whether there is a {\em constructive} way of finding such a continuous mapping $f(\cdot,\bm \theta)$ from $\bm x$ to $\bm z$? To this end, let us consider incrementally maximizing the objective $\Delta R_{\epsilon}$ as a function of $\Z \subseteq \mathbb{S}^{d-1}$. Although there might be many optimization schemes to choose from, for simplicity we first consider the arguably simplest projected {\em gradient ascent} (PGA)  scheme:\footnote{Notice that we use subscript $j$ on $\Z_j$ to indicate features in the $j$-th class and superscript $\ell$ on $\Z^{\ell}$ to indicate all features at $\ell$-th iteration or layer.} 
@@ -138,8 +137,8 @@ The question really boils down to whether there is a {\em constructive} way of f
 \quad \mbox{s.t.} \quad \Z^{\ell+1} \subseteq \mathbb{S}^{d-1}, \; \ell = 1, 2, \ldots,
 \label{eqn:gradient-descent}
 \end{equation}
-for some step size $\eta >0$ and the iterate starts with the given data $\bm Z^{1} = \bm X$.\footnote{Again, for simplicity, we here first assume the initial features $\bm Z^{1}$ are the data themselves. Note that here $\ell$ denotes the number of iterations. Hence, the data and the features have the same dimension $d$. This needs not to be the case though. As we will see in the next section, the initial features can be some (lifted) features of the data to begin with and could in principle have a different (much higher) dimension. All subsequent iterates have the same dimension.}
-This scheme can be interpreted as how one should incrementally adjust locations of the current features $\Z^\ell$, initialized as the input data $\bm X$, in order for the resulting $\Z^{\ell +1}$ to improve the rate reduction $\Delta R(\Z)$, as illustrated in Figure \ref{fig:gradient-flow}. 
+for some step size $\eta >0$ and the iterate starts with the given data $\bm Z^{0} = \bm X$.\footnote{Again, for simplicity, we here first assume the initial features $\bm Z^{1}$ are the data themselves. Note that here $\ell$ denotes the number of iterations. Hence, the data and the features have the same dimension $d$. This needs not to be the case though. As we will see in the next section, the initial features can be some (lifted) features of the data to begin with and could in principle have a different (much higher) dimension. All subsequent iterates have the same dimension.}
+This scheme can be interpreted as how one should incrementally adjust locations of the current features $\Z^\ell$, initialized as the input data $\bm X$, in order for the resulting $\Z^{\ell +1}$ to improve the rate reduction $\Delta R_{\epsilon}$, as illustrated in Figure \ref{fig:gradient-flow}. 
 \begin{figure}
 \centering
     \includegraphics[width=0.85\linewidth]{figs_chap4/redu_gradient_diagram.png} 
@@ -149,18 +148,18 @@ This scheme can be interpreted as how one should incrementally adjust locations 
 
 % \subsection{Transition from ReduNet to CRATE (TODO)}
 
-Simple calculation shows that the gradient ${\partial \Delta R}/{\partial \bm Z}$ entails evaluating the following derivatives of the two terms in $\Delta R(\Z )$:
+Simple calculation shows that the gradient ${\partial \Delta R_{\epsilon}}/{\partial \bm Z}$ entails evaluating the following derivatives of the two terms in $\Delta R_{\epsilon}$:
 \begin{equation}\label{eqn:expand-directions}
     \frac{1}{2}\frac{\partial \log \det (\I \!+\! \alpha \Z \Z^{\top} )}{\partial \bm Z}\bigg|_{\Z^\ell} = \,\, \underbrace{\alpha(\I \!+\! \alpha\Z^\ell (\Z^\ell)^\top)^{-1}}_{\bm E^{\ell} \; \in \Re^{d\times d}}\Z^\ell,
 \end{equation}
 
 \begin{equation}\label{eqn:compress-directions}
-\frac{1}{2}\frac{\partial \left( \gamma_{j}  \log \det (\I + \alpha_{j} \Z \bm \Pi_j \Z^{\top} )  \right)}{\partial \bm Z}\bigg|_{\Z^\ell} \\= \gamma_{j}  \underbrace{ \alpha_{j}  (\I +  \alpha_{j} \Z^\ell \bm \Pi_j (\Z^\ell)^{\top})^{-1}}_{\bm C^{\ell}_j \; \in \Re^{d\times d}} \Z^{\ell} \bm \Pi_j.
+\frac{1}{2}\frac{\partial \left( \gamma_{k}  \log \det (\I + \alpha_{k} \Z \bm \Pi_k \Z^{\top} )  \right)}{\partial \bm Z}\bigg|_{\Z^\ell} \\= \gamma_{k}  \underbrace{ \alpha_{k}  (\I +  \alpha_{k} \Z^\ell \bm \Pi_k (\Z^\ell)^{\top})^{-1}}_{\bm C^{\ell}_k \; \in \Re^{d\times d}} \Z^{\ell} \bm \Pi_k.
 \end{equation}
-Notice that in the above, the matrix $\bm E^{\ell}$  only depends on $\Z^{\ell}$ and it aims to {\em expand} all the features to increase the overall coding rate; the matrix $\bm C^{\ell}_{j}$ depends on features from the $j$-class and aims to {\em compress} them to reduce the coding rate of each class. 
-Then the complete gradient $\frac{\partial \Delta R}{\partial \bm Z}\big|_{\Z^\ell} \in \Re^{d\times N}$ is of the  form:
+Notice that in the above, the matrix $\bm E^{\ell}$  only depends on $\Z^{\ell}$ and it aims to {\em expand} all the features to increase the overall coding rate; the matrix $\bm C^{\ell}_{k}$ depends on features from the $k$-class and aims to {\em compress} them to reduce the coding rate of each class. 
+Then the complete gradient $\frac{\partial \Delta R_{\epsilon}}{\partial \bm Z}\big|_{\Z^\ell} \in \Re^{d\times N}$ is of the  form:
 \begin{equation}
-\frac{\partial \Delta R}{\partial \bm Z}\bigg|_{\Z^\ell}  = \underbrace{\bm E^{\ell}}_{\text{Expansion}} \Z^{\ell} \;-\; \sum_{j=1}^k \gamma_{j} \underbrace{\bm C_{j}^{\ell}}_{\text{Compression}}  \Z^{\ell} \bm{\Pi}_j.
+\frac{\partial \Delta R_{\epsilon}}{\partial \bm Z}\bigg|_{\Z^\ell}  = \underbrace{\bm E^{\ell}}_{\text{Expansion}} \Z^{\ell} \;-\; \sum_{k=1}^K \gamma_{k} \underbrace{\bm C_{k}^{\ell}}_{\text{Compression}}  \Z^{\ell} \bm{\Pi}_k.
 \label{eqn:DR-gradient}
 \end{equation}
 
@@ -170,7 +169,7 @@ For any $\bm z^\ell \in \mathbb{R}^d$,
     \bm E^\ell \bm z^\ell = \alpha(\bm z^\ell - \bm Z^\ell \bm q^\ell_\star),\
     \mbox{where}\ \bm q^\ell_\star \doteq \argmin_{\bm q^\ell} \alpha \|\bm z^\ell - \bm Z^\ell \bm q^\ell\|_2^2 + \|\bm q^\ell\|_2^2.
 \end{gather}
-Notice that $\bm q^\ell_\star$ is exactly the solution to the ridge regression by all the data points $\bm Z^\ell$ concerned. Therefore, $\bm E^\ell$ (similarly for $\bm C^\ell_j$) is approximately (i.e., when $N$ is large enough) the projection onto the orthogonal complement of the subspace spanned by columns of $\bm Z^\ell$. Another way to interpret the matrix $\bm E^\ell$ is through eigenvalue decomposition of the covariance matrix $\Z^\ell (\Z^\ell)^\top$. Assuming that $\Z^\ell (\Z^\ell)^\top \doteq \bm U^\ell \bm \Lambda^\ell (\bm U^\ell)^\top$ where $\bm \Lambda^\ell \doteq \diag\left(\lambda^\ell_1, \ldots, \lambda^\ell_d \right)$, we have 
+Notice that $\bm q^\ell_\star$ is exactly the solution to the ridge regression by all the data points $\bm Z^\ell$ concerned. Therefore, $\bm E^\ell$ (similarly for $\bm C^\ell_k$) is approximately (i.e., when $N$ is large enough) the projection onto the orthogonal complement of the subspace spanned by columns of $\bm Z^\ell$. Another way to interpret the matrix $\bm E^\ell$ is through eigenvalue decomposition of the covariance matrix $\Z^\ell (\Z^\ell)^\top$. Assuming that $\Z^\ell (\Z^\ell)^\top \doteq \bm U^\ell \bm \Lambda^\ell (\bm U^\ell)^\top$ where $\bm \Lambda^\ell \doteq \diag\left(\lambda^\ell_1, \ldots, \lambda^\ell_d \right)$, we have 
 \begin{equation}
 \bm E^\ell = \alpha \bm U^\ell\, \diag\left(\frac{1}{1+\alpha\lambda^\ell_1}, \ldots, \frac{1}{1+\alpha\lambda^\ell_d}\right) \left(\bm U^\ell\right)^\top.
 \end{equation}
@@ -179,66 +178,66 @@ Therefore, the matrix $\bm E^\ell$ operates on a vector $\bm z^\ell$ by stretchi
 \begin{figure}[t]
     \centering
     \includegraphics[width=0.65\linewidth]{figs_chap4/expand_compress.png}
-    \caption{\small Interpretation of $\bm C^\ell_j$ and $\bm E^\ell$: $\bm C^\ell_j$ compresses each class by contracting the features to a low-dimensional subspace; $\bm E^\ell$ expands all features by contrasting and repelling features across different classes.}
+    \caption{\small Interpretation of $\bm C^\ell_k$ and $\bm E^\ell$: $\bm C^\ell_k$ compresses each class by contracting the features to a low-dimensional subspace; $\bm E^\ell$ expands all features by contrasting and repelling features across different classes.}
     \label{fig:regression-interpretation}
     \vspace{-0.1in}
 \end{figure}
 
 
-Essentially, the linear operations $\bm E^\ell$ and $\bm C_j^\ell$ in gradient ascend for rate reduction are determined by training data conducting ``auto-regressions". The recent renewed understanding about ridge regression in an over-parameterized setting \cite{yang2020rethinking,Wu2020OnTO} indicates that using seemingly redundantly sampled data (from each subspace) as regressors does not lead to overfitting.
+Essentially, the linear operations $\bm E^\ell$ and $\bm C_k^\ell$ in gradient ascend for rate reduction are determined by training data conducting ``auto-regressions". The recent renewed understanding about ridge regression in an over-parameterized setting \cite{yang2020rethinking,Wu2020OnTO} indicates that using seemingly redundantly sampled data (from each subspace) as regressors does not lead to overfitting.
 \end{remark}
 
-\paragraph{Gradient-Guided Feature Map Increment.} Notice that in the above, the gradient ascent considers all the features $\Z^{\ell} = [\z^{\ell}_{1}, \dots, \z^{\ell}_{N}]$ as free variables. The increment $\Z^{\ell+1} - \Z^{\ell} = \eta \frac{\partial \Delta R}{\partial \bm Z}\big|_{\Z^\ell}$ does not yet give a transformation on the entire feature domain $\z^\ell \in \Re^d$. According to equation \eqref{eqn:DR-gradient}, the gradient cannot be evaluated at a point whose membership is not known, as illustrated in Figure \ref{fig:gradient-flow}. Hence, in order to find the optimal $f(\x,\bm  \theta)$ explicitly, we may consider constructing a small increment transform $g(\cdot, \bm{\theta}^{\ell})$ on the $\ell$-th layer feature $\z^\ell$ to emulate the above (projected) gradient scheme:
+\paragraph{Gradient-Guided Feature Map Increment.} Notice that in the above, the gradient ascent considers all the features $\Z^{\ell} = [\z^{\ell}_{1}, \dots, \z^{\ell}_{N}]$ as free variables. The increment $\Z^{\ell+1} - \Z^{\ell} = \eta \frac{\partial \Delta R_{\epsilon}}{\partial \bm Z}\big|_{\Z^\ell}$ does not yet give a transformation on the entire feature domain $\z^\ell \in \Re^d$. According to equation \eqref{eqn:DR-gradient}, the gradient cannot be evaluated at a point whose membership is not known, as illustrated in Figure \ref{fig:gradient-flow}. Hence, in order to find the optimal $f(\x,\bm  \theta)$ explicitly, we may consider constructing a small increment transform $g(\cdot, \bm{\theta}^{\ell})$ on the $\ell$-th layer feature $\z^\ell$ to emulate the above (projected) gradient scheme:
 \begin{equation}
 \z^{\ell + 1}   \; \propto \; \z^{\ell} + \eta\cdot  g(\z^{\ell}, \bm{\theta}^{\ell}) \quad \mbox{subject to} \quad \z^{\ell +1} \in \mathbb{S}^{d-1}
 \label{eqn:gradient-descent-transform}
 \end{equation}
-such that $\big[g(\z_1^{\ell}, \bm \theta^{\ell}), \ldots, g(\z_N^{\ell}, \bm \theta^{\ell}) \big] \approx \frac{\partial \Delta R}{\partial \bm Z}\big|_{\Z^\ell}.$ That is, we need to approximate the gradient flow $\frac{\partial \Delta R}{\partial \bm Z}$ that locally deforms all (training) features $\{\z_i^\ell\}_{i=1}^N$ with a continuous mapping $g(\z,\bm \theta)$ defined on the entire feature space $\z^\ell \in \Re^d$.  
+such that $\big[g(\z_1^{\ell}, \bm \theta^{\ell}), \ldots, g(\z_N^{\ell}, \bm \theta^{\ell}) \big] \approx \frac{\partial \Delta R_{\epsilon}}{\partial \bm Z}\big|_{\Z^\ell}.$ That is, we need to approximate the gradient flow $\frac{\partial \Delta R_{\epsilon}}{\partial \bm Z}$ that locally deforms all (training) features $\{\z_i^\ell\}_{i=1}^N$ with a continuous mapping $g(\z,\bm \theta)$ defined on the entire feature space $\z^\ell \in \Re^d$.  
 Notice that one may interpret the increment \eqref{eqn:gradient-descent-transform} as a discretized version of a continuous  differential equation:
 \begin{equation}
 \dot{\z} = g(\z, \theta).
 \end{equation}
-Hence the (deep) network so constructed can be interpreted as certain neural ODE \cite{chen2018neural}. Nevertheless, unlike neural ODE where the flow $g$ is chosen to be some generic structures, here our $g(\z, \theta)$ is to emulate the gradient flow of the rate reduction on the feature set (as shown in Figure \ref{fig:gradient-flow}): 
+Hence the (deep) network so constructed can be interpreted as certain neural ODE \cite{chen2018neural}. Nevertheless, unlike neural ODE where the flow $g$ is chosen to be some generic structures, here our $g(\z, \bm\theta)$ is to emulate the gradient flow of the rate reduction on the feature set (as shown in Figure \ref{fig:gradient-flow}): 
 \begin{equation*}
-    \dot{\Z} = \frac{\partial \Delta R}{\partial \bm Z},
+    \dot{\Z} = \frac{\partial \Delta R_{\epsilon}}{\partial \bm Z},
 \end{equation*} 
 and its structure is entirely derived and fully determined from this objective, without any other priors or heuristics.  
 
 By inspecting the structure of the gradient \eqref{eqn:DR-gradient}, it suggests that a natural candidate for the increment transform $g(\z^\ell, \bm \theta^\ell)$ is of the form:
 \begin{equation}
-    g(\z^\ell, \bm \theta^\ell) \; \doteq \; \bm E^\ell \z^\ell - \sum_{j=1}^k \gamma_{j} \pi_j(\z^\ell)\bm C_{j}^{\ell}  \z^{\ell}  \in \Re^d,
+    g(\z^\ell, \bm \theta^\ell) \; \doteq \; \bm E^\ell \z^\ell - \sum_{k=1}^K \gamma_{k} \pi_k(\z^\ell)\bm C_{k}^{\ell}  \z^{\ell}  \in \Re^d,
     \label{eqn:DR-gradient-transform}
 \end{equation}
-where  $\pi_j(\z^\ell) \in [0,1]$ indicates the probability of $\z^{\ell}$ belonging to the $j$-th class. The increment map parameters $\bm \theta^\ell$ depend on: First, a set of linear maps represented by $\bm E^{\ell}$ and $\{ \bm C^{\ell}_{j}\}_{j=1}^{k}$ that depend only on statistics of features of the training $\Z^\ell$; Second, the membership $\{ \pi_j(\z^\ell)\}_{j=1}^k$ of any feature $\z^\ell$. 
-Notice that on the training samples $\Z^\ell$, for which the memberships $\bm \Pi_j$ are known,  the so defined $g(\z^\ell, \bm \theta)$ gives exactly the values for the gradient $\frac{\partial \Delta R}{\partial \bm Z}\big|_{\Z^\ell}$.
+where $\pi_k(\z^\ell) \in [0,1]$ indicates the probability of $\z^{\ell}$ belonging to the $k$-th class. The increment map parameters $\bm \theta^\ell$ depend on: First, a set of linear maps represented by $\bm E^{\ell}$ and $\{ \bm C^{\ell}_{k}\}_{k=1}^{K}$ that depend only on statistics of features of the training $\Z^\ell$; Second, the membership $\{ \pi_k(\z^\ell)\}_{k=1}^K$ of any feature $\z^\ell$. 
+Notice that on the training samples $\Z^\ell$, for which the memberships $\bm \Pi_k$ are known,  the so defined $g(\z^\ell, \bm \theta)$ gives exactly the values for the gradient $\frac{\partial \Delta R_{\epsilon}}{\partial \bm Z}\big|_{\Z^\ell}$.  
 
 
-Since we only have the membership $\bm \pi_j$ for the training samples, the function $g(\cdot)$ defined in \eqref{eqn:DR-gradient-transform} can only be evaluated on the training. To extrapolate $g(\cdot)$ to the entire feature space, we need to estimate $\pi_j(\z^\ell)$ in its second term. In conventional deep learning, this map is typically modeled as a deep network and learned from the training data, say via {\em back propagation}. Nevertheless, our goal here is not to learn a precise classifier $\pi_{j}(\z^\ell)$ already. Instead, we only need a good enough estimate of the class information in order for $g(\cdot)$ to approximate the gradient $\frac{\partial \Delta R}{\partial \bm Z}$ well. 
+Since we only have the membership  for the training samples, the function $g(\cdot)$ defined in \eqref{eqn:DR-gradient-transform} can only be evaluated on the training. To extrapolate $g(\cdot)$ to the entire feature space, we need to estimate $\pi_k(\z^\ell)$ in its second term. In conventional deep learning, this map is typically modeled as a deep network and learned from the training data, say via {\em back propagation}. Nevertheless, our goal here is not to learn a precise classifier $\pi_{k}(\z^\ell)$ already. Instead, we only need a good enough estimate of the class information in order for $g(\cdot)$ to approximate the gradient $\frac{\partial \Delta R_{\epsilon}}{\partial \bm Z}$ well. 
 
 
 
-From the geometric interpretation of the linear maps $\bm E^\ell$ and $\bm C_j^\ell$ given by Remark \ref{rem:regression-interpretation}, the term $\bm p_{j}^{\ell} \doteq \bm C^{\ell}_j \z^{\ell}$ can be viewed as (approximately) the projection of $\z^{\ell}$ onto the orthogonal complement of each class $j$. Therefore, $\|\bm p_{j}^{\ell}\|_2$ is small if $\z^\ell$ is in class $j$ and large otherwise. This motivates us to estimate its membership based on the following softmax function:
+From the geometric interpretation of the linear maps $\bm E^\ell$ and $\bm C_k^\ell$ given by Remark \ref{rem:regression-interpretation}, the term $\bm p_{k}^{\ell} \doteq \bm C^{\ell}_k \z^{\ell}$ can be viewed as (approximately) the projection of $\z^{\ell}$ onto the orthogonal complement of each class $j$. Therefore, $\|\bm p_{j}^{\ell}\|_2$ is small if $\z^\ell$ is in class $j$ and large otherwise. This motivates us to estimate its membership based on the following softmax function:
 \begin{equation}
-    \widehat{\vpi}(\z^\ell) \doteq \softmax\rp{-\lambda\mat{\norm{\vC^{\ell}_{1}\vz^{\ell}}_{2} \\ \vdots \\ \norm{\vC^{\ell}_{k}\vz^{\ell}}_{2}}} = \frac{1}{\sum_{j = 1}^{k}\exp(-\lambda \norm{\vC^{\ell}_{j}\vz^{\ell}}_{2})}\mat{\exp(-\lambda\norm{\vC^{\ell}_{1}\vz^{\ell}}_{2}) \\ \vdots \\ \exp(-\lambda\norm{\vC^{\ell}_{k}\vz^{\ell}}_{2})} \in [0,1]^{k}.
+    \widehat{\vpi}(\z^\ell) \doteq \softmax\rp{-\lambda\mat{\norm{\vC^{\ell}_{1}\vz^{\ell}}_{2} \\ \vdots \\ \norm{\vC^{\ell}_{K}\vz^{\ell}}_{2}}} = \frac{1}{\sum_{k = 1}^{K}\exp(-\lambda \norm{\vC^{\ell}_{k}\vz^{\ell}}_{2})}\mat{\exp(-\lambda\norm{\vC^{\ell}_{1}\vz^{\ell}}_{2}) \\ \vdots \\ \exp(-\lambda\norm{\vC^{\ell}_{K}\vz^{\ell}}_{2})} \in [0,1]^{K}.
 \end{equation}
 Hence, the second term of \eqref{eqn:DR-gradient-transform} can be approximated by this estimated membership:
 \begin{align}
-\sum_{j=1}^k \gamma_{j} \pi_j(\z^\ell)\bm C_{j}^{\ell}  \z^{\ell} 
-\; \approx \;  \sum_{j=1}^k \gamma_{j} \widehat{\pi}_j(\z^\ell)  \bm{C}^{\ell}_j  \z^{\ell} 
-\; \doteq \; \bm \sigma\Big([\bm{C}^{\ell}_{1} \z^{\ell}, \dots, \bm{C}^{\ell}_{k} \z^{\ell}]\Big),
+\sum_{k=1}^K \gamma_{k} \pi_k(\z^\ell)\bm C_{k}^{\ell}  \z^{\ell} 
+\; \approx \;  \sum_{k=1}^K \gamma_{k} \widehat{\pi}_k(\z^\ell)  \bm{C}^{\ell}_k  \z^{\ell} 
+\; \doteq \; \bm \sigma\Big([\bm{C}^{\ell}_{1} \z^{\ell}, \dots, \bm{C}^{\ell}_{K} \z^{\ell}]\Big),
 \label{eqn:soft-residual}
 \end{align}
-which is denoted as a nonlinear operator $\bm \sigma(\cdot)$ on outputs of the feature $\z^\ell$ through $k$ groups of filters: $[\bm{C}^{\ell}_{1}, \dots, \bm{C}^{\ell}_{k}]$. Notice that the nonlinearality arises due to a ``soft'' assignment of class membership based on the feature responses from those filters.  
+which is denoted as a nonlinear operator $\bm \sigma(\cdot)$ on outputs of the feature $\z^\ell$ through $K$ groups of filters: $[\bm{C}^{\ell}_{1}, \dots, \bm{C}^{\ell}_{K}]$. Notice that the nonlinearality arises due to a ``soft'' assignment of class membership based on the feature responses from those filters.  
 
 Overall, combining \eqref{eqn:gradient-descent-transform},  \eqref{eqn:DR-gradient-transform}, and \eqref{eqn:soft-residual}, 
 the increment feature transform from $\z^{\ell}$ to $\z^{\ell+1}$ now becomes
 \begin{equation}\label{eqn:layer-approximate}
 \begin{aligned}
-\z^{\ell+1}  &\propto \; \z^\ell +  \eta \cdot  \bm E^{\ell} \z^{\ell} - \eta\cdot  \bm \sigma\big([\bm{C}^{\ell}_{1} \z^{\ell}, \dots, \bm{C}^{\ell}_{k} \z^{\ell}]\big)  \\
+\z^{\ell+1}  &\propto \; \z^\ell +  \eta \cdot  \bm E^{\ell} \z^{\ell} - \eta\cdot  \bm \sigma\big([\bm{C}^{\ell}_{1} \z^{\ell}, \dots, \bm{C}^{\ell}_{K} \z^{\ell}]\big)  \\
 &= \; \z^\ell +  \eta \cdot g(\z^\ell, \bm \theta^\ell) \qquad \mbox{s.t.} \quad \z^{\ell +1} \in \mathbb{S}^{d-1},
 \end{aligned}
 \end{equation}
-with the nonlinear function $\bm \sigma(\cdot)$ defined above and $\bm \theta^\ell$ collecting all the layer-wise parameters. That is  $\bm \theta^\ell =\left\{\bm E^\ell, \bm{C}^{\ell}_{1}, \dots, \bm{C}^{\ell}_{k}, \gamma_{j}, \lambda\right\}$. Note features at each layer are always ``normalized'' by projecting onto the unit sphere $\mathbb S^{d-1}$, denoted as $\mathcal P_{\mathbb S^{d-1}}$. The form of increment in \eqref{eqn:layer-approximate} can be illustrated by a diagram in  Figure~\ref{fig:arch-ReduNet}(a).
+with the nonlinear function $\bm \sigma(\cdot)$ defined above and $\bm \theta^\ell$ collecting all the layer-wise parameters. That is  $\bm \theta^\ell =\left\{\bm E^\ell, \bm{C}^{\ell}_{1}, \dots, \bm{C}^{\ell}_{K}, \gamma_{k}, \lambda\right\}$. Note features at each layer are always ``normalized'' by projecting onto the unit sphere $\mathbb S^{d-1}$, denoted as $\mathcal P_{\mathbb S^{d-1}}$. The form of increment in \eqref{eqn:layer-approximate} can be illustrated by a diagram in  Figure~\ref{fig:arch-ReduNet}(a).
 
 \begin{figure}[t]
     \begin{subfigure}[t]{0.35\textwidth}
@@ -252,7 +251,7 @@ with the nonlinear function $\bm \sigma(\cdot)$ defined above and $\bm \theta^\e
         \includegraphics[width=\textwidth]{figs_chap4/resnet_resnext.pdf}
         \caption{\textbf{ResNet} and \textbf{ResNeXt}.}
     \end{subfigure}
-    \caption{\small Network Architectures of the ReduNet and comparison with others. \textbf{(a)}: Layer structure of the \textbf{ReduNet} derived from one iteration of gradient ascent for optimizing rate reduction. \textbf{(b)} (left): A layer of ResNet~\cite{he2016deep}; and \textbf{(b)} (right): A layer of ResNeXt~\cite{ResNEXT}. As we will see in Section~\ref{sec:shift-invariant}, the linear operators $\bm E^\ell$ and $\bm{C}_j^\ell$ of the ReduNet naturally become (multi-channel) convolutions when shift-invariance is imposed.}
+    \caption{\small Network Architectures of the ReduNet and comparison with others. \textbf{(a)}: Layer structure of the \textbf{ReduNet} derived from one iteration of gradient ascent for optimizing rate reduction. \textbf{(b)} (left): A layer of ResNet~\cite{he2016deep}; and \textbf{(b)} (right): A layer of ResNeXt~\cite{ResNEXT}. As we will see in Section~\ref{sec:shift-invariant}, the linear operators $\bm E^\ell$ and $\bm{C}_k^\ell$ of the ReduNet naturally become (multi-channel) convolutions when shift-invariance is imposed.}
     \label{fig:arch-ReduNet}
 \end{figure}
 
@@ -260,47 +259,47 @@ with the nonlinear function $\bm \sigma(\cdot)$ defined above and $\bm \theta^\e
     \caption{Training algorithm for ReduNet}
     \label{alg:redunet_training}
     \begin{algorithmic}[1]
-        \Require{$\vX = [\vx_1, \ldots, \vx_N]\in \Re^{D \times N}$, $\bm{\Pi} = \{\bm \Pi_j\}_{j=1}^k$, $\epsilon > 0$, $\lambda$, and a learning rate $\eta$.}
-        \Ensure{The learned parameters \(\{\vE^{\ell}\}_{\ell = 1}^{L}, \{\{\vC^{\ell}_{j}\}_{j = 1}^{k}\}_{\ell = 1}^{L}, \{\gamma_{j}\}_{j = 1}^{k}\)}
+        \Require{$\vX = [\vx_1, \ldots, \vx_N]\in \Re^{D \times N}$, $\bm{\Pi} = \{\bm \Pi_k\}_{k=1}^K$, $\epsilon > 0$, $\lambda$, and a learning rate $\eta$.}
+        \Ensure{The learned parameters \(\{\vE^{\ell}\}_{\ell = 1}^{L}, \{\{\vC^{\ell}_{k}\}_{k = 1}^{K}\}_{\ell = 1}^{L}, \{\gamma_{k}\}_{k = 1}^{k}\)}
 
         \Procedure{ReduNetTraining}{$\vX, \vPi, \epsilon, \lambda, \eta$}
             \Statex{\quad\ \texttt{\# Define constants}}
 
             \State{\(\alpha \gets d/(N\epsilon^{2})\)}
-            \For{\(j \in \{1, \dots, k\}\)}
-            \State{\(\alpha_{j} \gets D/(\tr(\vPi_{j})\epsilon^{2})\)}
-            \State{\(\gamma_{j} \gets \tr(\vPi_{j})/D\)}
+            \For{\(k \in \{1, \dots, K\}\)}
+            \State{\(\alpha_{k} \gets D/(\tr(\vPi_{k})\epsilon^{2})\)}
+            \State{\(\gamma_{k} \gets \tr(\vPi_{k})/D\)}
             \EndFor
             \Statex{}
 
             \Statex{\quad\ \texttt{\# ReduNet layer-by-layer iteration}}
             \State{\(\vZ^{1} = \mat{\vz_{1}^1, \dots, \vz_{N}^1} \gets \vX\)} \Comment{Initialize the ReduNet per-layer iteration}
             \For{\(\ell \in \{1, \dots, L\}\)}
-                \Statex{\quad\ \texttt{\# Step 1: Compute network parameters} \(\vE^{\ell}, \{\vC^{\ell}_{j}\}_{j = 1}^{k}\)}
+                \Statex{\quad\ \texttt{\# Step 1: Compute network parameters} \(\vE^{\ell}, \{\vC^{\ell}_{k}\}_{k = 1}^{K}\)}
                 \State{\(\vE^{\ell} \gets \alpha\left(\vI + \alpha \vZ^{\ell}(\vZ^{\ell})^{\top}\right)^{-1} \in \R^{d \times d}\)}
-                \For{\(j \in \{1, \dots, k\}\)}
-                    \State{\(\vC^{\ell}_{j} \gets \alpha_{j}\left(\vI + \alpha_{j}\vZ^{\ell}\vPi_{j}(\vZ^{\ell})^{\top}\right)^{-1} \in \R^{d \times d}\)}
+                \For{\(k \in \{1, \dots, K\}\)}
+                    \State{\(\vC^{\ell}_{k} \gets \alpha_{k}\left(\vI + \alpha_{k}\vZ^{\ell}\vPi_{k}(\vZ^{\ell})^{\top}\right)^{-1} \in \R^{d \times d}\)}
                 \EndFor
                 \Statex{}
                 \Statex{\qquad\quad\texttt{\# Step 2: Update features \(\vZ^{\ell}\)}}
                 \For{\(i \in \{1, \dots, N\}\)}
-                    \State{\(\hat{\vpi}(\vz^{\ell}_i) \gets \displaystyle \softmax(-\lambda[\norm{\vC^{\ell}_{1}\vz^{\ell}_i}_{2}, \dots, \norm{\vC^{\ell}_{k}\vz^{\ell}_i}_{2}]) \in [0, 1]^{k}\)} \Comment{Compute soft assignments \(\hat{\vpi}(\vz^{\ell}_i)\)}
-                    \State{\(\displaystyle\vz^{\ell + 1}_i \gets \cP_{\bS^{d - 1}}\rp{\vz^{\ell}_i + \eta \bp{\vE^{\ell}\vz^{\ell}_i - \sum_{j = 1}^{k}\gamma_{j}\hat{\pi}_{j}(\vz^{\ell}_i) \vC^{\ell}_{j}\vz^{\ell}_i}} \in \R^{d}\)} \Comment{Update features \(\vz^{\ell + 1}_i\) from \(\vz^{\ell}_i\)}
+                    \State{\(\hat{\vpi}(\vz^{\ell}_i) \gets \displaystyle \softmax(-\lambda[\norm{\vC^{\ell}_{1}\vz^{\ell}_i}_{2}, \dots, \norm{\vC^{\ell}_{K}\vz^{\ell}_i}_{2}]) \in [0, 1]^{K}\)} \Comment{Compute soft assignments \(\hat{\vpi}(\vz^{\ell}_i)\)}
+                    \State{\(\displaystyle\vz^{\ell + 1}_i \gets \cP_{\bS^{d - 1}}\rp{\vz^{\ell}_i + \eta \bp{\vE^{\ell}\vz^{\ell}_i - \sum_{k = 1}^{K}\gamma_{k}\hat{\pi}_{k}(\vz^{\ell}_i) \vC^{\ell}_{k}\vz^{\ell}_i}} \in \R^{d}\)} \Comment{Update features \(\vz^{\ell + 1}_i\) from \(\vz^{\ell}_i\)}
                 \EndFor
             \EndFor
-            \State{\Return{\(\{\vE^{\ell}\}_{\ell = 1}^{L}, \{\{\vC^{\ell}_{j}\}_{j = 1}^{k}\}_{\ell = 1}^{L}, \{\gamma_{j}\}_{j = 1}^{k}\)}} \Comment{Return all network parameters.}
+            \State{\Return{\(\{\vE^{\ell}\}_{\ell = 1}^{L}, \{\{\vC^{\ell}_{k}\}_{k = 1}^{K}\}_{\ell = 1}^{L}, \{\gamma_{k}\}_{k = 1}^{K}\)}} \Comment{Return all network parameters.}
         \EndProcedure
     \end{algorithmic}
 \end{algorithm}
 
 
-\paragraph{Deep Network for Optimizing Rate Reduction.} Notice that the increment is constructed to emulate the gradient ascent for the rate reduction $\Delta R$. Hence by transforming the features iteratively via the above process, we expect the rate reduction to increase, as we will see in the experimental section. This iterative process, once converged say after $L$ iterations, gives the desired feature map $f(\x, \bm \theta)$ on the input $\x = \z_1 $, precisely in the form of a {\em deep network}, in which each layer has the structure shown in Figure~\ref{fig:arch-ReduNet} left:
+\paragraph{Deep Network for Optimizing Rate Reduction.} Notice that the increment is constructed to emulate the gradient ascent for the rate reduction $\Delta R_\epsilon$. Hence by transforming the features iteratively via the above process, we expect the rate reduction to increase, as we will see in the experimental section. This iterative process, once converged say after $L$ iterations, gives the desired feature map $f(\x, \bm \theta)$ on the input $\x = \z……0 $, precisely in the form of a {\em deep network}, in which each layer has the structure shown in Figure~\ref{fig:arch-ReduNet} left:
 \begin{equation}\label{eqn:ReduNet}
 \begin{aligned}
-f(\x, \bm \theta)\; =&  \;\;f^L \circ f^{L-1} \circ  \cdots \circ f^2 \circ
-    f^1(\z^1),  \\ 
+f(\x, \bm \theta)\; =&  \;\;f^L \circ f^{L-1} \circ  \cdots \circ f^1 \circ
+    f^0(\z^0),  \\ 
 f^\ell(\z^\ell, \bm \theta^\ell) \; \doteq & \;\; \z^{\ell+1} = \mathcal{P}_{\mathbb{S}^{n-1}}[\z^{\ell} + \eta\cdot g(\z^{\ell}, \bm \theta^{\ell})], \\
-g(\z^{\ell}, \bm \theta^{\ell}) \; =&\;\; \bm E^{\ell} \z^{\ell} -  \bm \sigma\big([\bm{C}^{\ell}_{1} \z^{\ell}, \dots, \bm{C}^{\ell}_{k} \z^{\ell}]\big).
+g(\z^{\ell}, \bm \theta^{\ell}) \; =&\;\; \bm E^{\ell} \z^{\ell} -  \bm \sigma\big([\bm{C}^{\ell}_{1} \z^{\ell}, \dots, \bm{C}^{\ell}_{K} \z^{\ell}]\big).
 \end{aligned}
 \end{equation}
 As this deep network is derived from maximizing the rate \textbf{redu}cation, we call it the \textbf{ReduNet}. By comparing the architecture of ReduNet with those of popular empirically designed networks, \textbf{ResNet} and \textbf{NesNeXt} shown in Figure \ref{fig:arch-ReduNet}, the similarity is somewhat uncanny. Conceptually, ReduNet could also be used to justify the popular mixture of experts (\textbf{MoE}) architecture \cite{MoE} as each parallel channel, $\bm{C}^{\ell}_k$, can be viewed as an ``expert'' trained for each class of objects.
@@ -322,14 +321,14 @@ We summarize the training and evaluation of ReduNet in \Cref{alg:redunet_trainin
     \caption{Evaluation algorithm for ReduNet}
     \label{alg:redunet_evaluation}
     \begin{algorithmic}[1]
-        \Require{Input \(\vx \in \R^{D}\), network parameters \(\{\vE^{\ell}\}_{\ell = 1}^{L}, \{\{\vC^{\ell}_{j}\}_{j = 1}^{k}\}_{\ell = 1}^{L}, \{\gamma_{j}\}_{j = 1}^{k}\), learning rate \(\lambda\)}
+        \Require{Input \(\vx \in \R^{D}\), network parameters \(\{\vE^{\ell}\}_{\ell = 1}^{L}, \{\{\vC^{\ell}_{k}\}_{k = 1}^{K}\}_{\ell = 1}^{L}, \{\gamma_{k}\}_{k = 1}^{K}\), learning rate \(\lambda\)}
         \Ensure{feature \(\vz^{L + 1}\)}
 
         \Procedure{ReduNetEvaluation}{$\vx$}
         \State{\(\vz^{1} \gets \vx \in \R^{D}\)} \Comment{Initialize the ReduNet per-layer iteration}
         \For{\(\ell \in \{1, \dots, L\}\)}
-        \State{\(\hat{\vpi}(\vz^{\ell}) \gets  \softmax(-\lambda\mat{\norm{\vC^{\ell}_{1}\vz^{\ell}}_{2}, \dots, \norm{\vC^{\ell}_{k}\vz^{\ell}}_{2}}) \in [0, 1]^{k}\)} \Comment{Compute soft assignments \(\hat{\vpi}(\vz^{\ell})\)}
-        \State{\(\vz^{\ell + 1} \gets \cP_{\bS^{d - 1}}\rp{\vz^{\ell} + \eta \bp{\vE^{\ell}\vz^{\ell} - \sum_{j = 1}^{k}\gamma_{j}\hat{\pi}_{j}(\vz^{\ell}) \vC^{\ell}_{j}\vz^{\ell}}} \in \R^{d}\)} \Comment{Update feature \(\vz^{\ell + 1}\) using \(\vz^{\ell}\)}
+        \State{\(\hat{\vpi}(\vz^{\ell}) \gets  \softmax(-\lambda\mat{\norm{\vC^{\ell}_{1}\vz^{\ell}}_{2}, \dots, \norm{\vC^{\ell}_{K}\vz^{\ell}}_{2}}) \in [0, 1]^{K}\)} \Comment{Compute soft assignments \(\hat{\vpi}(\vz^{\ell})\)}
+        \State{\(\vz^{\ell + 1} \gets \cP_{\bS^{d - 1}}\rp{\vz^{\ell} + \eta \bp{\vE^{\ell}\vz^{\ell} - \sum_{k = 1}^{K}\gamma_{k}\hat{\pi}_{k}(\vz^{\ell}) \vC^{\ell}_{k}\vz^{\ell}}} \in \R^{d}\)} \Comment{Update feature \(\vz^{\ell + 1}\) using \(\vz^{\ell}\)}
         \EndFor
         \State{\Return{\(\vz^{L + 1}\)}} \Comment{Return the output features}
         \EndProcedure
@@ -342,12 +341,12 @@ To provide some intuition on how ReduNet transforms the features, we provide a s
 Consider a mixture of three Gaussian distributions in $\R^{3}$ that is projected onto $\mathbb{S}^2$. We first generate data points for 3 classes: for $k=1,2,3$, $\bm{X}_{k}=[\bm{x}_{k,1}, \ldots, \bm{x}_{k,m}] \in \R^{3\times m}$, $\bm{x}_{k,i} \sim \mathcal{N}(\bm{\mu}_{k}, \sigma_{k}^{2} \I)$, and ${\pi}(\x_{k,i}) = k$.
 We set $m=500, \sigma_{1}=\sigma_{2}=\sigma_{3}=0.1$, and $\bm{\mu}_{1}, \bm{\mu}_{2}, \bm{\mu}_{3} \in \mathbb{S}^2$. 
 Then we project all the data points onto $\mathbb{S}^{2}$, i.e., $\bm{x}_{k,i}/\|\bm{x}_{k,i}\|_{2}$. 
-To construct the network (computing $\bm{E}^{\ell}, \bm{C}^{\ell}_{j}$ for the $\ell$-th layer), we set the number of iterations/layers $L=2,000$, step size $\eta=0.5$, and precision $\epsilon=0.1$. 
+To construct the network (computing $\bm{E}^{\ell}, \bm{C}^{\ell}_{k}$ for the $\ell$-th layer), we set the number of iterations/layers $L=2,000$, step size $\eta=0.5$, and precision $\epsilon=0.1$. 
 We do this only to demonstrate that our framework leads to stable deep networks even with thousands of layers. 
 In practice, thousands of layers may not be necessary and one can stop whenever adding new layers gives diminishing returns. 
 For this example, a couple of hundred layers is sufficient. Hence, the clear optimization objective gives a natural criterion for the depth of the network needed.
 
-As shown in Figure~\ref{fig:redu-3d-gaussian-diagram}, we can observe that after the mapping $f(\cdot, \bm{\theta})$, samples from the same class are highly compressed and converge to a single cluster and the angle between two different clusters is approximately $\pi/2$, which is well aligned with the optimal solution $\Z_{\star}$ of the MCR$^2$ loss in $\mathbb{S}^2$. 
+As shown in Figure~\ref{fig:redu-3d-gaussian-diagram}, we can observe that after the mapping $f(\cdot, \bm{\theta})$, samples from the same class are highly compressed and converge to a single cluster and the angle between two different clusters is approximately $\pi/2$, which is well aligned with the optimal solution $\Z^{\star}$ of the MCR$^2$ loss in $\mathbb{S}^2$. 
 MCR$^2$ loss of features on different layers can be found in Figure~\ref{fig:redu-3d-gaussian-diagram}(\textbf{c}). Empirically, we find that the constructed ReduNet is able to maximize MCR$^2$ loss and converges stably and samples from the same class converge to one cluster and different clusters are orthogonal to each other. 
 Moreover, when sampling new data points from the same distributions, we find that new samples from the same class consistently converge to the same cluster center as the training samples. 
 \begin{figure}[t]
@@ -420,10 +419,10 @@ Notice that now the data covariance matrix:
 &=& \left[ \circm(\z_{1}^1), \dots, \circm(\z_{N}^1) \right] \left[ \circm(\z_{1}^1), \dots, \circm (\z_{N}^1) \right]^\top \nonumber \\
 &=& \sum_{i =1}^N \circm(\z_{i}^1) \circm(\z_{i}^1)^\top \;\in \Re^{d\times d} 
 \end{eqnarray}
-associated with this family of samples is {\em automatically} a (symmetric) circulant matrix. Moreover, because the circulant property is preserved under sums, inverses, and products, the matrices $\bm E^1$ and $\bm C^1_j$ are also automatically circulant matrices, whose application to a feature vector $\bm z \in \Re^d$ can be implemented using circular convolution ``$\circledast$''.
+associated with this family of samples is {\em automatically} a (symmetric) circulant matrix. Moreover, because the circulant property is preserved under sums, inverses, and products, the matrices $\bm E^1$ and $\bm C^1_k$ are also automatically circulant matrices, whose application to a feature vector $\bm z \in \Re^d$ can be implemented using circular convolution ``$\circledast$''.
 Specifically, we have the following proposition. 
 
-\begin{proposition}[Convolution structures of $\bm E^1$ and $\bm C^1_j$]
+\begin{proposition}[Convolution structures of $\bm E^1$ and $\bm C^1_k$]
 The matrix 
 \begin{equation}
     \bm E^1 = \alpha\big(\bm I + \alpha \circm(\bm Z^1) \circm(\bm Z^1)^\top \big)^{-1}
@@ -434,24 +433,24 @@ where $\bm e_1 \in \Re^d$ is the first column vector of $\bm E^1$ and ``$\circle
 \begin{equation*}
     (\bm e_1 \circledast \bm z)_{i} \doteq \sum_{j=0}^{d-1} e_1(j) x(i+ d-j \,\, \textsf{mod} \,\,d).
 \end{equation*}
-Similarly, the matrices $\bm C^1_j$ associated with any subsets of $\bm Z^1$ are also circular convolutions. 
+Similarly, the matrices $\bm C^1_k$ associated with any subsets of $\bm Z^1$ are also circular convolutions. 
 \label{prop:circular-conv-1}
 \end{proposition}
 
-Not only do the first-layer parameters $\bm E^1$ and $\bm{C}^1_j$ of the ReduNet become circulant convolutions but also the next-layer features remain circulant matrices. 
+Not only do the first-layer parameters $\bm E^1$ and $\bm{C}^1_k$ of the ReduNet become circulant convolutions but also the next-layer features remain circulant matrices. 
 That is, the incremental feature transform in \eqref{eqn:layer-approximate} applied to all shifted versions of a $\z^1 \in \Re^d$, given by
 \begin{equation}
-    \circm(\z^1) + \eta \cdot \bm E^1 \circm(\z^1) - \eta \cdot \bm \sigma \Big([\bm{C}_1^1 \circm(\z^1), \ldots, \bm{C}^1_k \circm(\z^1)] \Big),
+    \circm(\z^1) + \eta \cdot \bm E^1 \circm(\z^1) - \eta \cdot \bm \sigma \Big([\bm{C}_1^1 \circm(\z^1), \ldots, \bm{C}^1_K \circm(\z^1)] \Big),
 \end{equation}
 is a circulant matrix.  This implies that there is no need to construct circulant families from the second layer features as we did for the first layer. 
 By denoting
 \begin{equation}
-\z^{2} \propto \z^{1} +\eta \cdot g(\z^{1}, \bm \theta^{1}) =  \z^1 + \eta \cdot \bm e_{1} \circledast \z^{1} -  \eta \cdot \bm \sigma\Big([\bm{c}_{1}^{1} \circledast \z^{1}, \dots, \bm{c}^{1}_{k} \circledast \z^{1}]\Big),
+\z^{2} \propto \z^{1} +\eta \cdot g(\z^{1}, \bm \theta^{1}) =  \z^1 + \eta \cdot \bm e_{1} \circledast \z^{1} -  \eta \cdot \bm \sigma\Big([\bm{c}_{1}^{1} \circledast \z^{1}, \dots, \bm{c}^{1}_{K} \circledast \z^{1}]\Big),
 \label{eqn:approximate-convolution}
 \end{equation}
 the features at the next level can be written as
 $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1, \bm \theta^1)), \dots, \circm( \bm z_{N}^1 + \eta g(\bm z_{N}^1, \bm \theta^1)) \big].$$
-Continuing inductively, we see that all matrices $\bm E^\ell$ and $\bm C^\ell_j$ based on such $\circm(\bm Z^\ell)$ are circulant, and so are all features. 
+Continuing inductively, we see that all matrices $\bm E^\ell$ and $\bm C^\ell_k$ based on such $\circm(\bm Z^\ell)$ are circulant, and so are all features. 
 By virtue of the properties of the data, ReduNet has taken the form of a convolutional network, {\em with no need to explicitly choose this structure!} 
 
 \paragraph{A Fundamental Trade-off between Invariance and Sparsity.} 
@@ -485,17 +484,17 @@ where $\circm(\z[c]) \in \Re^{d\times d}$ with $c \in [C]$ is the circulant vers
 	\caption{Each input signal $\bm x$ (an image here) can be represented as a superposition of sparse convolutions with multiple kernels $\bm d_c$ in a dictionary $\bm D$.}
 	\label{fig:multi-channel-sparse-representation}
 \end{figure}
-One way of resolving this conflict is to leverage additional structure within each class, in the form of {\em sparsity}: signals within each class are not generated as an arbitrary linear superposition of some base atoms (or motifs), but only {\em sparse} combinations of them and their shifted versions, as shown in Figure \ref{fig:multi-channel-sparse-representation}. More precisely, let $\bm D_j = [\bm d_{j,1}, \ldots, \bm d_{j,c}]$ denote a matrix with a collection of atoms associated for class $j$, also known as a dictionary, then each signal $\x$ in this class is sparsely generated as: 
+One way of resolving this conflict is to leverage additional structure within each class, in the form of {\em sparsity}: signals within each class are not generated as an arbitrary linear superposition of some base atoms (or motifs), but only {\em sparse} combinations of them and their shifted versions, as shown in Figure \ref{fig:multi-channel-sparse-representation}. More precisely, let $\bm D_k = [\bm d_{k,1}, \ldots, \bm d_{k,c}]$ denote a matrix with a collection of atoms associated for class $k$, also known as a dictionary, then each signal $\x$ in this class is sparsely generated as: 
 \begin{equation}
-    \x = \bm d_{j,1} \circledast z_1 + \ldots + \bm d_{j,c} \circledast z_c = \circm(\bm{D}_j)\z,
+    \x = \bm d_{k,1} \circledast z_1 + \ldots + \bm d_{k,c} \circledast z_c = \circm(\bm{D}_k)\z,
 \end{equation}
-for some sparse vector $\z$. Signals in different classes are then generated by different dictionaries whose atoms (or motifs) are incoherent from one another. Due to incoherence, signals in one class are unlikely to be sparsely represented by atoms in any other class. Hence all signals in the $k$ class can be represented as
+for some sparse vector $\z$. Signals in different classes are then generated by different dictionaries whose atoms (or motifs) are incoherent from one another. Due to incoherence, signals in one class are unlikely to be sparsely represented by atoms in any other class. Hence all signals can be represented as
 \begin{equation}
-\x = \big[\circm(\bm{D}_1), \circm(\bm{D}^2), \ldots, \circm(\bm{D}_k)\big] \bar \z,
+\x = \big[\circm(\bm{D}_1), \circm(\bm{D}_2), \ldots, \circm(\bm{D}_K)\big] \bar \z,
 \end{equation}
 where $\bar \z$ is sparse.\footnote{Notice that similar sparse representation models have long been proposed and used for classification purposes in applications such a face recognition, demonstrating excellent effectiveness  \cite{Wright:2009,wagner2012toward}. Recently, the convolution sparse coding model has been proposed by \cite{papyan2017convolutional} as a framework for interpreting the structures of deep convolution networks.} There is a vast literature on how to learn the most compact and optimal sparsifying dictionaries from sample data, e.g.  \cite{li2019multichannel,qu2019nonconvex} and subsequently solve the inverse problem and compute the associated sparse code $\z$ or $\bar \z$. Recent studies of \cite{qu2020nonconvex,Qu2020Geometric} even show that under broad conditions the convolution dictionary learning problem can be solved effectively and efficiently. 
 
-Nevertheless, for tasks such as classification, we are not necessarily interested in the precise optimal dictionary nor the precise sparse code for each individual signal. We are mainly interested if collectively the set of sparse codes for each class are adequately separable from those of other classes. Under the assumption of the sparse generative model, if the convolution kernels $\{\bm k_c\}_{c=1}^C$  match well with the ``transpose'' or ``inverse'' of the above sparsifying dictionaries $\bm D = [\bm D^1, \ldots, \bm D^k]$, also known as the {\em analysis filters} \cite{Cosparse-Nam,Analysis-Filter}, signals in one class will only have high responses to a small subset of those filters and low responses to others (due to the incoherence assumption).  Nevertheless, in practice, often a sufficiently large number of, say $C$, random filters $\{\bm k_c\}_{c=1}^C$ suffices to ensure that the extracted $C$-channel features
+Nevertheless, for tasks such as classification, we are not necessarily interested in the precise optimal dictionary nor the precise sparse code for each individual signal. We are mainly interested if collectively the set of sparse codes for each class are adequately separable from those of other classes. Under the assumption of the sparse generative model, if the convolution kernels $\{\bm k_c\}_{c=1}^C$  match well with the ``transpose'' or ``inverse'' of the above sparsifying dictionaries $\bm D = [\bm D_1, \ldots, \bm D_K]$, also known as the {\em analysis filters} \cite{Cosparse-Nam,Analysis-Filter}, signals in one class will only have high responses to a small subset of those filters and low responses to others (due to the incoherence assumption).  Nevertheless, in practice, often a sufficiently large number of, say $C$, random filters $\{\bm k_c\}_{c=1}^C$ suffices to ensure that the extracted $C$-channel features
 \begin{equation}
 \big[\bm k_1 \circledast \x, \bm k_2 \circledast \x, \ldots, \bm k_C \circledast \x\big]^\top = \big[\circm(\bm k_1) \x, \ldots, \circm(\bm k_C) \x \big]^\top \in \Re^{C\times d}
 \end{equation}
@@ -517,9 +516,9 @@ The multi-channel responses $\bar \z$ should be sparse. So to approximate the sp
 Figure \ref{fig:multi-channel-sparse-lifting} illustrates the basic ideas. One may refer to \cite{Analysis-Filter} for a more systematical study on the design of the sparsifying thresholding operator. Nevertheless, here we are not so interested in obtaining the best sparse codes as long as the codes are sufficiently separable. Hence the nonlinear operator $\bm \tau$ can be simply chosen to be a soft thresholding or a ReLU. 
 These presumably sparse features $\bar \z$ can be assumed to lie on a lower-dimensional (nonlinear) submanifold of $\mathbb{R}^{dC}$, which can be linearized and separated from the other classes by subsequent ReduNet layers, as illustrated later in Figure \ref{fig:learn-to-classify-diagram}. 
 
-The ReduNet constructed from circulant version of these multi-channel features $\bar\Z \doteq [\bar \z_1, \ldots, \bar \z_N] \in \Re^{C \times d \times N}$, i.e., $\circm(\bar\Z) \doteq [ \circm(\bar\z_1), \dots, \circm(\bar\z_N)] \in \Re^{dC \times dN}$, retains the good invariance properties described above: the linear operators, now denoted as $\bar{\bm E}$ and $\bar{\bm C}_j$, remain block circulant, and represent {\em multi-channel 1D circular convolutions. }
+The ReduNet constructed from circulant version of these multi-channel features $\bar\Z \doteq [\bar \z_1, \ldots, \bar \z_N] \in \Re^{C \times d \times N}$, i.e., $\circm(\bar\Z) \doteq [ \circm(\bar\z_1), \dots, \circm(\bar\z_N)] \in \Re^{dC \times dN}$, retains the good invariance properties described above: the linear operators, now denoted as $\bar{\bm E}$ and $\bar{\bm C}_k$, remain block circulant, and represent {\em multi-channel 1D circular convolutions. }
 Specifically, we have the following result.
-\begin{proposition}[Multi-channel convolution structures of $\bar{\bm E}$ and $\bar{\bm C}_j$]
+\begin{proposition}[Multi-channel convolution structures of $\bar{\bm E}$ and $\bar{\bm C}_k$]
 The matrix 
 \begin{equation}
 \label{eq:def-E-bar}
@@ -540,14 +539,14 @@ In above, $\bar{\bm e} \in \Re^{C \times C \times d}$ is a multi-channel convolu
 \begin{equation*}
     (\bar{\bm e} \circledast \bar\z)[c] \doteq \sum_{c'=1}^C \bar{\bm e}[c, c'] \circledast \bar{\z}[c'], \quad \forall c = 1, \ldots, C.
 \end{equation*}
-Similarly, the matrices $\bar{\bm C}_j$ associated with any subsets of $\bar{\bm Z}$ are also multi-channel circular convolutions. 
+Similarly, the matrices $\bar{\bm C}_k$ associated with any subsets of $\bar{\bm Z}$ are also multi-channel circular convolutions. 
 \label{prop:multichannel-circular-conv-1}
 \end{proposition}
-From Proposition \ref{prop:multichannel-circular-conv-1}, shift invariant ReduNet is a deep convolutional network for multi-channel 1D signals by construction. Notice that even if the initial lifting kernels are separated \eqref{eqn:sparse-lifting}, the matrix inverse  in \eqref{eq:def-E-bar} for computing $\bar{\bm E}$ (similarly for $\bar{\bm C_j}$) introduces ``cross talk'' among all $C$ channels. %This multi-channel mingling effect will become more clear when we show below how to compute $\bar{\bm E}$ and $\bar{\bm C}^j$ efficiently in the frequency domain. 
+From Proposition \ref{prop:multichannel-circular-conv-1}, shift invariant ReduNet is a deep convolutional network for multi-channel 1D signals by construction. Notice that even if the initial lifting kernels are separated \eqref{eqn:sparse-lifting}, the matrix inverse  in \eqref{eq:def-E-bar} for computing $\bar{\bm E}$ (similarly for $\bar{\bm C_k}$) introduces ``cross talk'' among all $C$ channels. %This multi-channel mingling effect will become more clear when we show below how to compute $\bar{\bm E}$ and $\bar{\bm C}^j$ efficiently in the frequency domain. 
 Hence, these multi-channel convolutions in general are {\em not} depth-wise separable, unlike the  Xception nets~\cite{Xception} that were once suggested to simplify multi-channel convolutional neural networks.\footnote{It remains open what additional structures on the data would lead to depth-wise separable convolutions.} 
 
 \begin{remark}[Reducing Computational Complexity in the Frequency Domain] 
-The calculation of $\bar{\bm E}$ in \eqref{eq:def-E-bar} requires inverting a matrix of size $dC \times dC$, which in general has complexity $O(d^3C^3)$.  Nevertheless, by using the fact that a circulant matrix can be diagonalized by the Discrete Fourier Transform (DFT) matrix, the complexity can be significantly reduced. As shown in \cite{chan2021redunet}, to compute $\bar{\bm E}$ and $\bar{C}——j \in \Re^{dC \times dC}$, we only need to compute in the frequency domain the inverse of $C\times C$ blocks for $d$ times hence the overall complexity becomes $O(dC^3)$.
+The calculation of $\bar{\bm E}$ in \eqref{eq:def-E-bar} requires inverting a matrix of size $dC \times dC$, which in general has complexity $O(d^3C^3)$.  Nevertheless, by using the fact that a circulant matrix can be diagonalized by the Discrete Fourier Transform (DFT) matrix, the complexity can be significantly reduced. As shown in \cite{chan2021redunet}, to compute $\bar{\bm E}$ and $\bar{\bm C}_k \in \Re^{dC \times dC}$, we only need to compute in the frequency domain the inverse of $C\times C$ blocks for $d$ times hence the overall complexity becomes $O(dC^3)$.
     
 \end{remark}
 
@@ -577,12 +576,6 @@ We use $N=100$ training samples ($10$ from each class) and set $\Gamma=200$, $C=
 By performing the above sampling in polar coordinate, we can obtain the data matrix $\bm{X}_p \in \mathbb{R}^{(\Gamma\cdot C) \times N}$. 
 For the ReduNet, we set the number of layers/iterations $L=40$, precision $\epsilon=0.1$, step size $\eta=0.5$. Before the first layer, we perform lifting of the input by 1D circulant-convolution with 20 random Gaussian kernels of size 5.   
 
-To evaluate the learned representation, each training sample is augmented by 20 of its rotated version, each shifted with stride=10. We compute the cosine similarities among the $m \times 20$ augmented training inputs $\bm{X}_{\text{rotation}}$ and the results are shown in Figure~\ref{fig:redu-invariant-1d-mnist-diagram} (\textbf{a}). 
-We compare the cosine similarities among the learned features of all the augmented versions, i.e., $\bar{\bm{Z}}_{\text{rotation}}$ and summarize the results in  Figure~\ref{fig:redu-invariant-1d-mnist-diagram} (\textbf{b}). 
-As we see, the so constructed rotation-invariant ReduNet is able to  map the training data (as well as all its rotated versions) from the 10 different classes into 10 nearly orthogonal subspaces. That is, the learnt subspaces are truly invariant to shift transformation in polar angle.  Next, we randomly draw another $100$ test samples followed by the same augmentation procedure. 
-In Figure~\ref{fig:redu-invariant-1d-mnist-diagram} (\textbf{c}), we visualize the MCR$^{2}$ loss on the  $\ell$-th layer representation of the ReduNet on the training and test dataset. From these results, we can find that the constructed ReduNet is indeed able to maximize the MCR$^{2}$ loss as well as generalize to the test data.
-
-
 \begin{figure}[t]
     \begin{subfigure}[t]{0.3\textwidth}
         \centering
@@ -604,6 +597,14 @@ In Figure~\ref{fig:redu-invariant-1d-mnist-diagram} (\textbf{c}), we visualize t
     \caption{\small Examples of rotated images of MNIST digits, each by 18$^{\circ}$. (\textbf{Left}) Diagram for polar coordinate representation;  (\textbf{Right}) Rotated images of digit `0' and `1'.}
     \label{fig:samples-invariant-1d-mnist-diagram}
 \end{figure}
+
+
+To evaluate the learned representation, each training sample is augmented by 20 of its rotated version, each shifted with stride=10. We compute the cosine similarities among the $m \times 20$ augmented training inputs $\bm{X}_{\text{rotation}}$ and the results are shown in Figure~\ref{fig:redu-invariant-1d-mnist-diagram} (\textbf{a}). 
+We compare the cosine similarities among the learned features of all the augmented versions, i.e., $\bar{\bm{Z}}_{\text{rotation}}$ and summarize the results in  Figure~\ref{fig:redu-invariant-1d-mnist-diagram} (\textbf{b}). 
+As we see, the so constructed rotation-invariant ReduNet is able to  map the training data (as well as all its rotated versions) from the 10 different classes into 10 nearly orthogonal subspaces. That is, the learnt subspaces are truly invariant to shift transformation in polar angle.  Next, we randomly draw another $100$ test samples followed by the same augmentation procedure. 
+In Figure~\ref{fig:redu-invariant-1d-mnist-diagram} (\textbf{c}), we visualize the MCR$^{2}$ loss on the  $\ell$-th layer representation of the ReduNet on the training and test dataset. From these results, we can find that the constructed ReduNet is indeed able to maximize the MCR$^{2}$ loss as well as generalize to the test data.
+
+
 
 \begin{figure}[t]
     \begin{subfigure}[t]{0.3\textwidth}
@@ -796,17 +797,18 @@ The supervised classification setting in which the ReduNet was derived is also s
 
 % \subsection{CRATE}
 
-\subsection{Learning Parsimonious Representations via Unrolled Optimization for Sparse Rate Reduction}
+\subsection{Unrolled Optimization for Sparse Rate Reduction}
 
 % Briefly recapping the sparse Dictionary Learning problem in Chapter \ref{ch:linear-independent}, fine-tuning its unrolled optimization leads to the Learned ISTA (LISTA) architecture. The sparseLand-type networks from unrolling convolutional sparse recovery... 
 
 % \pw{TODO: By unifying rate reduction, denoising and diffusion, and transformers, we derive  \href{https://arxiv.org/abs/2306.01129}{the white-box transformer CRATE}.}
 
-We consider a general learning setup associated with real-world signals. Let \(\X = \mat{\x_{1}, \dots, \x_{N}} \in \bR^{D \times N}\) denote random variables representing our data source, where each \(\x_{i} \in \bR^{D}\) is interpreted as a \textit{token}\footnote{For language transformers, tokens roughly correspond to words~\cite{vaswani2017attention}, while for vision transformers, tokens correspond to image patches~\cite{dosovitskiy2020image}.} and the \(\x_{i}\)'s may have arbitrary correlation structures. We use \(\Z = \mat{\z_{1}, \dots, \z_{N}} \in \bR^{d \times N}\) to denote the random variables that defines our representations. Each \(\z_{i} \in \bR^{d}\) is the representation of the corresponding token \(\x_i \in \bR^{D}\). 
-We are given \(B \geq 1\) i.i.d.~samples \(\X_{1}, \dots, \X_{B} \sim \X\), whose tokens are \(\x_{i, b}\). The representations of our samples are denoted \(\Z_{1}, \dots, \Z_{B} \sim \Z\) and those of our tokens are \(\z_{i, b}\). Finally, for a given network, we use \(\Z^{\ell}\) to denote the output of the first \(\ell\) layers when given \(\X\) as input. Correspondingly, the sample outputs are \(\Z_{i}^{\ell}\) and the token outputs are \(\z_{i, b}^{\ell}\).
+We consider a general learning setup associated with real-world signals. Let \(\X = \mat{\x_{1}, \dots, \x_{N}} \in \bR^{D \times N}\) denote random variables representing our data source. In vision tasks, each \(\x_{i} \in \bR^{D}\) is interpreted as a \textit{token}, typically corresponding to an image patch. In language tasks, each \(\x_{i} \in \bR^{D}\) is interpreted as an \textit{token embedding}, i.e., a continuous vector representation of a discrete token such as a word or subword.\footnote{With a slight abuse of terminology, we refer to both the discrete tokens and their associated embeddings simply as tokens throughout this chapter for convenience.}  % \footnote{For language transformers, tokens roughly correspond to words~\cite{vaswani2017attention}, while for vision transformers, tokens correspond to image patches~\cite{dosovitskiy2020image}.} and 
+The \(\x_{i}\)'s may have arbitrary correlation structures. We use \(\Z = \mat{\z_{1}, \dots, \z_{N}} \in \bR^{d \times N}\) to denote the random variables that defines our representations, where \(\z_{i} \in \bR^{d}\) is the representation of the corresponding token \(\x_i \in \bR^{D}\).% We are given \(B \geq 1\) i.i.d.~samples \(\X_{1}, \dots, \X_{B} \sim \X\), whose tokens are \(\x_{i, b}\). The representations of our samples are denoted \(\Z_{1}, \dots, \Z_{B} \sim \Z\) and those of our tokens are \(\z_{i, b}\). Finally, For a given network, we use \(\Z^{\ell}\) to denote the output of the first \(\ell\) layers when given \(\X\) as input. Correspondingly, the sample outputs are \(\Z_{i}^{\ell}\) and the token outputs are \(\z_{i, b}^{\ell}\).
 
 \begin{remark}
-    In transformers, each input sample is typically converted into a sequence of tokens. The definition of a token depends on the domain: in natural language processing, tokens typically correspond to words, subwords, or characters; in computer vision, tokens often represent image patches; and in time-series or graph data, tokens can be time points or nodes, respectively. A token representation is a vector that encodes the semantic or structural information of a token, typically produced by the intermediate or final layers of a transformer. These representations are designed to capture meaningful features of the input that are useful for downstream tasks such as classification, generation, or regression.
+    In transformers, each input sample is typically converted into a sequence of {\em tokens}. A token is a basic unit of information derived from the raw input: in natural language processing, tokens are typically words or subwords; in computer vision, they correspond to image patches; and in other modalities, they may represent time steps, spatial locations, or other domain-specific units. A {\em token embedding} is a continuous vector representation of a token that serves as the input to a transformer. It maps each token to a point in a high-dimensional space, enabling the model to process symbolic inputs using numerical computation.
+    A {\em token representation} is a vector that encodes the semantic or structural information of a token, typically produced by the intermediate or final layers of a transformer. These representations are designed to capture meaningful features of the input that are useful for downstream tasks such as classification, generation, or regression. Please refer to \Cref{sec:contrastive_learning} for more details about these concepts in implementations. 
 \end{remark}
 
 
@@ -815,22 +817,16 @@ We are given \(B \geq 1\) i.i.d.~samples \(\X_{1}, \dots, \X_{B} \sim \X\), whos
 \paragraph{Objective for Learning a Structured and Compact Representation.}
 Following the framework of rate reduction \Cref{sec:chap4-white-box-model-via-unrolling}, we contend
 that the goal of representation learning is to find a feature mapping \(f
-\colon \X \in \bR^{D \times N} \to \Z\in \bR^{d \times N}\) which transforms input
-data \(\X \in \bR^{D \times N}\) with a potentially nonlinear and multi-modal
-distribution to a (piecewise) \textit{linearized and compact} feature
-representation \(\Z \in \bR^{d \times N}\). While the joint distribution of
-tokens \(\{\z_{i}\}_{i = 1}^{N}\) in \(\Z\) may be sophisticated (and
-task-specific), we further contend that it is reasonable and practical to
-require that the target marginal distribution of individual tokens
-\(\z_{i}\) should be highly compressed and structured, amenable for compact coding. Particularly, we require the distribution to be \textit{a mixture of low-dimensional (say \(K\)) Gaussian
+\colon \X \in \bR^{D \times N} \to \Z\in \bR^{d \times N}\) which transforms input tokens \(\{\bm x_i\}_{i=1}^N \subset \R^D\) with a potentially nonlinear and multi-modal distribution to a (piecewise) \textit{linearized and compact} token representations \(\{\bm z_i\}_{i=1}^N \subset \bR^{d}\). While the joint distribution of tokens representations \(\{\z_{i}\}_{i = 1}^{N}\) may be sophisticated (and task-specific), we further contend that it is reasonable and practical to
+require that the target marginal distribution of individual token representations should be highly compressed and structured, amenable for compact coding. Particularly, we require the distribution to be \textit{a mixture of low-dimensional (say \(K\)) Gaussian
 distributions}, such that the \(k\)-th Gaussian has mean \(\Zero \in \bR^{d}\), covariance \(\vSigma_{k} \succeq \Zero \in \bR^{d \times d}\), and support spanned by the orthonormal basis \(\vU_{k} \in \bR^{d \times p}\). 
-We denote $\vU_{[K]} = \{\vU_k\}_{k=1}^K$ to be the set of bases of all Gaussians. Hence, to maximize the \textit{information gain} \cite{ma2022principles} for the final token representation, we wish to maximize the rate reduction (see \Cref{subsec:MCR2}) of the tokens, i.e., 
+We denote $\vU_{[K]} = \{\vU_k\}_{k=1}^K$ to be the set of bases of all Gaussians. Hence, to maximize the \textit{information gain} \cite{ma2022principles} for the final token representations, we wish to maximize their rate reduction (see \Cref{subsec:MCR2}), i.e., 
 \begin{align}\label{eq:rate reduction}
-    \mathrm{max}\ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) = R_{\epsilon}(\Z) - R^c_{\epsilon}(\Z \mid \vU_{[K]}) \qquad \mathrm{s.t.}\ \Z = f(\bm X). 
+    \mathrm{max}_{\bm Z \in \R^{d\times N}}\ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) \doteq R_{\epsilon}(\Z) - R^c_{\epsilon}(\Z \mid \vU_{[K]}).
 \end{align}
 %i.e., $\max_{\Z} \Delta R(\Z; \vU_{[K]}) = R(\Z) - R^c(\Z; \vU_{[K]})$, 
 % where \(R\) and \(R^{c}\) are estimates of lossy coding rates to be formally defined in Eq.~\eqref{eq:coding_rate} and Eq.~\eqref{eq:def-mcr-Rc}. This also promotes token representations \(\z_{i}\) from different Gaussians to be \textit{incoherent} \cite{yu2020learning}. 
-Here, the first term $R_{\epsilon}$ is an estimate of the lossy coding rate for the whole set of token representations. More specifically, if we view the token representations $\{\bm z_i\}_{i=1}^N$ as i.i.d. samples from a single zero-mean Gaussian, their lossy coding rate subject to quantization precision $\epsilon > 0$ is given as
+Here, the first term $R_{\epsilon}$ is an estimate of the lossy coding rate for the whole set of token representations. More specifically, if we view the token representations $\{\bm z_i\}_{i=1}^N$ as i.i.d. samples from a single zero-mean Gaussian, their lossy coding rate subject to a quantization precision $\epsilon > 0$ is given as
 \begin{equation}\label{eq:coding_rate}
     R_{\epsilon}(\Z) \doteq \frac{1}{2}\textrm{logdet}\left(\I + \frac{d}{N\epsilon^{2}}\Z^{\top}\Z\right) = \frac{1}{2}\textrm{logdet}\left(\I + \frac{d}{N\epsilon^{2}}\Z\Z^{\top}\right).
 \end{equation}
@@ -844,7 +840,7 @@ The second term $R_{\epsilon}^c$ is an estimate of the lossy coding rate under t
 \end{equation}
 
 \begin{remark}
-    The expression \eqref{eq:def-mcr-Rc} for the coding rate can be viewed as a generalization of the coding rate \(R_\epsilon^{c}\) used in the original rate reduction objective \eqref{eq:MCRc}. In particular, the original objective is defined with respect to a set of known membership labels \(\{\vPi_{k}\}\) specific to the particular data realization \(\vX\). In contrast, the current objective is defined with respect to subspaces \(\vU_{[K]}\), which are independent of any particular realization but are assumed to support the distribution of token features. Suppose that a token representation $\bm z_i$ belongs to a subspace $\bm U_k$ and these subspaces are orthogonal to each other, i.e., $\bm U_k^\top \bm U_l = \bm 0$ for all $k \neq l$. Then, one can verify that the projections $\bm U_k\bm U_k^\top \bm z_i = \bm z_i$ and  $\bm U_l\bm U_l^\top \bm z_i = \bm 0$ for all $l \neq k$. These orthogonal projections effectively serve as implicit membership labels, identifying the subspace to which each token representation belongs. 
+    The expression \eqref{eq:def-mcr-Rc} for the coding rate can be viewed as a generalization of the coding rate \(R_\epsilon^{c}\) used in the original rate reduction objective \eqref{eq:MCRc}. In particular, the original objective is defined with respect to a set of known membership labels \(\{\vPi_{k}\}\) specific to the particular data realization \(\vX\). In contrast, the current objective is defined with respect to subspaces \(\vU_{[K]}\), which are independent of any particular realization but are assumed to support the distribution of token representations. Suppose that a token representation $\bm z_i$ belongs to a subspace $\bm U_k$ and these subspaces are approximately orthogonal to each other, i.e., $\bm U_k^\top \bm U_l \approx \bm 0$ for all $k \neq l$. Then, one can verify that the projections $\bm U_k\bm U_k^\top \bm z_i  = \bm z_i$ and  $\bm U_l\bm U_l^\top \bm z_i \approx \bm 0$ for all $l \neq k$. These orthogonal projections effectively serve as implicit membership labels, identifying the subspace to which each token representation belongs. 
 \end{remark}
 
 % \begin{figure}
@@ -864,15 +860,12 @@ The second term $R_{\epsilon}^c$ is an estimate of the lossy coding rate under t
 \end{figure}
 
 
-\paragraph{Sparse Rate Reduction.} Note that the rate reduction objective \eqref{eq:rate reduction} is invariant to arbitrary joint rotations of the representations and subspaces. In particular, optimizing the rate reduction objective may not naturally lead to axis-aligned (i.e., \textit{sparse}) representations. {For instance, consider the three sets of learned representations in \Cref{fig:sparse-rate-reduction-diagram}. The coding rate reduction increases from (a) to (b), but because it is invariant under rotations, remains the same from (b) to (c).} Therefore, we would like to transform the representations (and their supporting subspaces) so that the features $\vZ$ eventually become sparse\footnote{Concretely, having few nonzero entries.} with respect to the standard coordinates of the resulting representation space {as in \Cref{fig:sparse-rate-reduction-diagram}(c)}. Therefore, to ensure the final representations are amenable to more compact coding, we would like to transform the representations (and their supporting subspaces) so that they become \textit{sparse} with respect to the standard coordinates of the resulting representation space.\footnote{That is, having the fewest nonzero entries.} Computationally, we may combine the above two goals into a unified objective for optimization:
-\vspace{0.05in}
+\paragraph{Sparse Rate Reduction.} Note that the rate reduction objective \eqref{eq:rate reduction} is invariant to arbitrary joint rotations of the representations and subspaces. In particular, optimizing the rate reduction objective may not naturally lead to axis-aligned (i.e., \textit{sparse}) representations. {For instance, consider the three sets of learned representations in \Cref{fig:sparse-rate-reduction-diagram}. The coding rate reduction increases from (a) to (b), but because it is invariant under rotations, remains the same from (b) to (c).} Therefore, we would like to transform the representations (and their supporting subspaces) so that the representations $\vZ$ eventually become sparse\footnote{Concretely, having few nonzero entries.} with respect to the standard coordinates of the resulting representation space {as in \Cref{fig:sparse-rate-reduction-diagram}(c)}. Therefore, to ensure the final representations are amenable to more compact coding, we would like to transform the representations (and their supporting subspaces) so that they become \textit{sparse} with respect to the standard coordinates of the resulting representation space.\footnote{That is, having the fewest nonzero entries.} Computationally, we may combine the above two goals into a unified objective for optimization:
 \begin{equation}
-\begin{aligned}
-   \max_{f \in \mathcal{F}}\ \mathbb{E}_{\Z}\big[ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) - \lambda \|\bm{Z}\|_0 \big] \qquad \text{s.t.}\ \Z = f(\X),
+   \max_{f \in \mathcal{F}}\ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) - \lambda \|\bm{Z}\|_0 \qquad \text{s.t.}\ \Z = f(\X),
    \label{eq:sparse-rr}
-\end{aligned}
 \end{equation}
-where the $\ell_0$-norm $\|\Z\|_0$ promotes the sparsity of the final token representations \(\Z = f(\X)\).\footnote{To simplify the notation, we will discuss the objective for one sample $\X$ at a time with the understanding that we always mean to optimize the expectation.} We call this objective \textit{sparse rate reduction}. 
+where $\mathcal{F}$ denotes a general function class and the $\ell_0$-norm $\|\Z\|_0$ promotes the sparsity of the final token representations \(\Z = f(\X)\).% \footnote{To simplify the notation, we will discuss the objective for one sample $\X$ at a time with the understanding that we always mean to optimize the expectation.} We call this objective \textit{sparse rate reduction}. 
 % \yima{A figure to illustrate the sparse rate reduction objective...} 
 % \yaodong{Added the figure below and the comparison with MCR$^2$.}
 
@@ -883,7 +876,7 @@ where the $\ell_0$-norm $\|\Z\|_0$ promotes the sparsity of the final token repr
 In practice, the $\ell_0$-norm is often relaxed to the $\ell_1$-norm to improve computational traceability and enable convex optimization techniques \cite{Wright-Ma-2022}. Motivated by this, we relax Problem \eqref{eq:sparse-rr} accordingly, leading to a formulation that remains faithful to the original sparsity objective while being more amenable to efficient algorithms as follow:  
 \begin{equation}
 \begin{aligned}
-   \max_{f \in \mathcal{F}}\ \mathbb{E}_{\Z}\big[ \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) - \lambda \|\bm{Z}\|_1 \big] \qquad \text{s.t.}\ \Z = f(\X),
+   \max_{f \in \mathcal{F}}\    \Delta R_{\epsilon}(\Z \mid \vU_{[K]}) - \lambda \|\bm{Z}\|_1  \qquad \text{s.t.}\ \Z = f(\X),
    \label{eq:sparse-rr-1}
 \end{aligned}
 \end{equation}
@@ -894,49 +887,109 @@ In practice, the $\ell_0$-norm is often relaxed to the $\ell_1$-norm to improve 
 % To optimize the learning objective and learn compact and structured representation, one approach is unrolled optimization~\cite{gregor2010learning,tolooshams2021stable}: each layer of the deep network implements an iteration of an optimization algorithm on the learning objective. 
 % For example, one can design the layer $f^{\ell}$ such that the forward pass is equivalent to a proximal gradient descent step for optimizing learning objective $L(\vZ)$, i.e., $\vZ^{\ell+1} = f^{\ell}(\vZ^{\ell}) = \texttt{Prox}[\vZ^{\ell} - \eta\cdot\nabla_{\vZ} L(\vZ^{\ell})]$. Here we use $\eta$ to denote the step size and $\texttt{Prox}[\cdot]$ to denote the proximal operator~\cite{parikh2014proximal}.
 
-Although easy to state, each term in the above objective is computationally challenging to optimize \cite{Wright-Ma-2022,chan2021redunet}. Hence it is natural to adopt an approximation approach that realizes the global transformation $f$ to optimize 
+Although easy to state, each term in the above objective is computationally challenging to optimize \cite{Wright-Ma-2022}. Hence it is natural to adopt an approximation approach that realizes the global transformation $f$ to optimize 
 \eqref{eq:sparse-rr} through a concatenation of multiple, say $L$, simple \textit{incremental and local} operations $f^\ell$ that push the representation distribution towards the desired parsimonious model distribution:
 \begin{equation}
 f\colon \X = \bm Z^0 \xrightarrow{\hspace{1mm} f^0 \hspace{1mm}} \Z^1 \rightarrow \cdots \rightarrow \Z^\ell \xrightarrow{\hspace{1mm} f^{\ell} \hspace{1mm}} \Z^{\ell+1} \rightarrow  \cdots \xrightarrow{\hspace{1mm} f^{L-1}} \Z^L = \Z,
 \label{eq:incremental}
 \end{equation}
 where $f^0: \bR^{D} \rightarrow \bR^{d}$ is the pre-processing mapping that transforms each input token $\x_{i} \in \bR^{D}$ to the initial token representations $\z_{i}^{1} \in \bR^{d}$.  
-Each incremental \textit{forward mapping} $\Z^{\ell + 1} = f^\ell(\Z^\ell)$, or a ``layer'', transforms the token distribution to \textit{optimize} the above sparse rate reduction objective \eqref{eq:sparse-rr}, conditioned on the distribution of its input $\Z^\ell$. {In contrast to other unrolled optimization approaches such as the ReduNet \cite{chan2021redunet}}, we \textit{explicitly model} the distribution of $\Z^\ell$ at each layer, say as a mixture of linear subspaces or sparsely generated from a dictionary. The model parameters are learned from data (say via \textit{backward propagation} with end-to-end training). This separation of forward ``optimization'' and backward
+Each incremental \textit{forward mapping} $\Z^{\ell + 1} = f^\ell(\Z^\ell)$, or a ``layer'', transforms the token distribution to \textit{optimize} the above sparse rate reduction objective \eqref{eq:sparse-rr}, conditioned on the distribution of its input $\Z^\ell$. 
+
+\begin{remark}
+    In contrast to other unrolled optimization approaches such as the ReduNet (see \Cref{sec:chap4-white-box-model-via-unrolling}), we \textit{explicitly model} the distribution of $\Z^\ell$ at each layer, say as a mixture of linear subspaces or sparsely generated from a dictionary. The model parameters are learned from data (say via \textit{backward propagation} with end-to-end training). This separation between forward ``optimization'' and backward
 ``learning'' clarifies the mathematical role of each layer as an operator
-transforming the distribution of its input, whereas the input distribution is
-in turn modeled (and subsequently learned) by the parameters of the layer. 
+that transforms the distribution of its input, whereas the input distribution is in turn modeled (and subsequently learned) by the parameters of the layer. 
+\end{remark}
 
 Now, we show how to derive these incremental and local operations through an unrolled optimization perspective to solve Problem \eqref{eq:sparse-rr-1}.  Once we decide on using an incremental approach to optimizing Problem
 \eqref{eq:sparse-rr-1}, there are a variety of possible choices to achieve the optimization. Given a model for $\Z^\ell$, say a mixture of subspaces $\vU_{[K]}$, we opt for a two-step \textit{alternating minimization} method with a strong conceptual basis. First, we \textit{compress} the tokens $\vZ^{\ell}$ via a gradient descent to minimize the coding rate term $R^c_\epsilon (\vZ \mid \vU_{[K]}^\ell)$. Specifically, we take a gradient step on $R^c_\epsilon$ with a learning rate $\kappa$ as follows:
-\begin{align}
-    \bm Z^{\ell+1/2} = \bm Z^\ell - \kappa \nabla R^c_\epsilon (\vZ \mid \vU_{[K]}^\ell). 
+\begin{align}\label{eq:Z l+1/2}
+    \bm Z^{\ell+1/2} = \bm Z^\ell - \kappa \nabla_{\bm Z} R^c_\epsilon (\vZ \mid \vU_{[K]}^\ell). 
 \end{align}
+Next, we \textit{sparsify} the compressed tokens, generating \(\vZ^{\ell + 1}\) via a suitably-relaxed proximal gradient step to minimize the remaining term $\lambda \norm{\vZ}_{1} - R_{\epsilon}(\vZ)$. As we will argue in detail later, we can find such a $\bm Z^{\ell+1}$ by solving a sparse presentation problem with respect to a dictionary $\bm D^\ell$:
+\begin{equation}\label{eq:Z l+1}
+  \vZ^{\ell+1} = \argmin_{{\vZ}}  \lambda \norm{\vZ}_1 + \frac{1}{2}\norm{\vZ^{\ell + 1/2} - \vD^{\ell} {\vZ}}_F^2.
+\end{equation}
+In the following, we provide technical details for each of the two steps above and derive efficient updates for their implementation.
 
 
 
+
+\paragraph{Self-Attention as Gradient Descent on Coding Rate of Token Representations.} For the first step \eqref{eq:Z l+1/2}, the gradient of the coding rate \(\nabla_{\bm Z} R^c_\epsilon\) is costly to compute, as it involves \(K\) separate matrix inverses, one for each of the \(K\) subspaces with basis \(\vU_{k}^{\ell}\):
+\begin{equation}
+    \nabla_{\bm Z} R_{\epsilon}^c(\vZ \mid \vU_{[K]})
+    = \frac{p}{N\epsilon^2}\sum_{k=1}^K \vU_k\vU_k^\top\vZ\Big(\I +
+    \frac{p}{N\epsilon^2}(\vU_k^\top\vZ)^\top(\vU_k^\top\vZ)\Big)^{-1}.
+    \label{eq:rate-gradient}
+\end{equation}
+Now, we demonstrate that this gradient can be naturally approximated using a so-called multi-head subspace self-attention (MSSA) operator, which has a similar functional form to the multi-head self-attention operator \citep{vaswani2017attention} with \(K\) heads (i.e., one for each subspace, coming from each matrix inverse). Here, we approximate the gradient \eqref{eq:rate-gradient} using the first-order Neumann series (see \Cref{ex:neumannn}):
+\begin{align}\label{eq:gd_rc_neumann}
+    \nabla_{\bm Z} R_{\epsilon}^{c}(\vZ \mid \vU_{[K]}) 
+    &\approx \frac{p}{N\epsilon^2} \sum_{k = 1}^{K}\vU_{k}\vU_{k}^\top\vZ\left(\vI - \frac{p}{N\epsilon^2} (\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)\right) \notag \\
+    &{= \frac{p}{N\epsilon^2} \left(\sum_{k = 1}^{K} \vU_{k}\vU_{k}^\top\right)\vZ -  \left( \frac{p}{N\epsilon^2}\right)^2\sum_{k = 1}^{K} \vU_{k}(\vU_{k}^\top\vZ)(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)}.
+\end{align}
+In this approximation, we compute the similarity between projected token representations $\{\bm U_k^\top\bm z_i\}$ through an auto-correlation among the projected features as $(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)$ and convert it to a distribution of membership with a softmax, namely $\softmax{(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)}$. 
+Suppose that a union of subspaces $\bm U_{[K]}$ spans the whole space. Then, we have $\sum_{k = 1}^{K} \vU_{k}\vU_{k}^\top = \bm I$. Hence, \eqref{eq:gd_rc_neumann} becomes
+\begin{align}\label{eq:grad Rc}
+    \nabla_{\bm Z} R_{\epsilon}^{c}(\vZ \mid \vU_{[K]}) 
+     \approx  \frac{p}{N\epsilon^2} \vZ -  \left( \frac{p}{N\epsilon^2}\right)^2 \MSSA\left(\vZ^{\ell} \mid \vU_{[K]}^{\ell}\right),
+\end{align}
+where MSSA is defined through an SSA operator as follows:
+\begin{align}
+% \vspace{-0.15in}
+    & \mathrm{SSA}\left(\vZ \mid \vU_{k}\right) 
+    \doteq (\vU_{k}^\top \vZ)\mathrm{softmax}\left((\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)\right), \ \forall k \in [K], \label{eq:SSA} \\
+    & \mathrm{MSSA}\left(\vZ \mid \vU_{[K]}\right) 
+    \doteq \frac{p}{N\epsilon^2} \mat{\vU_{1}, \dots, \vU_{K}}\mat{\mathrm{SSA}({\vZ \mid \vU_{1}}) \\ \vdots \\ \mathrm{SSA}({\vZ \mid \vU_{K}})}.\label{eq:Multi-Head-SSA}
+\end{align}  
+Substituting \eqref{eq:grad Rc} into \eqref{eq:Z l+1/2} yields that it can naturally approximated by
+\begin{equation}
+    \vZ^{\ell + 1/2} = \left(1 - \frac{\kappa p}{N\epsilon^2}\right) \vZ^{\ell} + \frac{\kappa p}{N\epsilon^2} \mathrm{MSSA}\left({\vZ^{\ell} \mid \vU_{[K]}^{\ell}}\right).  \label{eq:gd-mcr-parts} 
+\end{equation}
 % Next, we \textit{sparsify} the compressed tokens, with a suitably-relaxed proximal gradient step on the difference of the sparsity penalty and the expansion term to minimize the remaining term $\lambda \norm{\vZ}_{1} - R_\epsilon(\vZ)$. 
 % \begin{align}
 %     \bm Z^{l+1} = \mathrm{argmin}\ \frac{1}{2} \left\| \bm Z^{\ell+1/2} - \bm D^\ell\bm Z \right\|_F^2 + \lambda \|\bm Z_1\|.
 % \end{align}
 % These two operators are applied incrementally and repeatedly, as each $f^\ell$ in \eqref{eq:incremental} is instantiated with these two steps.  
 
-\begin{figure}[t!]
-     \centering
-         \includegraphics[width=\textwidth]{figs_chap4/CRATE_fig1_patches.pdf}
-     \vspace{-0.1in}
-     \caption{
-     \textbf{The `main loop' of the \textsc{crate} white-box deep network design.} 
-     After encoding input data as a sequence of tokens $\vZ^0$, \textsc{crate} constructs a deep network that transforms the data to a canonical configuration of low-dimensional subspaces by successive   {\textit{\textbf{compression}}} 
-     against a local model for the distribution, generating $\vZ^{\ell+1/2}$, and      {\textit{\textbf{sparsification}}} 
-     against a global dictionary, generating $\vZ^{\ell+1}$. 
-     Repeatedly stacking these blocks and training the model parameters via backpropagation yields a powerful and interpretable representation of the data.
-     }
-        \label{fig:crate-diagram}
-\end{figure}
 
 
-\paragraph{One Layer of the \textsc{CRATE} Model} We now design a white-box transformer architecture, named the Coding RATE Transformer (\textsc{crate}), by applying unrolled optimization to the sparse rate reduction objective \eqref{eq:sparse-rr}. Each layer of \textsc{crate} contains two blocks: the compression block and the sparsification block, which correspond to a two-step alternating optimization procedure for optimizing the sparse rate reduction objective \eqref{eq:sparse-rr}. 
+\begin{remark}
+    The SSA operator in \eqref{eq:SSA} resembles the \textit{attention operator} in a typical transformer \citep{vaswani2017attention}, except that here the linear operators of value, key, and query  are all set to be \textit{the same} as the subspace basis, i.e., $\vV_{k} = \vK_{k} = \bm{Q}_{k} = \vU_k^*$. Hence, we name $\mathrm{SSA}({\spcdot\mid\vU_k}): \bR^{d\times n} \rightarrow \bR^{p\times n}$  the \textbf{S}ubspace \textbf{S}elf-\textbf{A}ttention (SSA) operator. Then, the whole MSSA operator in \eqref{eq:Multi-Head-SSA}, formally defined as \(\mathrm{MSSA}({\spcdot \mid \vU_{[K]}}) \colon \bR^{d \times n} \to \bR^{d \times n}\) and called the \textbf{M}ulti-Head \textbf{S}ubspace \textbf{S}elf-\textbf{A}ttention (MSSA) operator, aggregates the attention head outputs by averaging using model-dependent weights, similar in concept to the popular multi-head self-attention operator in existing transformer networks.  The overall gradient step \eqref{eq:gd-mcr-parts} resembles the multi-head self-attention implemented with a skip connection in transformers.  
+\end{remark}
 
+
+
+
+\paragraph{MLP as Proximal Gradient Descent for Sparse Coding of Token Representations.} For the second step of alternating minimization, we need to minimize $\lambda \norm{\vZ}_{1} - R_{\epsilon}(\vZ)$. Note that the gradient \(\nabla R_{\epsilon}(\vZ)\) involves a matrix inverse, and thus naive proximal gradient (see \Cref{subsec:pgd}) to optimize this problem becomes intractable on large-scale problems. % However, this problem is highly nonsmooth and nonconvex, which is difficult to optimize. 
+We therefore take a different, simplifying approach to trading off between representational diversity and sparsification: we posit a (complete) incoherent or orthogonal dictionary $\vD^{\ell} \in \bR^{d \times d}$, and ask to sparsify the intermediate iterates $\vZ^{\ell + 1/2}$ with respect to \(\vD^{\ell}\). That is, $\vZ^{\ell + 1/2} \approx \vD^{\ell} \vZ^{\ell + 1}$ where $\vZ^{\ell + 1}$ is more sparse; that is, it is a \textit{sparse encoding} of \(\vZ^{\ell + 1/2}\). The dictionary \(\vD^{\ell}\) is used to sparsify all tokens simultaneously. 
+By the incoherence assumption, we have $(\vD^{\ell})^\top(\vD^{\ell}) \approx \vI$. Thus from \eqref{eq:coding_rate} we have 
+\begin{equation}
+    R_{\epsilon}(\vZ^{\ell + 1/2}) \approx R_{\epsilon}(\vD^{\ell}\vZ^{\ell + 1}) \approx R_{\epsilon}(\vZ^{\ell + 1}).
+\end{equation}  
+To solve $\lambda \norm{\vZ}_{1} - R_{\epsilon}(\vZ)$, we optimize the following problem
+\begin{align*}
+       \vZ^{\ell + 1} \approx \argmin_{\vZ}  \norm{\vZ}_1 \quad \mbox{subject to} \quad \vZ^{\ell + 1/2} = \vD^{\ell}\vZ.
+\end{align*}
+{The above sparse representation program is usually solved by relaxing it to an unconstrained convex program, known as LASSO \citep{Wright-Ma-2022}:} 
+\begin{equation}
+    \vZ^{\ell + 1} \approx \argmin_{\vZ} \left[\lambda \norm{\vZ}_1 + \frac{1}{2}\norm{\vZ^{\ell + 1/2} - \vD^{\ell} \vZ}_F^2 \right].
+\end{equation}
+In our implementation, we also add a non-negative constraint to $\vZ^{\ell + 1}$, and solve the corresponding non-negative LASSO:
+\begin{equation}
+    \vZ^{\ell + 1} \approx \argmin_{\vZ \geq \bm 0} \left[\lambda\norm{\vZ}_1 + \frac{1}{2}\norm{\vZ^{\ell + 1/2} - \vD^{\ell} \vZ}_{F}^{2}\right].
+    \label{eq:sparse-nonnegative}
+\end{equation}
+Then, we incrementally optimize \Cref{eq:sparse-nonnegative} by performing an unrolled {\em proximal gradient descent} step, known as an ISTA step \citep{beck2009fast}, to give the update:
+\begin{align}\label{eq:ista-block}
+    \vZ^{\ell + 1} 
+    &= \mathrm{ISTA}({\vZ^{\ell + 1/2} \mid \vD^{\ell}}), \\
+    \text{where} \quad \mathrm{ISTA}({\vZ \mid \vD}) 
+    &\doteq \operatorname{ReLU}(\vZ - \eta \vD^\top(\vD\vZ - \vZ) - \eta \lambda \bm{1}).
+\end{align}
+
+% \paragraph{One Layer of the \textsc{CRATE} Model} We now design a white-box transformer architecture, named the Coding RATE Transformer (\textsc{crate}), by applying unrolled optimization to the sparse rate reduction objective \eqref{eq:sparse-rr}. Each layer of \textsc{crate} contains two blocks: the compression block and the sparsification block, which correspond to a two-step alternating optimization procedure for optimizing the sparse rate reduction objective \eqref{eq:sparse-rr}. 
 
 
 % Specifically, the $\ell$-th layer of \textsc{crate} is defined as
@@ -967,10 +1020,9 @@ Now, we show how to derive these incremental and local operations through an unr
 % \end{align}
 % In particular, the \texttt{ISTA} block sparsifies the intermediate iterates $\vZ^{\ell + 1/2}$ w.r.t.~$\vD^{\ell}$ to obtain $\vZ^{\ell + 1}$.
 
-
 \begin{figure}
      \centering
-     \includegraphics[width=0.65\textwidth]{figs_chap4/crate_encoder_architecture.pdf}
+     \includegraphics[width=0.75\textwidth]{figs_chap4/crate_encoder_architecture.pdf}
     \caption{\small \textbf{One layer of the CRATE encoder architecture.} The full architecture is simply a concatenation of such layers, with some initial tokenizer, pre-processing head, and final task-specific head (i.e., a classification head).}
     \label{fig:arch-crate}
 \end{figure}
@@ -979,9 +1031,7 @@ Now, we show how to derive these incremental and local operations through an unr
 
 \subsection{Overall White-Box Transformer Architecture: CRATE}
 
-
-
-By combining the above two steps:
+We now design a white-box transformer architecture, named the Coding RATE Transformer (\textsc{crate}), by unrolling the above updates. By combining the above two steps \eqref{eq:gd-mcr-parts} and \eqref{eq:ista-block}:
 \begin{enumerate}[leftmargin=0.7cm]
     \item Local compression of tokens within a sample towards a mixture-of-subspace structure, leading to the multi-head subspace self-attention block -- \texttt{MSSA};
     \item Global sparsification of token sets across all samples through sparse coding, leading to the sparsification block -- \texttt{ISTA};
@@ -992,15 +1042,29 @@ we can get the following rate-reduction-based transformer layer, illustrated in 
     \qquad 
     \vZ^{\ell+1}\doteq \texttt{ISTA}(\vZ^{\ell+1/2} \mid \bm D^\ell).
 \end{equation}
-Composing multiple such layers following the incremental construction of our representation in \eqref{eq:incremental}, we obtain a white-box transformer architecture that transforms the data tokens towards a compact and sparse union of incoherent subspaces, where $f^{\pre}: \bR^{D \times N} \rightarrow \bR^{d \times n}$ is the pre-processing mapping that transforms the input token set $\vX \in \bR^{D \times N}$ to a first-layer representation $\vZ^{1} \in \bR^{d \times n}$. An overall flow of this architecture was shown in \Cref{fig:encoder_compression_sparsification}.
+Composing multiple such layers following the incremental construction of our representation in \eqref{eq:incremental}, we obtain a white-box transformer architecture that transforms the data tokens towards a compact and sparse union of incoherent subspaces, where $f^{\pre}: \bR^{D \times N} \rightarrow \bR^{d \times N}$ is the pre-processing mapping that transforms the input tokens $\vX \in \bR^{D \times N}$ to first-layer representations $\vZ^{1} \in \bR^{d \times N}$. An overall flow of this architecture was shown in \Cref{fig:crate-diagram}.
 
-\begin{figure}
+\begin{figure}[t!]
      \centering
-     \includegraphics[width=0.99\textwidth]{figs_chap4/crate_compression_sparsification.pdf}
-     \caption{\small \textbf{The `main loop' of the CRATE white-box deep network design.} After preprocessing input data \(\vX\) into a sequence of tokens \(\vZ^1\), CRATE constructs a deep network that transforms the data to a canonical configuration of low-dimensional subspaces by successive {\color{blue!60!black}\bf\textit{compression}} against a local model for the distribution, generating $\vZ^{\ell+1/2}$, and {\color{green!60!black}\bf\textit{sparsification}} against a global dictionary, generating $\vZ^{\ell+1}$. Repeatedly stacking these blocks and training the model parameters via backpropagation yields a powerful and interpretable representation of the data.
-        }
-        \label{fig:encoder_compression_sparsification}
+         \includegraphics[width=\textwidth]{figs_chap4/CRATE_fig1_patches.pdf}
+     \vspace{-0.1in}
+     \caption{
+     \textbf{The `main loop' of the \textsc{crate} white-box deep network design.} 
+     After encoding input data as a sequence of tokens $\vZ^0$, \textsc{crate} constructs a deep network that transforms the data to a canonical configuration of low-dimensional subspaces by successive   {\textit{\textbf{compression}}} 
+     against a local model for the distribution, generating $\vZ^{\ell+1/2}$, and      {\textit{\textbf{sparsification}}} 
+     against a global dictionary, generating $\vZ^{\ell+1}$. 
+     Repeatedly stacking these blocks and training the model parameters via backpropagation yields a powerful and interpretable representation of the data.
+     }
+        \label{fig:crate-diagram}
 \end{figure}
+
+% \begin{figure}
+%      \centering
+%      \includegraphics[width=0.99\textwidth]{figs_chap4/crate_compression_sparsification.pdf}
+%      \caption{\small \textbf{The `main loop' of the CRATE white-box deep network design.} After preprocessing input data \(\vX\) into a sequence of tokens \(\vZ^1\), CRATE constructs a deep network that transforms the data to a canonical configuration of low-dimensional subspaces by successive {\color{blue!60!black}\bf\textit{compression}} against a local model for the distribution, generating $\vZ^{\ell+1/2}$, and {\color{green!60!black}\bf\textit{sparsification}} against a global dictionary, generating $\vZ^{\ell+1}$. Repeatedly stacking these blocks and training the model parameters via backpropagation yields a powerful and interpretable representation of the data.
+%         }
+%         \label{fig:encoder_compression_sparsification}
+% \end{figure}
 
 \begin{remark}[\textbf{The roles of the forward pass and backward propagation}]\label{sub:forward_backward}
     In contrast to other unrolled optimization approaches such as the ReduNet \cite{chan2021redunet}, we \textit{explicitly model} the distribution of each $\vZ^\ell$ and $\vZ^{\ell + 1/2}$ at each layer, either by a mixture of linear subspaces or sparsely generated from a dictionary. We introduced the interpretation that at each layer \(\ell\), the learned bases for the subspaces \(\vU_{[K]}^{\ell}\) and the learned dictionaries \(\vD^{\ell}\) together serve as a \textit{codebook} or \textit{analysis filter} that encodes and transforms the intermediate representations at each layer \(\ell\). Since the input distribution to layer \(\ell\) is first modeled by \(\vU_{[K]}^{\ell}\) then transformed by \(\vD^{\ell}\), the input distribution to each layer is different, and so we require a separate code book at each layer to obtain the most parsimonious encoding. Parameters of these codebooks (i.e., the subspace bases and the dictionaries), heretofore assumed as being perfectly known, are actually learned from data (say via \textit{backward propagation} within end-to-end training).
@@ -1034,7 +1098,7 @@ From Table~\ref{tab:crate_comparison_with_sota}, we find that with a similar num
         \includegraphics[width=\textwidth]{figs_chap4/backward.png}
         \caption{\bf Backward propagation}
     \end{subfigure}
-    \caption{\small {\bf The roles of forward pass and backward propagation in deep networks}. (a) Given fixed subspaces and dictionaries $\{(\bm U_{[K]}^{\ell}, \bm D^{\ell})\}_{l=1}^L$, each layer performs compression and sparsification on representations in the forward pass; (b) Backpropagation learn subspaces and dictionaries $\{(\bm U_{[K]}^{\ell}, \bm D^{\ell})\}_{l=1}^L$ from training data. }
+    \caption{\small {\bf The roles of forward pass and backward propagation in deep networks}. (a) Given fixed subspaces and dictionaries $\{(\bm U_{[K]}^{\ell}, \bm D^{\ell})\}_{\ell=1}^L$, each layer performs compression and sparsification on representations in the forward pass; (b) Backpropagation learn subspaces and dictionaries $\{(\bm U_{[K]}^{\ell}, \bm D^{\ell})\}_{\ell=1}^L$ from training data. }
     \label{fig:forward-backward}
 \end{figure}
 
@@ -1065,9 +1129,10 @@ when pre-trained on ImageNet-1K. For ImageNet-1K/ImageNet-1K ReaL, we directly e
 \end{table*}
 
 
+
 \section{Variants of Deep Architectures by Design} \label{sec:chap4-derive-white-box-transformer-variants}
 
-So far, we wish we have provided  compelling evidence that the role of (popular) deep networks is to realize certain optimization algorithms for minimizing the coding rate (or maximizing the information gain) of the learned representation. However, readers who are familiar with optimization methods might have  noticed that the above architectures (the ReduNet or the CRATE) correspond to rather basic optimization techniques. They may have plenty of room for improvement in efficiency or effectiveness. Moreover, if we believe the proposed theoretical framework for interpreting deep networks is correct, it should not only help explain existing architectures, it should guide us develop more efficient and effective architectures. In this section, we show this could be the case: the resulting new architectures are not only fully interpretable but also with guaranteed correctness and improved efficiency. 
+So far, we wish that we have provided compelling evidence that the role of (popular) deep networks is to realize certain optimization algorithms for minimizing the coding rate (or maximizing the information gain) of the learned representations. However, readers who are familiar with optimization methods might have noticed that the above architectures (the ReduNet or the CRATE) correspond to rather basic optimization techniques. They may have plenty of room for improvement in efficiency or effectiveness. Moreover, if we believe the proposed theoretical framework for interpreting deep networks is correct, it should not only help explain existing architectures, it should guide us develop more efficient and effective architectures. In this section, we show this could be the case: the resulting new architectures are not only fully interpretable but also with guaranteed correctness and improved efficiency. 
 
 % \pw{New variants of the CRATE networks that are more efficient or more effective; add more comments}  
 
@@ -1075,67 +1140,29 @@ So far, we wish we have provided  compelling evidence that the role of (popular)
 
 
 
-\subsection{Attention-only Transformer Architecture} \label{sub:aot}
+\subsection{Attention-Only Transformer Architecture} \label{sub:aot}
 
-Suppose that the token representations are sampled from a mixture of low-rank Gaussians.  We propose to directly apply the MSSA operator to denoise token representations, i.e., 
-\begin{align}\label{eq:MSSA}
-    \bm Z^{(l+1)} =  \bm Z^{(l)} + \eta \sum_{k=1}^K \bm U_k\bm U_k^T \bm Z^{(l)} \varphi \left(\bm Z^{(l)^T}\bm U_k\bm U_k^T\bm Z^{(l)} \right).
-\end{align}
-Now, we formally introduce the proposed transformer architecture. Specifically, by unrolling the iterative optimization steps (\ref{eq:MSSA}) as layers of a deep network, we construct a transformer architecture in \Cref{fig:transformer}. Each layer of the proposed architecture only consists of the MSSA operator and a skip connection. For language tasks, we additionally incorporate LayerNorm before the MSSA operator to improve performance. The complete architecture is built by stacking such layers, along with essential task-specific pre-processing and post-processing steps, such as positional encoding, token embedding, and final task-specific head to adapt to different applications. 
-
-\begin{figure*}[t]
-\begin{center}
-        \includegraphics[width=0.75\textwidth]{figs_chap4/MSSA.png}
-    \caption{\textbf{Details of the attention-only transformer architecture.} Each layer consists of the MSSA operator and a skip connection. In addition, LayeNnorm is included only for language tasks. In practice, backpropagation is applied to train the model parameters using training samples. % \qq{this figure is too large}
-    }\label{fig:transformer}
-\end{center}\vspace{-0.2in}
-\end{figure*}
-
-
-Generally speaking, the standard decoder-only transformer architecture is composed of the following key components \cite{vaswani2017attention}: (1)  positional encoding, (2) multi-head QKV self-attention mechanisms, (3) feed-forward MLP networks, (4) layer normalization, and (5) residual connections. In contrast, our proposed transformer architecture adopts a streamlined design by incorporating several key simplications. Specifically, it employs shared-QKV subspace self-attention mechanisms, excludes MLP layers, and reduces the frequency of LayerNorm.
-
-%\yima{Theoretical guarantee for this type of architecture.}
-
-\paragraph{Theoretical Guarantee on the Denoisng Performance.}
-
-To study the denoising performance of the attention-only transformer, we assume that the initial token representations $\bm Z^{(0)}=[\bm z_1^{(0)},\dots,\bm z_N^{(0)}]$ are drawn from a mixture of noisy low-rank Gaussian distributions as follows. 
-
+In this subsection, we propose a minimalistic transformer architecture consisting of interpretable layers based on the MSSA operator. To derive a fully interpretable transformer architecture with only necessary components,
+we contend that the goal of representation learning is to compress a set of noisy initial token representations towards a mixture of low-dimensional subspaces. % To compress these noisy token representations, an associated denoising operation naturally takes the form of an MSSA operator (see \eqref{eq:Multi-Head-SSA}). By unrolling such iterative denoising operations into a deep network, we arrive at a highly compact architecture that consists of only self-attention operators with skip connections at each layer. 
+Here, we assume that the initial token representations $\bm Z^{(1)}$ are sampled from a mixture of low-rank Gaussians perturbed by noise as follows: 
 \begin{definition}\label{def:MoG}
-Let $C_1,\dots,C_K$ be a partition of the index set $[N]$ and $\bm U_k \in \R^{d \times p_k}$ denote the orthonormal basis of the $k$-th cluster for each $K \in [K]$. We say that the token representations $\{\bm z_i^{(0)}\}_{i=1}^N$ are sampled from a mixture of noisy low-rank Gaussian distributions if for each $k \in [K]$,
+Let $C_1,\dots,C_K$ be a partition of the index set $[N]$ and $\bm U_k \in \mathcal{O}^{d \times p_k}$ denote the orthonormal basis of the $k$-th subspace for each $k \in [K]$. We say that the token representations $\{\bm z_i \}_{i=1}^N \subseteq \R^d$ are sampled from a mixture of noisy low-rank Gaussian distributions if for each $k \in [K]$,
 \begin{align}\label{eq:MoG}
-    \bm z_i^{(0)} = \bm U_{k} \bm a_i + \sum_{j \neq k}^K \bm U_j \bm e_{i,j},\quad \forall i \in C_k, 
+    \bm z_i = \underbrace{\bm U_{k} \bm a_i}_{\bf signal} + \underbrace{\sum_{j \neq k}^K \bm U_j \bm e_{i,j}}_{\bf noise},\ \forall i \in C_k, 
 \end{align}
-where $\bm{a}_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\bm{I}_{p_k})$ and $\bm{e}_{i,j} \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\delta^2\bm{I}_{p_j})$ for all $i \in C_k$ and $k \in [K]$, $\{\bm{a}_i\}$ and $\{\bm{e}_{i,j}\}$ are respectively mutually independent, and $\{\bm{a}_i\}$ is independent of $\{\bm{e}_{i,j}\}$.   
+where $\bm{a}_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\bm{I}_{p_k})$ and $\bm{e}_{i,j} \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\delta^2\bm{I}_{p_j})$ for all $i \in C_k$ and $k \in [K]$, $\{\bm{a}_i\}$ and $\{\bm{e}_{i,j}\}$ are respectively mutually independent, and $\{\bm{a}_i\}$ is independent of $\{\bm{e}_{i,j}\}$.         
 \end{definition}
+This model serves as an idealized framework for approximating token representations in real-world pretrained LLMs. It assumes that the token representations are sampled from a mixture of multiple low-rank Gaussian distributions with noise. Under this model, the goal of representation learning is to compress a set of noisy initial token presentations into the corresponding subspace. In addition, this model aligns well with two well-established hypotheses about the structure of token representations in pretrained large language models: the ``linear representation hypothesis''  \citep{jiang2024origins,park2023linear} and the ``superposition hypothesis'' \citep{elhage2022toy,yun2021transformer}. 
 
-To quantify the denoising capability, we define the signal-to-noise ratio (SNR) for each block of the token representations at the $l$-th layer as follows: 
-\begin{align}\label{def:SNR}
-\mathrm{SNR}(\bm Z_k^{(l)}) :=  \frac{\|\bm U_k\bm U_k^T\bm Z_k^{(l)} \|_F}{\|(\bm I - \bm U_k\bm U_k^T)\bm Z_k^{(l)} \|_F},\quad \forall k \in [K]. 
+\begin{remark}
+    The linear representation hypothesis posits that token representations in LLMs lie in low-dimensional linear subspaces that encode semantic features. Similarly, the superposition hypothesis suggests that these representations can be approximately expressed as a sparse linear combination of these feature vectors. In \Cref{def:MoG}, each basis $\bm U_k$ of the subspaces can be interpreted as a set of semantic features, where each feature corresponds to a specific aspect of the token's meaning. Token representations are then approximately expressed as sparse linear combinations of these subspace bases, capturing the essential semantic components of the token while ignoring irrelevant dimensions. 
+\end{remark}
+
+\paragraph{Denoising Operator for Token Representations.} Now, we show that the MSSA operator (see \eqref{eq:Multi-Head-SSA}) can incrementally denoise token representations generated from the above model. Spefically, we consider for each $\ell =1 ,\dots,L$, 
+\begin{align}\label{eq:MSSA}
+    \bm Z^{(\ell+1)} =  \bm Z^{(\ell)} + \eta \sum_{k=1}^K \bm U_k\bm U_k^T \bm Z^{(\ell)} \varphi \left(\bm Z^{(\ell)^T}\bm U_k\bm U_k^T\bm Z^{(\ell)} \right),
 \end{align}
-To simplify our analysis, we assume that $p=p_1=\dots=p_K$, $N_1=\dots=N_K=N/K$, and 
-\begin{align}\label{eq:orth}
-\begin{bmatrix}
-\bm U_1 & \dots & \bm U_K
-\end{bmatrix} \in \mathcal{O}^{d\times Kp}. 
-\end{align}  
-
-With the above setup, we now characterize the denoising performance of the proposed transformer.
-
-\begin{theorem}\label{thm:1}
-Let $\bm Z^{(0)}$ be defined in \Cref{def:MoG} and $\varphi(\cdot)$ in Eq. (\ref{eq:MSSA}) be 
-%\begin{align}\label{eq:relu}
-$\varphi(\bm x) = h\left(\sigma(\bm x)\right)$,
-%\end{align}
-where $\sigma:\R^N \to \R^N$ is the soft-max function and $h:\R^N \to \R^N$ is an element-wise thresholding function with $h(x) = \tau \mathbb{I}\left\{x > \tau\right\}$ for each $i \in [N]$. Suppose that $p \gtrsim \log N$, $\delta \lesssim \sqrt{\log N}/\sqrt{p}$, and 
-\begin{align*}
-\tau \in \left( \frac{1}{2},  \frac{1}{1+N\exp(-9p/32)} \right].
-\end{align*}
-For sufficiently large $N$, it holds with probability at least $1-KLN^{-\Omega(1)}$ that for each $l \in [L-1]$, 
-    \begin{align}\label{eq:SNR}
-        \mathrm{SNR}(\bm Z_k^{(l+1)}) = (1+\eta\tau) \mathrm{SNR}(\bm Z_k^{(l)}),\quad  \forall k \in [K]. 
-    \end{align}
-\end{theorem}
-This theorem demonstrates that when the initial token representations are sampled from a mixture of low-rank Gaussian distributions with a noise level $O(\sqrt{\log N}/\sqrt{p})$, we show that each layer of the proposed transformer denoises token representations at a linear rate. This indicates the MSSA operator's efficiency in reducing noise across layers. Notably, our theoretical results are well-supported by experimental observations in \Cref{fig:MSSA}, which further validate the practical denoising capability of the proposed transformer. 
+where $\{\bm U_k\}_{k=1}^K$ is defined in \Cref{def:MoG}, $\eta > 0$ is the step size, and $\varphi$ is an element-wise operator, such as soft-max, ReLU, or other functions. To simplify our development, we assume that the subspaces in \Cref{def:MoG} are orthogonal to each other, i.e., $\bm U_k^T\bm U_j = \bm 0$ for all $k \neq j$. Note that this assumption is not restrictive, as in high-dimensional spaces, random low-dimensional subspaces are incoherent to each other with high probability, i.e., $\bm U_k^T\bm U_j \approx \bm 0$ \citep{Wright-Ma-2021}.\footnote{One may straightforwardly generalize our results to non-orthogonal subspaces, with slightly more sophisticated analysis.}   
 
 \begin{figure}[t]
     \begin{subfigure}[t]{0.45\textwidth}
@@ -1153,30 +1180,92 @@ This theorem demonstrates that when the initial token representations are sample
 \end{figure} 
 
 
+Now, let the columns of $\bm Z_k^{(\ell)}$ denotes the token representations from the $k$-th subspace at the $\ell$-th layer. To quantify the denoising capability, we define the signal-to-noise ratio (SNR) for each block of the token representations at the $\ell$-th layer as follows: 
+\begin{align}\label{def:SNR}
+\mathrm{SNR}(\bm Z_k^{(\ell)}) :=  \frac{\|\bm U_k\bm U_k^T\bm Z_k^{(\ell)} \|_F}{\|(\bm I - \bm U_k\bm U_k^T)\bm Z_k^{(\ell)} \|_F},\quad \forall k \in [K].
+\end{align}
+To simplify our analysis, we assume that $p=p_1=\dots=p_K$, $N_1=\dots=N_K=N/K$, and 
+\begin{align}\label{eq:orth}
+\begin{bmatrix}
+\bm U_1 & \dots & \bm U_K
+\end{bmatrix} \in \mathcal{O}^{d\times Kp}. 
+\end{align}  
+
+With the above setup, we now characterize the denoising performance of the MSSA operator.
+
+\begin{figure*}[t]
+\begin{center}
+        \includegraphics[width=0.75\textwidth]{figs_chap4/MSSA.png}
+    \caption{\textbf{Details of the attention-only transformer architecture.} Each layer consists of the MSSA operator and a skip connection. In addition, LayeNnorm is included only for language tasks. In practice, backpropagation is applied to train the model parameters using training samples. % \qq{this figure is too large}
+    }\label{fig:transformer}
+\end{center} 
+\end{figure*}
+
+\begin{theorem}\label{thm:1}
+Let $\bm Z^{(1)}$ be defined in \Cref{def:MoG} and $\varphi(\cdot)$ in Eq. (\ref{eq:MSSA}) be 
+%\begin{align}\label{eq:relu}
+$\varphi(\bm x) = h\left(\sigma(\bm x)\right)$,
+%\end{align}
+where $\sigma:\R^N \to \R^N$ is the soft-max function and $h:\R^N \to \R^N$ is an element-wise thresholding function with $h(x) = \tau \mathbb{I}\left\{x > \tau\right\}$ for each $i \in [N]$. Suppose that $p \gtrsim \log N$, $\delta \lesssim \sqrt{\log N}/\sqrt{p}$, and 
+\begin{align*}
+\tau \in \left( \frac{1}{2},  \frac{1}{1+N\exp(-9p/32)} \right].
+\end{align*}
+For sufficiently large $N$, it holds with probability at least $1-KLN^{-\Omega(1)}$ that for each $\ell \in [L]$, 
+    \begin{align}\label{eq:SNR}
+        \mathrm{SNR}(\bm Z_k^{(\ell+1)}) = (1+\eta\tau) \mathrm{SNR}(\bm Z_k^{(\ell)}),\ \forall k \in [K]. 
+    \end{align}
+\end{theorem}
+This theorem demonstrates that when the initial token representations are sampled from a mixture of low-rank Gaussian distributions with a noise level $O(\sqrt{\log N}/\sqrt{p})$, we show that each layer of the proposed transformer denoises token representations at a linear rate. This indicates the MSSA operator's efficiency in reducing noise across layers. Notably, our theoretical results are well-supported by experimental observations in \Cref{fig:MSSA}. This theorem provides a theoretical foundation for the practical denoising capability of the transformer architecture derived by unrolling (\ref{eq:MSSA}). 
+
+\begin{remark}
+    Under this model, the goal of representation learning is to compress a set of noisy initial token presentations into the corresponding subspace. However, we should point out that in real-world applications, where token representations exhibit more complicated structures, the goal of representation learning is to find a compact and structured representation by compressing token sets. 
+\end{remark}
+
+
+\paragraph{Attention-Only Transformer.} Now, we formally propose an attention-only transformer architecture. Specifically, by unrolling the iterative optimization steps (\ref{eq:MSSA}) as layers of a deep network, we construct a transformer architecture in \Cref{fig:transformer}. Each layer of the proposed architecture only consists of the MSSA operator and a skip connection. For language tasks, we additionally incorporate LayerNorm before the MSSA operator to improve performance. The complete architecture is built by stacking such layers, along with essential task-specific pre-processing and post-processing steps, such as positional encoding, token embedding, and final task-specific head to adapt to different applications. 
+
+
+
+
+Generally speaking, the standard decoder-only transformer architecture is composed of the following key components \cite{vaswani2017attention}: (1)  positional encoding, (2) multi-head QKV self-attention mechanisms, (3) feed-forward MLP networks, (4) layer normalization, and (5) residual connections. In contrast, our proposed transformer architecture adopts a streamlined design by incorporating several key simplications. Specifically, it employs shared-QKV subspace self-attention mechanisms, excludes MLP layers, and reduces the frequency of LayerNorm.
+
+%\yima{Theoretical guarantee for this type of architecture.}
+
+% \paragraph{Theoretical Guarantee on the Denoisng Performance.}
+
+% To study the denoising performance of the attention-only transformer, we assume that the initial token representations $\bm Z^{(0)}=[\bm z_1^{(0)},\dots,\bm z_N^{(0)}]$ are drawn from a mixture of noisy low-rank Gaussian distributions as follows. 
+
+
+
+
+
+
 
 \subsection{Linear-Time Attention: Token Statistics Transformer}\label{sub:tost} 
 
-In this section, we propose a new transformer attention operator whose computational complexity scales linearly with the number of tokens. We derive our network architecture by extending prior work which has shown that a transformer style architecture naturally arises by ``white-box'' architecture design, where each layer of the network is designed to implement an incremental optimization step of a maximal coding rate reduction objective MCR$^2$. Specifically, we derive a novel variational form of the MCR$^2$ objective and show that the architecture that results from unrolled gradient descent of this variational objective leads to a new attention module called Token Statistics Self-Attention (\texttt{TSSA}). \texttt{TSSA} has {\em linear computational and memory complexity} and radically departs from the typical attention architecture that computes pairwise similarities between tokens. 
+In this subsection, we propose a new transformer attention operator whose computational complexity scales linearly with the number of tokens based on the coding rate reduction objective.  Specifically, we derive a novel variational form of the MCR$^2$ objective and show that the architecture that results from unrolled gradient descent of this variational objective leads to a new attention module called Token Statistics Self-Attention (\texttt{TSSA}). \texttt{TSSA} has {\em linear computational and memory complexity} and radically departs from the typical attention architecture that computes pairwise similarities between tokens.  Recall from \eqref{eq:MCR pi} that $\bm \Pi = [\bm \pi_1, \ldots, \bm \pi_K] \in \R^{N \times K}$ denotes a stochastic ``group assignment'' matrix (i.e., $\bm \Pi \bm 1 = \bm 1$ and $\Pi_{ik} \geq 0, \  \forall (i,k) \in [N] \times [K]$ ), where $\Pi_{ik}$ denotes the probability of assigning the $i$-th token to the $k$-th group. 
 
-Recall that  \(\X = [\x_{1}, \dots, \x_{N}] \in \R^{D \times N}\) is typically
-a matrix-valued variable, and the transformer seeks to find
-a \textit{representation mapping}, or a mapping of the tokens $\plainphi\colon
-\R^{D \times N} \to \R^{d \times N}$ such that the features $\Z = \plainphi(\X) = [\z_1, \ldots, \z_N] \in \R^{d \times N}$ are appropriate for the task at hand. In MCR$^2$, the tokens are assumed to belong to an underlying set of \(K\) groups, which may (for example) represent different modes within the population of tokens, and the MCR$^2$ objective seeks to find token features of each group which are \textit{compressed} within a group while the set of all token features is as expansive as possible.  In particular, let $\bm \Pi = [\bm \pi_1, \ldots, \bm \pi_K] \in \R^{N \times K}$ be a stochastic ``group assignment'' matrix (i.e., $\bm \Pi \bm 1 = \bm 1$ and $\Pi_{ik} \geq 0, \  \forall (i,k) \in [N] \times [K]$ ) that assigns a group membership probability to each token (i.e., the $i^\text{th}$ row of $\bm\Pi$ is a probability vector for group membership for the $i^\text{th}$ token).  Then, letting $\epsilon > 0$ and $N_k \doteq \langle \bm\pi_k, \bm 1 \rangle$ for each \(k \in [K]\), the MCR$^2$ objective, denoted as $\Delta R(\bm Z,\bm \Pi)$, is:
-\begin{equation}
-    \label{eq:mcr2} 
-    \Delta R(\Z,\bm\Pi) \doteq \underbrace{\frac{1}{2} \log \det \left( \I + \frac{d}{\epsilon^{2}} \frac{1}{N} \Z \Z^{\top} \right)}_{\doteq R(\Z)} - \underbrace{\frac{1}{2} \sum_{k=1}^{K} \frac{N_{k}}{N} \log \det \left( \I + \frac{d}{\epsilon^{2}} \frac{1}{N_k}\Z \mathrm{Diag}(\bm \pi_k) \Z^{\top} \right) }_{\doteq R_{c}(\Z, \bm\Pi)}.
-\end{equation}
+% Recall that  \(\X = [\x_{1}, \dots, \x_{N}] \in \R^{D \times N}\) is typically
+% a matrix-valued variable and the transformer seeks to find
+% a \textit{representation mapping}, or a mapping of the tokens $f \colon
+%  \R^{D \times N} \to \R^{d \times N}$ such that the features $\Z = f(\X) = [\z_1, \ldots, \z_N] \in \R^{d \times N}$ are appropriate for the task at hand. In MCR$^2$, the tokens are assumed to belong to an underlying set of \(K\) groups, which may (for example) represent different modes within the population of tokens, and the MCR$^2$ objective seeks to find token features of each group which are \textit{compressed} within a group while the set of all token features is as expansive as possible (see \eqref{eq:MCR pi}). 
+ 
+%  In particular, let $\bm \Pi = [\bm \pi_1, \ldots, \bm \pi_K] \in \R^{N \times K}$ be a stochastic ``group assignment'' matrix (i.e., $\bm \Pi \bm 1 = \bm 1$ and $\Pi_{ik} \geq 0, \  \forall (i,k) \in [N] \times [K]$ ) that assigns a group membership probability to each token (i.e., the $i^\text{th}$ row of $\bm\Pi$ is a probability vector for group membership for the $i^\text{th}$ token).  Then, letting $\epsilon > 0$ and $N_k \doteq \langle \bm\pi_k, \bm 1 \rangle$ for each \(k \in [K]\), the MCR$^2$ objective, denoted as $\Delta R(\bm Z,\bm \Pi)$, is:
+% \begin{equation}
+%     \label{eq:mcr2} 
+%     \Delta R(\Z,\bm\Pi) \doteq \underbrace{\frac{1}{2} \log \det \left( \I + \frac{d}{\epsilon^{2}} \frac{1}{N} \Z \Z^{\top} \right)}_{\doteq R(\Z)} - \underbrace{\frac{1}{2} \sum_{k=1}^{K} \frac{N_{k}}{N} \log \det \left( \I + \frac{d}{\epsilon^{2}} \frac{1}{N_k}\Z \mathrm{Diag}(\bm \pi_k) \Z^{\top} \right) }_{\doteq R_{c}(\Z, \bm\Pi)}.
+% \end{equation}
 
-\paragraph{A New Variational Form for Coding Rates.} To begin, we consider a general form of MCR$^2$-like objectives based on concave functions of the spectrum of a matrix.  Namely, for a given PSD matrix $\bm M \in \PSD(d)$ and any scalar $c \geq 0$ we have that $\log \det (\I + c \bm M) = \sum_{i=1}^{d} \log( 1 + c \lambda_i(\bm M))$ where (recall) $\lambda_i (\bm M)$ is the $i^\text{th}$ largest eigenvalue of $\bm M$.  Further, note that $\log(1 + c \sigma)$ is a concave non-decreasing function of $\sigma$.  Thus, we describe our results in terms of a more general form of MCR$^2$ based on general spectral functions of PSD matrices of the form $F(\bm M) = \sum_{i=1}^{d} f(\lambda_i(\bm M))$, where $f$ is concave and non-decreasing.  In particular, recall from our above discussion that the attention mechanism arises from unrolling the compression component of MCR$^2$, so we consider a more general MCR$^2$-style compression function:
+\paragraph{A New Variational Form for Coding Rates.} To begin, we consider a general form of MCR$^2$-like objectives based on concave functions of the spectrum of a matrix.  Namely, for a given PSD matrix $\bm M \in \PSD(d)$ and any scalar $c \geq 0$ we have that $\log \det (\I + c \bm M) = \sum_{i=1}^{d} \log( 1 + c \lambda_i(\bm M))$, where $\lambda_i (\bm M)$ is the $i$-th largest eigenvalue of $\bm M$.  Further, note that $\log(1 + c \sigma)$ is a concave non-decreasing function of $\sigma$.  Thus, we describe our results in terms of a more general form of MCR$^2$ based on general spectral functions of PSD matrices of the form $F(\bm M) = \sum_{i=1}^{d} f(\lambda_i(\bm M))$, where $f$ is concave and non-decreasing.  In particular, recall from our above discussion that the attention mechanism arises from unrolling the compression component of MCR$^2$, so we consider a more general MCR$^2$-style compression function:
 \vspace{-2mm}
 \begin{equation}
-    R_{c,f}(\bm Z,\bm \Pi) \doteq \frac{1}{2}\sum_{k=1}^K \frac{N_k}{N} F\left( \frac{1}{N_k}\Z \mathrm{Diag}(\bm \pi_k) \Z^{\top} \right).
+    R_{c,f}(\bm Z, \bm \Pi) \doteq \frac{1}{2}\sum_{k=1}^K \frac{N_k}{N} F\left( \frac{1}{N_k}\Z \mathrm{Diag}(\bm \pi_k) \Z^{\top} \right).
     \label{eq:mcr_c_gen}
 \end{equation}
 
 
 
-For the objective of this form, we now note the following result:
+For the above objective, we now note the following result:
 \begin{theorem}
 \label{thm:var_concave}
     Let \(f \colon [0, \infty) \to \R\) be non-decreasing, concave, and obey \(f(0) = 0\), and let \(F \colon \PSD(d) \to \R\) have the form \(F(\bm M) = \sum_{i = 1}^{d}f(\lambda_{i}(\bm M))\). Then for each \(\bm M \in \PSD(d)\) and \(\bm Q \in \O(d)\), we have
@@ -1191,15 +1280,15 @@ Using the above result, we can replace \eqref{eq:mcr_c_gen} with an equivalent v
 \vspace{-2mm}
 \begin{equation}
     \label{eq:var_comp}
-    R^{\rm var}_{c,f} (\Z,\bm \Pi \mid \{\bm U_{k}\}_{k = 1}^{K}) \doteq \frac{1}{2}\sum_{k=1}^K \frac{N_k}{N} \sum_{i=1}^{d} f\left(\frac{1}{N_k} (\bm U_{k}^{\top} \Z \mathrm{Diag}(\bm \pi_k) \bm Z^{\top} \bm U_{k})_{ii} \right),
+    R^{\rm var}_{c,f} (\Z,\bm \Pi \mid \bm U_{[K]}) \doteq \frac{1}{2}\sum_{k=1}^K \frac{N_k}{N} \sum_{i=1}^{d} f\left(\frac{1}{N_k} (\bm U_{k}^{\top} \Z \mathrm{Diag}(\bm \pi_k) \bm Z^{\top} \bm U_{k})_{ii} \right),
 \end{equation}
-where the equivalence is in the sense that for an optimal choice of $\{ \bm U_k \in \O(d)\}_{k=1}^K$ matrices as described in \Cref{thm:var_concave} (i.e., orthogonal matrices which diagonalize each $\Z \mathrm{Diag}(\bm \pi_k) \Z^\top $) we will achieve a tight bound with $ R^{\rm var}_{c,f} (\Z,\bm \Pi \mid \{\bm U_{k}\}_{k = 1}^{K}) = R_{c,f} (\Z,\bm \Pi)$. Note that in general, achieving this bound would require selecting, for each sampled instance of $\Z$, a new optimal set of $\U_{k}$ parameter matrices which diagonalize each $\Z\mathrm{Diag}(\bm \pi_{k})\Z^{\top}$, which is clearly impractical for network architecture. 
-Instead, as an alternative viewpoint, rather than considering the data ($\Z$) as fixed and trying to optimize the $\bm U_k$ parameters to achieve the tight variational bound, we can instead take the algorithmic unrolling design principle described above and design an operator to perturb $\Z$ to incrementally minimize $R_{c, f}^{\rm var}(\cdot \mid \{\bm U_{k}\}_{k = 1}^{K})$.  To make this point explicit, each variational bound becomes tight when the eigenspaces of $\Z \mathrm{Diag}(\bm \pi_k) \Z
+where the equivalence is in the sense that for an optimal choice of $\{ \bm U_k \in \O(d)\}_{k=1}^K$ matrices as described in \Cref{thm:var_concave} (i.e., orthogonal matrices which diagonalize each $\Z \mathrm{Diag}(\bm \pi_k) \Z^\top $) we will achieve a tight bound with $ R^{\rm var}_{c,f} (\Z,\bm \Pi \mid \bm U_{[K]}) = R_{c,f} (\Z,\bm \Pi)$. Note that in general, achieving this bound would require selecting, for each sampled instance of $\Z$, a new optimal set of $\bm U_{k}$ parameter matrices which diagonalize each $\Z\mathrm{Diag}(\bm \pi_{k})\Z^{\top}$, which is clearly impractical for network architecture. 
+Instead, as an alternative viewpoint, rather than considering the data ($\Z$) as fixed and trying to optimize the $\bm U_k$ parameters to achieve the tight variational bound, we can instead take the algorithmic unrolling design principle described above and design an operator to perturb $\Z$ to incrementally minimize $R_{c, f}^{\rm var}(\cdot \mid \bm U_{[K]})$.  To make this point explicit, each variational bound becomes tight when the eigenspaces of $\Z \mathrm{Diag}(\bm \pi_k) \Z
 ^\top$ align with the columns of $\bm U_k$, so by rotating the appropriate columns of $\Z$ (namely, those which correspond to large entries in $\bm \pi_k$) to align with $\bm U_k$ we can approach a tight variational bound. That is, instead of rotating $\bm U_k$ to align with the data for each instance of $\Z$, we can instead rotate the token features in each $\Z$ to align with $\bm U_k$. 
 
 Following this approach, we compute a gradient descent step on $R_{c,f}^{\rm var}$ w.r.t. $\Z$.
 To begin this computation, first let $\bm \pi \in \Re^N$ be any element-wise non-negative vector. Then we have
-\begin{equation}
+\begin{equation}\label{eq1:grad Rcf}
 \nabla_{\Z} \ \frac{1}{2} \sum_{i = 1}^{d} f(  (\Z \mathrm{Diag}(\bm \pi) \Z^{\top} )_{ii}) %& 
 %\; \Diag \left( \nabla f\left[ \diag(\Z \Diag(\p) \Z^{\top}) \right] \right) \Z  \Diag(\p) \\
 = \; \mathrm{Diag}(\nabla f[ \Z^{\odot 2} \bm \pi] ) \Z \mathrm{Diag}(\bm \pi),
@@ -1207,15 +1296,15 @@ To begin this computation, first let $\bm \pi \in \Re^N$ be any element-wise non
 %
 %where $\Z^{\odot 2}$ denotes raising $\Z$ to the second-power entrywise (i.e., $(\Z^{\odot 2})_{ij} = Z_{ij}^2$), and $\nabla f[\cdot]$ denotes the gradient of $f(x)$ w.r.t. $x$ applied entrywise.  
 where $\nabla f$ is the gradient of $f$, and (recall) $\nabla f[\cdot]$ applies $\nabla f$ to each element of the vector in the bracket. In particular, for $ f(x) = \log(1 + (d/\epsilon^{2}) x)$,  $\nabla f(x) = (d / \epsilon^{2}) (1+ (d / \epsilon^{2}) x)^{-1}$ is simply a non-linear activation. Also, (recall) $N_{k} = \langle \bm \pi_{k}, \bm 1\rangle$. Thus, the gradient of $R^{\rm var}_{c,f}$ w.r.t. $\Z$ is:
-\begin{eqnarray}\label{eq:D_def}
-    &&\nabla_{\Z} R^{\rm var}_{c,f}(\Z,\bm \Pi \mid \{\bm U_{k}\}_{k = 1}^{K}) \nonumber =  \frac{1}{n} \sum_{k=1}^K \bm U_{k} \underbrace{\mathrm{Diag} \left( \nabla f\left[ (\bm U_{k}^{\top} \Z)^{\odot 2}  \frac{\bm \pi_k}{\langle \bm \pi_{k}, \bm 1\rangle} \right] \right)}_{\doteq \bm D(\Z, \bm \pi_{k} \mid \bm U_{k})} \bm U_{k}^{\top} \Z \mathrm{Diag}(\bm \pi_k).
-\end{eqnarray}
-(Note that the $1/N$ constant arises from a $(N_{k}/N)\cdot (1/N_{k}) = 1/N$ constant in each term of the sum.) If we now consider a gradient step w.r.t. the $j^\text{th}$ token $\z_j$
+\begin{align}\label{eq2:grad Rcf}
+    \nabla_{\Z} R^{\rm var}_{c,f}(\Z,\bm \Pi \mid \bm U_{[K]}) =  \frac{1}{n} \sum_{k=1}^K \bm U_{k} \underbrace{\mathrm{Diag} \left( \nabla f\left[ (\bm U_{k}^{\top} \Z)^{\odot 2}  \frac{\bm \pi_k}{\langle \bm \pi_{k}, \bm 1\rangle} \right] \right)}_{\doteq \bm D(\Z, \bm \pi_{k} \mid \bm U_{k})} \bm U_{k}^{\top} \Z \mathrm{Diag}(\bm \pi_k).
+\end{align}
+(Note that the $1/N$ constant arises from a $(N_{k}/N)\cdot (1/N_{k}) = 1/N$ constant in each term of the sum.) If we now consider a gradient step w.r.t. the $j$-th token $\z_j$
 , we arrive at our proposed incremental compression operator, i.e., our surrogate for a \textit{self attention} + residual operator:
 %
 \vspace{-2mm}
 \begin{equation}\label{eq:layer-operation-orig}
-    \z_j^+ = \z_{j} - \tau \nabla_{\z_{j}}R_{c, f}^{\rm var}(\Z, \bm \Pi \mid \{\bm U_{k}\}_{k = 1}^{K}) = \z_j - \frac{\tau}{N} \sum_{k=1}^K \Pi_{jk} \bm U_{k} \bm D(\Z, \bm \pi_{k} \mid \bm U_{k}) \bm U_{k}^{\top} \z_j
+    \z_j^+ = \z_{j} - \tau \nabla_{\z_{j}}R_{c, f}^{\rm var}(\Z, \bm \Pi \mid \bm U_{[K]}) = \z_j - \frac{\tau}{N} \sum_{k=1}^K \Pi_{jk} \bm U_{k} \bm D(\Z, \bm \pi_{k} \mid \bm U_{k}) \bm U_{k}^{\top} \z_j
 \end{equation}
 for each \(j \in [n]\), where $\tau > 0$ is a step size parameter for the incremental optimization. Then, we can construct a layer of TOST in \Cref{fig:vcrate-architecture}.  
 
@@ -1242,30 +1331,28 @@ From this, we arrive at the core interpretation of our attention head + residual
 
 \paragraph{Practical Implementation Details.} Having introduced our proposed attention operator, we now discuss further practical considerations.  First, until this point in the presentation, we have avoided discussion of how tokens are ``grouped'' into various attention heads via the $\bm\Pi$ matrix, but clearly a means of constructing $\bm\Pi$ is needed to implement our method.  Additionally, our variational form in \Cref{thm:var_concave} requires the $\bm U$ matrices to be square and orthogonal, but one would ideally like to use smaller matrices (i.e., reduce the number of columns in $\bm U$) for efficiency as well as drop the orthogonality constraints. 
 
-In practice, we do not enforce the orthogonality constraints. To reduce the number of columns in the $\bm U$ matrices, we note that similar to CRATE \citep{yu2023white}, if we assume the features $\bm Z$ within group \(k\) are (approximately) clustered around a low-dimensional subspace --- say of dimension \(p\) --- then the within-group-\(k\) covariance \(\Z\mathrm{Diag}(\bm \pi_{k})\Z^{\top}\) is low-rank, where recall that \cite{yu2020learning} shows that the optimal geometry of $\Z$ will be for each group to be a low-rank subspace, orthogonal to the other groups. We can thus explicitly find a low-dimensional orthonormal basis for the image of this covariance, i.e., the linear span of the data in group \(k\). If the dimension is $p \leq d$, the basis can be represented by a $d\times p$ orthogonal matrix $\bm U_k \in \O(d, p)$. In this case, we can more efficiently upper-bound \(R_{c}\) using these low-rank orthogonal basis matrices. To show this, we use a more general version of \Cref{thm:var_concave}  to yield the following corollary.
+In practice, we do not enforce the orthogonality constraints. To reduce the number of columns in the $\bm U$ matrices, we note that similar to CRATE \citep{yu2023white}, if we assume the features $\bm Z$ within group \(k\) are (approximately) clustered around a low-dimensional subspace --- say of dimension \(p\) --- then the within-group-\(k\) covariance \(\Z\mathrm{Diag}(\bm \pi_{k})\Z^{\top}\) is low-rank, where recall that \cite{yu2020learning} shows that the optimal geometry of $\Z$ will be for each group to be a low-rank subspace, orthogonal to the other groups. We can thus explicitly find a low-dimensional orthonormal basis for the image of this covariance, i.e., the linear span of the data in group \(k\). If the dimension is $p \leq d$, the basis can be represented by a $d\times p$ orthogonal matrix $\bm U_k \in \O(d, p)$. In this case, we can more efficiently upper-bound \(R_{c,f}\) using these low-rank orthogonal basis matrices. To show this, we use a more general version of \Cref{thm:var_concave}  to yield the following corollary.
 \begin{corollary}\label{cor:var_concave_logdet}
-    Let \(f \colon [0, \infty) \to \R\) be non-decreasing, concave, and obey \(f(0) = 0\), and let \(F \colon \PSD(p) \to \R\) have the form \(F(\bm M) = \sum_{i = 1}^{p}f(\lambda_{i}(\bm M))\). Let \(\Z\), \(\bm \Pi\) be fixed. Then, for all \(\bm U_{1}, \dots, \bm U_{K} \in \O(d, p)\) such that \(\mathrm{image}(\Z\diag(\bm \pi_{k})\Z^{\top}) \subseteq \mathrm{image}(\bm U_{k})\) for all \(k \in [K]\), we have
-    %\vspace{-1mm}
+    Let \(f \colon [0, \infty) \to \R\) be non-decreasing, concave, and obey \(f(0) = 0\), and let \(F \colon \PSD(p) \to \R\) have the form \(F(\bm M) = \sum_{i = 1}^{p}f(\lambda_{i}(\bm M))\). Let \(\Z\), \(\bm \Pi\) be fixed. Then, for all \(\bm U_{1}, \dots, \bm U_{K} \in \O(d, p)\) such that \(\mathrm{image}(\Z\diag(\bm \pi_{k})\Z^{\top}) \subset \mathrm{image}(\bm U_{k})\) for all \(k \in [K]\), we have
     \begin{equation}
-        R_{c, f}(\Z, \bm\Pi) \leq R_{c, f}^{\rm var}(\Z, \bm\Pi \mid \{\bm U_{k}\}_{k = 1}^{K}), 
+        R_{c, f}(\Z, \bm\Pi) \leq R_{c, f}^{\rm var}(\Z, \bm\Pi \mid \bm U_{[K]}), 
     \end{equation}
      where \(R_{c, f}^{\rm var}\) is formally defined in \eqref{eq:var_comp}. Equality holds if \(\bm U_{k}\) diagonalizes \(\Z\diag(\bm \pi_{k})\Z^{\top}\) for each \(k \in [K]\), and if \(f\) is strongly concave then this equality condition becomes an ``if and only if.''
 \end{corollary}
 
-The final step to define our attention operator is to estimate the group membership $\bm\Pi$. For this we posit a simple model of how each feature \(\z_{j}\) deviates from its supporting subspace and then find the optimal subspace assignment. \cite{yu2023white} show that if we independently model each \(\z_{j}\) as belonging to a low-dimensional Gaussian mixture model, where each Gaussian has a covariance matrix with identical spectrum and is supported on a subspace with orthonormal basis \(\bm U_{k}\), plus independent Gaussian noise with covariance \(\eta \I\), then the posterior probability that each token \(\z_{j}\) belongs to each subspace is given by the assignment matrix \(\bm \Pi = \bm \Pi(\bm Z \mid \{\bm U_{k}\}_{k = 1}^{K})\) as follows:
+The final step to define our attention operator is to estimate the group membership $\bm\Pi$. For this we posit a simple model of how each feature \(\z_{j}\) deviates from its supporting subspace and then find the optimal subspace assignment. \cite{yu2023white} show that if we independently model each \(\z_{j}\) as belonging to a low-dimensional Gaussian mixture model, where each Gaussian has a covariance matrix with identical spectrum and is supported on a subspace with orthonormal basis \(\bm U_{k}\), plus independent Gaussian noise with covariance \(\eta \I\), then the posterior probability that each token \(\z_{j}\) belongs to each subspace is given by the assignment matrix \(\bm \Pi = \bm \Pi(\bm Z \mid \bm U_{[K]})\) as follows:
 \begin{align}\label{eq:pi}
-    \bm \Pi = \begin{bmatrix} \boldsymbol{\nu}(\z_1 \mid \{\bm U_{k}\}_{k = 1}^{K})^\top \\ \vdots \\ \boldsymbol{\nu}(\z_n \mid \{\bm U_{k}\}_{k = 1}^{K})^\top \end{bmatrix}, \quad
+    \bm \Pi = \begin{bmatrix} \boldsymbol{\nu}(\z_1 \mid \bm U_{[K]})^\top \\ \vdots \\ \boldsymbol{\nu}(\z_n \mid \bm U_{[K]})^\top \end{bmatrix}, \quad
 \text{where} \quad 
-\boldsymbol{\nu}(\z_j \mid \{\bm U_{k}\}_{k = 1}^{K}) \doteq \operatorname{softmax}\left( \frac{1}{2\eta} \begin{bmatrix} \|  \bm U_{1}^{\top} \z_j \|_2^2 \\ \vdots \\ \| \bm U_{K}^{\top} \z_j \|_2^2 \end{bmatrix} \right), \quad \forall j \in [n],
+\boldsymbol{\nu}(\z_j \mid \bm U_{[K]}) \doteq \operatorname{softmax}\left( \frac{1}{2\eta} \begin{bmatrix} \|  \bm U_{1}^{\top} \z_j \|_2^2 \\ \vdots \\ \| \bm U_{K}^{\top} \z_j \|_2^2 \end{bmatrix} \right), \quad \forall j \in [n],
 \end{align}
 where $\eta$ becomes a learnable temperature parameter. Thus, given an input feature \(\Z\), we estimate \(\bm\Pi\) using \eqref{eq:pi} and then compute the attention operator.  Combining the construction of $\bm\Pi$ in \eqref{eq:pi} with 
 \eqref{eq:layer-operation-orig}, we obtain the {\em Token Statistics Self-Attention} operator: 
-\vspace{-3mm}
 \begin{equation}
     \label{eq:tssa}
-   \texttt{TSSA}(\Z \mid \{\bm U_{k}\}_{k = 1}^{K}) \doteq -\frac{\tau}{n}\sum_{k = 1}^{K}\bm U_{k}\bm D(\Z, \bm\pi_{k} \mid \bm U_{k})\bm U_{k}^{\top}\Z\diag(\bm \pi_{k}),
+   \texttt{TSSA}(\Z \mid \bm U_{[K]}) \doteq -\frac{\tau}{n}\sum_{k = 1}^{K}\bm U_{k}\bm D(\Z, \bm\pi_{k} \mid \bm U_{k})\bm U_{k}^{\top}\Z\diag(\bm \pi_{k}),
 \end{equation}
-where \(\bm\pi_{k}\) are the columns of \(\bm\Pi = \bm\Pi(\Z \mid \{\bm U_{k}\}_{k = 1}^{K})\), defined in \eqref{eq:pi}, and \(\bm D\) is defined in \eqref{eq:D_def}. 
+where \(\bm\pi_{k}\) are the columns of \(\bm\Pi = \bm\Pi(\Z \mid \bm U_{[K]})\) defined in \eqref{eq:pi} and \(\bm D\) is defined in \eqref{eq2:grad Rcf}. 
 
 
 
@@ -1273,6 +1360,14 @@ where \(\bm\pi_{k}\) are the columns of \(\bm\Pi = \bm\Pi(\Z \mid \{\bm U_{k}\}_
 \section{Summary and Notes}
 
 %\yima{A table for comparison between blackbox and whitebox...}
+
+% With the advent of deep learning, empirically designed deep networks have demonstrated remarkable success in capturing complex nonlinear structures. Architectures such as CNNs, RNNs, LSTMs, ResNets, and Transformers have been widely adopted across domains. Yet, the design of these models has been largely empirical, driven by trial-and-error, ablation studies, and large-scale hyperparameter searches, with little theoretical understanding of their inner workings. 
+
+
+The materials presented in this chapter are based on a series of recent works on this topic, including \cite{chan2021redunet, wang2024global, wang2025attention, wu2025token, yu2023white}. These contributions encompass both theoretical advances and practical methodologies for constructing interpretable deep networks through unrolled optimization. Many of the key results and proofs discussed in this chapter are derived directly from, or inspired by, these foundational works. 
+
+
+The idea of unrolling an optimization algorithm to construct a neural network traces back to the seminal work \cite{gregor2010learning}. In this work, the authors demonstrated that sparse coding algorithms—such as the Iterative Shrinkage-Thresholding Algorithm (ISTA)—can be unrolled to form multilayer perceptrons (MLPs), effectively bridging iterative optimization and neural network design. Notably, \cite{monga2019algorithm} demonstrated that such unrolled networks are more interpretable, parameter-efficient, and effective compared to generic networks. In this chapter, we build on this perspective to develop principled, white-box deep network architectures by unrolling optimization algorithms that are designed to minimize well-motivated objectives—such as the (sparse) rate reduction objective introduced earlier. This approach not only clarifies the role of each layer in the network but also offers theoretical grounding for architectural choices, moving beyond empirical trial-and-error toward interpretable and goal-driven design.  In the following, we compare conventional DNNs, which are typically constructed through empirical design and heuristic tuning, with our mathematically grounded ReduNet architectures: 
 
 \begin{center}
 %\begin{small}
@@ -1301,6 +1396,8 @@ Representations & hidden/latent & incoherent subspaces \\ [0.5ex]
 \end{center}
 
 
+
+
 \section{Exercises and Extensions}
 
 
@@ -1313,7 +1410,7 @@ Representations & hidden/latent & incoherent subspaces \\ [0.5ex]
     \begin{align*}
  \nabla^2 R(\bm Z)[\bm D, \bm D] =\alpha \mathrm{Tr}\left( \bm X^{-1}\bm D\bm D^T\right) - \frac{\alpha^2}{2}\mathrm{Tr}\left(\bm X^{-1}\left( \bm Z\bm D^T+\bm D\bm Z^T\right) \bm X^{-1}\left( \bm Z\bm D^T+\bm D\bm Z^T\right)\right),
     \end{align*}
-    where $\bm X = \bm I + \alpha\bm Z\bm Z^T$. {\em Hint:} Note that
+    where $\bm X := \bm I + \alpha\bm Z\bm Z^T$. {\em Hint:} Note that
     \begin{align*}
         \nabla^2 R(\bm Z)[\bm D, \bm D] := \left\langle \lim_{t \to 0} \frac{\nabla R(\bm Z+ t\bm D) - \nabla R(\bm Z)}{t}, \bm D \right\rangle. 
     \end{align*}
@@ -1327,7 +1424,7 @@ where the equality holds if and only if $\bm Z_k^T\bm Z_l = \bm 0$ for all $k \n
 \medskip 
 
 \noindent 
-3. Given some $\alpha >0$, let $\alpha_k=m\alpha/m_k$ for each $k \in [K]$. Please characterize the first-order critical point of the following function: 
+3. Given some $\alpha >0$, let $\alpha_k=m\alpha/m_k$ for each $k \in [K]$. Please derive the closed-form for the first-order critical point of the following function: 
 \begin{align*}
     f(\bm Z_k) = \frac{1}{2}\log\det\left(\bm I + \alpha\bm Z_k\bm Z_k^T \right) - \frac{m_k}{2m}\log\det\left(\bm I + \alpha_k \bm Z_k\bm Z_k^T \right) - \frac{\lambda}{2}\|\bm Z_k\|_F^2. 
 \end{align*}
@@ -1351,8 +1448,24 @@ where $\bm P_k \in \mathcal{O}^d$ with $\bm P_{k,1} \in \R^{d\times r_k}$ and  $
 \end{exercise}
 
 
-% \begin{exercise}
+\begin{exercise}[Neumann series for matrix inverse]\label{ex:neumannn} 
+Let $\bm A \in \mathbb{R}^{n\times n}$. If $\|\bm A\| < 1$, please show 
+\begin{align}\label{eq:neumann}
+    \left( \bm I - \bm A\right)^{-1} = \sum_{k=1}^\infty \bm A^k.  
+\end{align}
+{\em Hint:} The proof consists of two steps. \\
+(i) {\bf Step 1}: Please show that the infite series $\sum_{k=1}^\infty \bm A^k$ converges when $\bm A < 1$ using $\|\bm A^k\| \le \|\bm A\|^k$. \\
+(ii) {\bf Step 2}: Compute the matrix product $(\bm I - \bm A) \sum_{k=1}^\infty \bm A^k$. 
+\end{exercise}
 
-% \end{exercise}
+
+\begin{exercise}
+    Please compute the gradients in \eqref{eq1:grad Rcf} and \eqref{eq2:grad Rcf}. 
+\end{exercise}
+
+
+\begin{exercise}
+    Please show \Cref{cor:var_concave_logdet} when $Kp \le d$. 
+\end{exercise}
 
 \end{document}
