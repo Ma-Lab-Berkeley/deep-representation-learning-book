@@ -29,15 +29,33 @@ Despite a dazzling variety of applications in the practice of machine learning w
 \end{equation}
 where $h(\cdot)$ represents measurements of a part of $\x$ or its certain observed attributes and $\vw$ represents some measurement noise and even (sparse) corruptions, solve the ``inverse problem'' of obtaining a most likely estimate $\hat \x(\y)$ of $\x$ or generating a sample $\hat{\x}$ that is at least consistent with the observation $\y \approx h(\hat{\x})$. 
 
-\paragraph{Statistical Interpretation via the Bayes' Rule.} Generally speaking, to accomplish such tasks well, we essentially need to get a hold of the conditional distribution $p(\x\mid \y)$. Either the maximal likelihood estimate (prediction): $$\hat{\x} = \arg\max_{\x} p(\x\mid \y),$$ the conditional expected estimate: $$\hat{\x} = \mathbb{E}(\x \mid \y) = \int \x p(\x\mid \y)~d \x,$$ or the conditional generation (sampling):  $$\hat{\x} \sim p(\x \mid \y)$$ can be inferred from the conditional distribution. 
+\begin{figure}
+  \centering 
+  \includegraphics[width=0.9\textwidth]{figs_chap6/inference_roadmap.pdf}
+  \caption{\small \textbf{Inference with low-dimensional distributions.} This is the generic picture for this chapter: we have a low-dimensional distribution for \(\vx \in \R^{D}\) (here depicted as a union of two \(2\)-dimensional manifolds in \(\R^{3}\)) and a measurement model \(\y = h(\vx) + \vw \in \R^{d}\). We want to infer various things about this model, including the conditional distribution of \(\vx\) given \(\vy\), or the conditional expectation \(\mathbb{E}[\vx \mid \y]\), given various information about the model and (potentially finite) samples of either \(\vx\) or \(\vy\).}
+  \label{fig:inference_roadmap}
+\end{figure}
 
-Notice that from the {\em Bayes' rule}, we have
+\paragraph{Statistical interpretation via Bayes' rule.} Generally speaking, to accomplish such tasks well, we need to get ahold of the conditional distribution $p(\x\mid \y)$. If we had this, then we would be able to find the maximal likelihood estimate (prediction): 
 \begin{equation}
-p(\x\mid \y) = \frac{p(\y\mid \x) p(\x) }{p(\y)}.
+  \hat{\x} = \argmax_{\x} p(\x\mid \y);
+\end{equation}
+compute the conditional expectation estimate: 
+\begin{equation}
+  \hat{\x} = \mathbb{E}[\x \mid \y] = \int \x p(\x\mid \y)\odif{\vx};
+\end{equation}
+and sample from the conditional distribution:  
+\begin{equation}
+  \hat{\x} \sim p(\x \mid \y).
+\end{equation}
+
+Notice that from Bayes' rule, we have
+\begin{equation}
+  p(\x\mid \y) = \frac{p(\y\mid \x) p(\x) }{p(\y)}.
 \end{equation} 
 For instance, the maximal likelihood estimate can be computed by solving the following (maximal log likelihood) program:
 \begin{equation}
-    \hat{\x} = \arg\max_{\x} \log p(\y\mid \x) + \log p(\x), 
+    \hat{\x} = \argmax_{\x} [\log p(\y\mid \x) + \log p(\x)], 
 \end{equation}
 say via gradient ascent:
 \begin{equation}
@@ -46,13 +64,13 @@ say via gradient ascent:
 \end{equation}
 Efficiently computing the conditional distribution $p(\x \mid \y)$ naturally depends on how we learn and exploit the low-dimensional distribution $p(\x)$ of the data $\x$ and the observation model $\y = h(\x) + \vw$ that determines the conditional distribution $p(\y \mid \x)$. 
 
-\paragraph{Geometric Interpretation as Constrained Optimization.}
+\paragraph{Geometric interpretation as constrained optimization.}
 
-As the support of the distributions of $\x$ is low-dimensional, we may assume that there exist functions:
+As the support \(\cS_{\vx}\) of the distribution of \(\vx\) is low-dimensional, we may assume that there exist a function \(F\) such that
 \begin{equation}
-F(\x) = \boldsymbol{0}
+  F(\vx) = \boldsymbol{0}, \qquad \iff \vx \in \cS_{\vx},
 \end{equation}
-such that $\mathcal{S}_{\x} \doteq \{\x \mid F((\x)) = \va\}$ is the low-dimensional support of the distribution $p(\x)$. Geometrically, one natural choice of $F(\x)$ is the ``distance function'' to the support $\mathcal{S}_{\x}$:\footnote{Notice that, in reality, we only have discrete samples on the support of the distribution. In the same spirit of continuation, through diffusion or lossy coding studied in Chapter \ref{ch:compression},  we may approximate the distance function as $    F(\x) = \min_{\x_p \in \mathcal{S}_{\x}} \|\x - \x_p\|_2$ where $\mathcal{S}_{\x}$ is replaced by an $\epsilon$-tabular neighborhood of the set of samples, or a covering of the samples with $\epsilon$-balls. }
+such that \(\cS_{\vx} = F^{-1}(\{\vzero\})\) is the low-dimensional support of the distribution $p(\x)$. Geometrically, one natural choice of $F(\x)$ is the ``distance function'' to the support $\mathcal{S}_{\x}$:\footnote{Notice that, in reality, we only have discrete samples on the support of the distribution. In the same spirit of continuation, through diffusion or lossy coding studied in Chapter \ref{ch:compression},  we may approximate the distance function as $    F(\x) \approx \min_{\x_p \in \cC_{\vx}^{\epsilon}} \|\x - \x_p\|_2$ where $\mathcal{S}_{\x}$ is replaced by a covering \(\cC_{\vx}^{\epsilon}\) of the samples with $\epsilon$-balls. }
 \begin{equation}
     F(\x) = \min_{\x_p \in \mathcal{S}_{\x}} \|\x - \x_p\|_2. 
 \end{equation}
@@ -60,32 +78,34 @@ Now given $\y = h(\x) +\vw$, to solve for $\x$, we can solve the following const
 \begin{equation}
     \max_{\x} - \frac{1}{2}\|h(\x) - \y\|_2^2 \quad \mbox{s.t.} \quad F(\x) = \boldsymbol{0}. 
 \end{equation}
-Using augmented Lagrange multiplier method, we can solve the following unconstrained program:
+Using the method of augmented Lagrange multipliers, we can solve the following unconstrained program:
 \begin{equation}
-   \max_{\x} -\frac{1}{2}\|h(\x) - \y\|_2^2  + \vlambda^T F(\x) - \frac{\mu}{2} \|F(\x)\|_2^2
+   \max_{\x} \left[-\frac{1}{2}\|h(\x) - \y\|_2^2  + \vlambda^{\top} F(\x) - \frac{\mu}{2} \|F(\x)\|_2^2\right]
 \end{equation}
 for some constant Lagrange multipliers $\vlambda$.
 This is equivalent to the following program:
-\begin{equation}
-\max_{\x} \log \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big) + \log \exp\Big( - \frac{\mu}{2} \big\|F(\x) - \vlambda/\mu\big\|_2^2\Big),   
-\end{equation} where $\vc \doteq {\vlambda}/{\mu}$ can be viewed as a ``mean.'' 
+\begin{equation}\label{eq:lagrange_multiplier_continuation}
+\max_{\x} \left[\log \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big) + \log \exp\Big( - \frac{\mu}{2} \big\|F(\x) - \vlambda/\mu\big\|_2^2\Big)\right],   
+\end{equation} 
+where $\vc \doteq {\vlambda}/{\mu}$ can be viewed as a ``mean''  for the constraint function.
 
 We may view the first term as the conditional probability of $\y$ given $\x$, and the second term as a probability density for $\x$:
 \begin{equation}
-p(\y\mid \x) \propto \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big), \quad 
+  p(\y\mid \x) \propto \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big), \quad 
     p(\x) \propto \exp\Big( - \frac{\mu}{2}\|F(\x) - \vc\|_2^2\Big).
-\end{equation} As $\mu$ becomes large when enforcing the constraint via continuation, $\|\vc\|_2$ becomes increasingly small.
+\end{equation} 
+As $\mu$ becomes large when enforcing the constraint via continuation\footnote{In the same spirit of continuation in \Cref{ch:compression} where we obtained better approximations of our distribution by sending \(\eps \to 0\), here we send \(\mu \to \infty\). Larger values of \(\mu\) will constrain \(F\) to take smaller and smaller values at optimum, meaning that the optimum lies within a smaller and smaller neighborhood of the support \(\cS_{\vx}\). Interestingly, the theory of Lagrange multipliers hints that, under certain benign conditions on \(F\) and other terms in the objective, we only need to make \(\mu\) large enough in order to ensure \(F(\vx) = \vzero\) at optimum, meaning that at \textit{finite} penalty we get \textit{perfect} approximation of the support. In general, we should have the intuition that \(\mu\) plays the same role as  \(\epsilon^{-1}\).}, $\|\vc\|_2$ becomes increasingly small.
 
-Notice that solving the above program via gradient ascent is equivalent to the above maximal likelihood estimate \eqref{eqn:loglikelihoo-gradient-ascent}, 
+Notice that solving the above program \eqref{eq:lagrange_multiplier_continuation} via gradient ascent is equivalent to the above maximal likelihood estimate \eqref{eqn:loglikelihoo-gradient-ascent}, 
 in which the gradient  takes the form:
 \begin{equation}
-   \nabla_{\x} \log p(\y \mid \x) + \nabla_{\x} \log p(\x)   =  J_h(\x)^*\big(\y - h(\x)\big) + \mu J_F(\x)^* \big(\vc - F(\x)\big),
+   \nabla_{\x} \log p(\y \mid \x) + \nabla_{\x} \log p(\x)   =  \pdv{h}{\vx}(\vx)\big(\y - h(\x)\big) + \mu \pdv{F}{\vx}(\vx)\big(\vc - F(\x)\big),
 \end{equation}
-where $J_h(\x), J_F(\x)$ are the Jacobian of $h(\x), F(\x)$, respectively. Notice that, the augmented Lagrange multiplier method that enforces the constraint $F(\x) = \boldsymbol{0}$ via gradient ascent is equivalent to use the score function of the probability density $p(\x)$ and conditional probability density $p(\y\mid \x)$ (in the space of $\x$).
+where $\pdv{h}{\vx}(\vx)$ and $\pdv{F}{\vx}(\vx)$ are the Jacobians of $h(\x)$ and $F(\x)$, respectively.% Notice that an augmented Lagrange multiplier method that enforces the constraint $F(\x) = \boldsymbol{0}$ via gradient ascent is equivalent to direct gradient ascent using Bayes' rule, the score associated with the probability density $p(\x)$, and the score associated with the conditional probability density $p(\y\mid \x)$ (in the space of $\x$). \DP{redundant, I think?}
 %One may view this as the geometric interpretation of the conditional generation score developed earlier in \eqref{eqn:conditional-denoising-score}. 
 
 
-\paragraph{Several Representative Practical Settings.} 
+\paragraph{Several representative practical settings.} 
 In practice, however, initial information about the distributions of $\x$ and the relationship between $\x$ and $\y$ can be given in many different ways or forms. In general, they can mostly be categorized into four cases, which are, conceptually, increasingly more challenging:
 \begin{itemize}
 \item {\em Case 1:} Both a model for the distribution of $\x$ and the observation model $\y = h(\x)$ $(+ \boldsymbol{w})$ is known, even with an analytical form. This is typically the case for many classic signal processing problems, such as signal denoising, the sparse vector recovery problem we saw in Chapter \ref{ch:classic} and the low-rank matrix recovery problem to be introduced below.
@@ -93,7 +113,7 @@ In practice, however, initial information about the distributions of $\x$ and th
 \item {\em Case 3:} We only have the paired samples: $(\X, \Y) = \{ (\x_1, \y_1), \ldots, (\x_N, \y_N) \}$ of the two variables  $(\x, \y)$. The distributions of $\x$ and $\y$ and their relationship $h(\cdot)$ need to be learned from these paired sample data. For example, given many images and their captions, learning to conduct text-conditioned image generation is one such problem. 
 \item {\em Case 4:} We only have the samples $\Y = \{\y_1, \ldots, \y_N\}$ of the observations $\y$, and the observation model $h(\cdot)$ needs to be known, at least in some parametric family $h(\cdot, \boldsymbol{\theta})$. The distribution $p(\x)$ and $p(\x \mid \y)$ need to be learned from $\hat \x$, estimated from $\Y$. For example, learning to render a new view from a sequence of calibrated or uncalibrated views is one such problem.
 \end{itemize}
-In this chapter, we will discuss general approaches to learn the desired distributions and solve the associated conditional estimation or generation for these cases, typically with a representative problem. 
+In this chapter, we will discuss general approaches to learn the desired distributions and solve the associated conditional estimation or generation for these cases, typically with a representative problem.  Throughout the chapter, you should keep \Cref{fig:inference_roadmap} in mind.
 
 % Here onwards, we will tailor our discussion
 % towards specific modern applications where we desire to learn useful
@@ -133,7 +153,7 @@ where $\mathcal{P}_{\Omega}(\spcdot)$ represents a masking operation
 
 In this section and the next, we will study the completion task under two different scenarios: One is when the distribution of the data $\x$ of interest is already given {\em apriori}, even in a certain analytical form. This is the case that prevails in classic signal processing where the structures of the signals are assumed to be known, for example,  band-limited, sparse or low-rank. The other is when only raw samples of $\x$ are available and we need to learn the low-dimensional distribution from the samples in order to solve the completion task well. This is the case for the tasks of natural image completion or video frame prediction. As a precursor to the rest of the chapter, we start with the simplest case of image completion: when the image to be completed can be well modeled as a low-rank matrix. We will move on to increasingly more general cases and more challenging settings later.
 
-\paragraph{Low-rank Matrix Completion.}  
+\paragraph{Low-rank matrix completion.}  
 The low-rank {\em matrix
 completion} problem is a classical problem for data completion when its distribution is low-dimensional and known. Consider a  random sample of a matrix $\X_o =
 [\x_1, \ldots, \x_n] \in \mathbb{R}^{m\times n}$ from the space of all matrices of rank $r$. In general, we assume the rank
@@ -200,7 +220,7 @@ volume spanned by $\X$) of the data in $\X$ to be small:
 \end{equation}
 The problem can viewed as a continuous relaxation of the above
 low-rank matrix completion problem \eqref{eqn:rank-min} and it can be
-solved via gradient descent. As one can show, the gradient descent
+solved via gradient descent. One can show that the gradient descent
 operator for the $\log\det$ objective is precisely minimizing a close
 surrogate of the rank of the matrix $\X\X^\top$.
 
@@ -234,9 +254,9 @@ the above programs  efficiently and effectively.
 Figure \ref{fig:matrix-completion} shows a real example in which the
 matrix $\hat \X$ is actually recovered by solving the above program.
 
-\paragraph{Further Extensions.}
-It has been shown that for images (or more accurately textures) and 3D scenes
-with low-rank structures, they can be very effectively completed via
+\paragraph{Further extensions.}
+It has been shown that images (or more accurately textures) and 3D scenes
+with low-rank structures can be very effectively completed via
 solving optimization programs of the above kind,  even if there is
 additional corruption and distortion
 \cite{Zhang2010TILTTI,Liang-ECCV2012,Yi_2023_ICCV}:
@@ -284,7 +304,7 @@ One empirical approach to the image completion task is to find an encoding and d
 solving the following {\em masked autoencoding} (MAE) program that
 minimizes the reconstruction loss:
 \begin{equation}\label{eq:mae_loss}
-\min L_{\mathrm{MAE}}(f, g) \doteq \mathbb{E}\big[\norm{(g \circ
+\min_{f, g} L_{\mathrm{MAE}}(f, g) \doteq \mathbb{E}\big[\norm{(g \circ
 f)(\mathcal{P}_\Omega(\vX)) - \vX}_{2}^{2}].
 \end{equation}
 Unlike the matrix completion problem which has a simple underlying
@@ -303,11 +323,10 @@ encoder} $f$ is to transform $\X$ to a representation $\Z$:
     f: \X \mapsto \Z
 \end{equation}
 such that the distribution of $\Z$ can be well modeled as a mixture of subspaces, say $\{\vU_{[K]}\}$,
-such that the overall coding rate and sparsity of the resulting
-feature $\Z$ is the minimum:
+such that the rate reduction is maximized while the sparsity is minimized:
 \begin{equation}\label{eq:sparse_rr}
-\min \mathbb{E}_{\vZ}[\Delta R(\vZ \mid \vU_{[K]}) - \lambda
-\norm{\vZ}_{0}] = \mathbb{E}_{\vZ}[R(\vZ) - R^{c}(\vZ \mid
+\mathbb{E}_{\vZ = f(\vX)}[\Delta R(\vZ \mid \vU_{[K]}) - \lambda
+\norm{\vZ}_{0}] = \mathbb{E}_{\vZ = f(\vX)}[R(\vZ) - R^{c}(\vZ \mid
 \vU_{[K]}) - \lambda \norm{\vZ}_{0}].
 \end{equation}
 
@@ -403,26 +422,33 @@ $p_{\X \mid \X_v}$ is a generalized function---if $\vX$ is fully determined by $
 
 Hence, instead of solving the completion task as a conditional estimation problem, we should address it as a conditional sampling problem. To that end, we should first learn the (low-dimensional) distribution of all natural images $\X$. If we have sufficient samples of natural images, we can learn the distribution via a denoising process $\X_t$ described in Chapter \ref{ch:compression}. Then the problem of recovering $\X$ from its partial observation $\Y = \mathcal{P}_\Omega(\x) +\vw$ becomes a conditional generation problem -- to sample the distribution conditioned on the observation.
 
-\paragraph{General Linear Measurements.} 
+\begin{figure}
+  \centering
+  \includegraphics[width=0.9\textwidth]{figs_chap6/ambient_diffusion.png}
+  \caption{\small \textbf{Sampling visualizations from models trained via ambient diffusion \cite{Daras-NIPS2023} with 80\% of the pixels masked.} Using a similar ratio of masked pixels as in \Cref{fig:mae_autoencoding-small}, the ambient diffusion sampling algorithm recovers a much sharper image than the blurry image recovered by the MAE-based method. The former method samples from the distribution of natural images, while the latter approximates the conditional expectation (i.e., average) of this distribution given the observation; this averaging causes the blurriness.}
+  \label{fig:ambient_diffusion}
+\end{figure}
+
+\paragraph{General linear measurements.} 
 In fact, we may even consider recovering $\X$ from a more general linear observation model:
 \begin{equation}
-    \Y = \vA(\X_0),  \quad \X_t = \X_0 + \sigma_t \vG,  
+    \Y = \vA\X_0,  \quad \X_t = \X_0 + \sigma_t \vG,  
 \end{equation}
-where $\vG \sim \mathcal{N}(\boldsymbol{0}, \vI)$. The masking operator $\mathcal{P}_{\Omega}(\cdot)$ in the image completion task is one example of such a linear model. Then it has been shown by \cite{daras2023ambient} that 
+where $\vA$ is a linear operator on matrix space\footnote{i.e., if we imagine unrolling \(\vX\) into a long vector then \(\vA\) takes the role of a matrix on \(\vX\)-space.} and $\vG \sim \mathcal{N}(\boldsymbol{0}, \vI)$. The masking operator $\mathcal{P}_{\Omega}(\cdot)$ in the image completion task is one example of such a linear model. Then it has been shown by \cite{daras2023ambient} that 
 \begin{equation}
-    \hat{\X}_* = \argmin \mathbb{E}[\|\vA(\hat{\X}(\vA\X_t, \vA) - \X_0)\|^2]
+    \hat{\X}_* = \argmin_{\hat{\X}} \mathbb{E}[\|\vA(\hat{\X}(\vA\X_t, \vA) - \X_0)\|^2]
 \end{equation}
 satisfies the condition that:
 \begin{equation}
-    \vA (\hat{\X}_*(\vA(\X_t), \vA)) = \vA (\mathbb{E}[\X_0 \mid \vA \X_t, \vA]).
+    \vA \hat{\X}_*(\vA(\X_t), \vA) = \vA \mathbb{E}[\X_0 \mid \vA \X_t, \vA].
 \end{equation} Notice that in the special case when $\vA$ is of  full column rank, we have $ \mathbb{E}[\X_0 \mid \vA\X_t, \vA] = \mathbb{E}[\X_0 \mid \X_t]$. Hence, in the more general case, it has been suggested by \cite{daras2023ambient} that one could still use the so obtained $\mathbb{E}[\X_0 \mid \vA(\X_t), \vA]$ to replace the $\mathbb{E}[\X_0 \mid \X_t]$ in the normal denoising process for $\X_t$:
 \begin{equation}
     \X_{t-s} = \gamma_t \X_t + (1-\gamma_t) \mathbb{E}[\X_0 \mid \vA\X_t, \vA].
 \end{equation}
-This usually works very well in practice, say for many image restoration tasks, as shown in \cite{daras2023ambient}. Compared to the blurry images recovered from MAE, the images recovered by the above method are much sharper as it leverages a learned distribution of natural image and sample a (sharp) image from the distribution that is consistent with the measurement.
+This usually works very well in practice, say for many image restoration tasks, as shown in \cite{daras2023ambient}. Compared to the blurry images recovered from MAE, the images recovered by the above method are much sharper as it leverages a learned distribution of natural image and sampls a (sharp) image from the distribution that is consistent with the measurement, as shown in \Cref{fig:ambient_diffusion} (cf \Cref{fig:mae_autoencoding-small}).
 
 
-\paragraph{General Nonlinear Measurements.}
+\paragraph{General nonlinear measurements.}
 To generalize the above (image) completion problems and make things more rigorous, we may consider that a random vector $\vx \sim p$ is partially observed through a more
 general observation function:
 \begin{equation}\label{eq:measurement-matching-observation}
@@ -607,7 +633,7 @@ so-called ``measurement matching'' term) enforces consistency with the
 observations $\vy$. The reader should take care to note to which argument the
 gradient operators are applying in the above score functions in order to fully
 grasp the meaning of this operator.
-\yima{Can we simply replace $\log p(\y \mid \x_t)$ with the measurement constraint $\|\y - h(\x_t)\|^2$ and use its gradient to replae the second term in the above equation?}
+\yima{Can we simply replace $\log p(\y \mid \x_t)$ with the measurement constraint $\|\y - h(\x_t)\|^2$ and use its gradient to replae the second term in the above equation?} \DP{It requires \(y \mid \vx_{t}\) to be like \(\dNorm(\vy; h(\vx_{t}), \sigma{2}\vI)\) where \(1/\sigma^{2}\) eventually becomes the learning rate. This assumption is fine to state but a bit unrealistic, IMO.}
 
 The key remaining issue in making this procedure computational is to prescribe
 how to compute the measurement matching correction, since in general we do not
@@ -2144,7 +2170,7 @@ x)$ and $p(x \mid y)$...}
 \label{sec:measurement-self-consistency}
 In this last section, we consider the more extreme, but actually ubiquitous, case for distribution learning in which we only have a set of observed samples $\Y = \{\y_1,\ldots, \y_N\}$ of the data $\x$, but no samples of $\x$ directly! In general, the observation $\y \in \mathbb{R}^d$ is of lower dimension that $\x \in \mathbb{R}^D$. To make the problem well-defined, we do assume that the observation model between $\y$ and $\x$ is known to belong to a certain family of analytical models, denoted as $\y = h(\x, \theta) +\vw$, with $\theta$ either known or not known. 
 
-Let us first try to understand the problem conceptually with the simple case when the measurement function $h$ is known and the observed $\y = h(\x) + \vw$ is informative about $\x$. That is, we assume that $h$ is surjective from the space of $\x$ to that of $\y$ and the support of the distribution $\y_0 = h(\x_0)$ is low-dimensional. This typically requires the dimension $d$ of $\y$ is higher than the intrinsic dimension of the support of the distribution of $\x$. Without loss of generality, we may assume that there exist functions:
+Let us first try to understand the problem conceptually with the simple case when the measurement function $h$ is known and the observed $\y = h(\x) + \vw$ is informative about $\x$. That is, we assume that $h$ is surjective from the space of $\x$ to that of $\y$ and the support of the distribution $\y_0 = h(\x_0)$ is low-dimensional. This typically requires the \textit{extrinsic} dimension $d$ of $\y$ is higher than the \textit{intrinsic} dimension of the support of the distribution of $\x$. Without loss of generality, we may assume that there exist functions:
 \begin{equation}
 F(\x) = \boldsymbol{0},\quad     G(\y) = \boldsymbol{0}.
 \end{equation}
@@ -2176,7 +2202,7 @@ First, for simplicity, let us consider the measurement is a linear function of t
 \end{equation}
 Here the matrix $\vA \in \mathbb{R}^{m\times n}$ is of full row rank and $m$ is typically smaller than $n$. We assume $\vA$ is known for now. We are interested in how to learn the distribution of $\x$ from such measurements. Since we no longer have direct samples of $\x$, we wonder whether we can still develop a denoiser for $\x$ with observations $\y$. Let us consider the following diffusion process:
 \begin{equation}
-    \y_t = \y_0 + \sigma_t \vg, \quad \y_0 = \vA(\x_0), 
+    \y_t = \y_0 + t \vg, \quad \y_0 = \vA(\x_0), 
 \end{equation}
 where $\vg \sim \mathcal{N}(\boldsymbol{0}, \vI)$. 
 
@@ -2205,21 +2231,22 @@ Without loss of generality, we assume $\vA$ is of full row rank, i.e., under-det
 
 From the denoising process of $\y_t$, we have
 \begin{equation}
-    \y_{t-s} =  \y_t + st \nabla \log p_t(\y_t).
+    \y_{t-s} \approx  \y_t + st \nabla \log p_t(\y_t).
 \end{equation}
 Then we have:
 \begin{equation}
-    \vA\x_{t-s} =   \vA\x_t + st \nabla \log p_t(\vA \x_t),
+    \vA\x_{t-s} \approx   \vA\x_t + st \nabla \log p_t(\vA \x_t),
 \end{equation}
 for a small $s >0$. So $\x_{t-s}$ and $\x_t$ need to satisfy:
 \begin{equation}
-    \vA(\x_{t-s} - \x_t) = st \nabla \log p_t(\vA\x_t). 
+    \vA(\x_{t-s} - \x_t) \approx st \nabla \log p_t(\vA\x_t). 
 \end{equation}
-Among all $\x_{t_s}$ that satisfy the above constraint, we choose the one that minimizes the distance $\|\x_{t-s} - \x_t\|_2^2$. Therefore, we obtain a ``denoising'' process for $\x_t$:
+Among all $\x_{t_s}$ that satisfy the above constraint, we arbitrarily choose the one that minimizes the distance $\|\x_{t-s} - \x_t\|_2^2$. Therefore, we obtain a ``denoising'' process for $\x_t$:
 \begin{equation}
-    \x_{t-s}  = \x_t + st\vA^\dagger \nabla \log p_t(\vA\x_t). 
+    \x_{t-s}  \approx \x_t + st\vA^\dagger \nabla \log p_t(\vA\x_t). 
 \label{eqn:denoising-projection}
 \end{equation}
+Notice that this process does not sample from the distribution of $\vx_t$. In particular, there are components of $\vx$ in the null space/kernel of $\vA$ which can never be recovered from observations. Thus more information is needed to recover the full distribution of $\vx$, strictly speaking. But this recovers the component of $\vx$ that is orthogonal to the null space of $\vA$.
 
 % \paragraph{Inference.}
 % Notice that the above process is trying to enforce the constraints learned for the low-dimensional distribution of $\y$. Given a specific observation of $\y = \vnu$, to solve the inverse problem of inferring $\x$, we also want to enforce the measurement constraint $\vnu = \vA \x$, say through the gradient descent of $\frac{1}{2} \|\vA \x_t - \vnu\|_2^2$:
@@ -2256,14 +2283,21 @@ Among all $\x_{t_s}$ that satisfy the above constraint, we choose the one that m
 \subsection{3D Visual Model from Calibrated Image Pairs}
 In practice, the measurement model is often nonlinear or only partially known. A typical problem of this kind is actually behind how we can learn a working model of the external world from the  images perceived, say through our eyes,  telescopes or microscopes. In particular, humans and animals are able to build a model of the 3D world ((or 4D for a dynamical world) through a sequence of its 2D projections -- a sequence of 2D images (or stereo image pairs). The mathematical or geometric model of the projection is generally known:
 \begin{equation}
-    \y^i = h(\x, \theta^i) +\vw, 
+    \y^i = h(\x, \theta^i) +\vw^{i}, 
 \end{equation}
-where $h(\cdot)$ represents a  (perspective) projection of the 3D (or 4D) scene from a certain camera view at time $t_i$ to a 2D image (or a stereo pair) and $\vw$ is some possibly additive small measurement noise. Figure \ref{fig:projection-2D} illustrates this relationship. A full exposition of geometry related to multiple 2D views of a 3D scene is beyond the scope of this book. Interested readers may refer to the book \cite{MaY2003}. For now, all we need to proceed is that such projections are well understood and multiple images of a scene contains sufficient information about the scene.
+where $h(\cdot)$ represents a  (perspective) projection of the 3D (or 4D) scene from a certain camera view at time $t_i$ to a 2D image (or a stereo pair) and $\vw$ is some possibly additive small measurement noise. \Cref{fig:projection-2D} illustrates this relationship concretely, while \Cref{fig:inference_distributed} illustrates the model problem in the abstract. A full exposition of geometry related to multiple 2D views of a 3D scene is beyond the scope of this book. Interested readers may refer to the book \cite{MaY2003}. For now, all we need to proceed is that such projections are well understood and multiple images of a scene contains sufficient information about the scene.
 \begin{figure}[t]
     \centering
     \includegraphics[width=0.7\linewidth]{figs_chap6/3D-2D-projection.png}
     \caption{Relationship between a 3D object/scene and its 2D projections. Here we illustrate the projection of a point $\x$ and a line intersecting the point.}
     \label{fig:projection-2D}
+\end{figure}
+
+\begin{figure}[t]
+  \centering 
+  \includegraphics[width=0.7\linewidth]{figs_chap6/inference_distributed.pdf}
+  \caption{\small \textbf{Inference with distributed measurements.} We have a low-dimensional distribution \(\vx\) (here, similarly to \Cref{fig:inference_roadmap}, depicted as a union of two \(2\)-dimensional manifolds in \(\R^{3}\)) and a measurement model \(\y^{i} = h^{i}(\vx) + \vw^{i}\). As before, we want to infer various properties of the conditional distribution of \(\vx\) given \(\vy\), where \(\vy\) is the collection of all the measurements \(\y^{i}\).}
+  \label{fig:inference_distributed}
 \end{figure}
 
 In general, we would like to learn the distribution $p(\x)$ of the 3D (or 4D) world scene $\x$\footnote{Here by abuse of notation, we use $\x$ to represent either a point in 3D or a sample of an entire 3D object or a scene which consists of many points.} from the perceived 2D images of the world so far. The primary function of such a (visual) world model is to allow us to recognize places where we had been before or predict what the current scene would look alike in a future time at a new viewpoint. 
@@ -2310,14 +2344,14 @@ for a small $s >0$.
 % \end{equation}
 Suppose $\x_{t-s} = \x_t + s \vv$ for some vector $\vv$ and small increment $s$. We have
 \begin{equation}
-    h(\x_{t-s}) \approx h(\x_t) + \frac{\partial h}{\partial \x}\bigg\rvert_{\x_t} \vv s \doteq h(\x_t) + \vA(\x_t) \vv s. 
+    h(\x_{t-s}) \approx h(\x_t) + \frac{\partial h}{\partial \x}(\vx_{t}) \cdot \vv s \doteq h(\x_t) + \vA(\x_t) \vv s. 
 \end{equation}
 Hence, we have
 \begin{equation}
     \vA(\x_t) \vv = t \nabla_{\y} \log p_t(h(\x_t)).
     \label{eqn:pushforward}
 \end{equation}
-Geometrically the vector $\vv$ in the domain of $\x$ can be viewed as the pullback of the vector field $t \nabla \log p_t(\y)$ under the map $\y = h(\x)$. In general, we may choose $\vv$ to be the minimum 2-norm vector that satisfies the pullback relationship. Hence, we can express  $\hat{\x}_{t-s}$ approximately as:
+Geometrically the vector $\vv$ in the domain of $\x$ can be viewed as the pullback of the vector field $t \nabla \log p_t(\y)$ under the map $\y = h(\x)$. In general, as before, we may (arbitrarily) choose $\vv$ to be the minimum 2-norm vector that satisfies the pullback relationship. Hence, we can express  $\hat{\x}_{t-s}$ approximately as:
 \begin{equation}
     \hat{\x}_{t-s} \approx \x_t + st\vA(\x_t)^\dagger \nabla_{\y} \log p_t(h(\x_t)). 
 \label{eqn:pullback-denoise}
@@ -2333,7 +2367,7 @@ Geometrically the vector $\vv$ in the domain of $\x$ can be viewed as the pullba
     \vA^i(\x_t) \vv = t \nabla_{\y^i} \log p_t(h^i(\x_t)),
 \label{eqn:federated-pushforward}
 \end{equation}
-where $\vA^i(\x_t) = \frac{\partial h^i}{\partial \x}\rvert_{\x_t}$. The final $\vv$ can be chosen as a ``centralized'' solution that satisfies all the above equations, or it could be chosen as a certain (stochastically) ``aggregated'' version of all $\vv^i$:
+where $\vA^i(\x_t) = \frac{\partial h^i}{\partial \x}(\vx_t)$. The final $\vv$ can be chosen as a ``centralized'' solution that satisfies all the above equations, or it could be chosen as a certain (stochastically) ``aggregated'' version of all $\vv^i$:
 \begin{equation}
     \vv^i = t\vA^i(\x_t)^\dagger \big[\nabla_{\y^i} \log p_t(h^i(\x_t))\big], \quad i = 1, \ldots, K,
 \end{equation}
@@ -2356,7 +2390,7 @@ that are computed in a parallel and distributed fashion? An open question here i
 
 In the above derivation, we have assumed that the measurement model $h(\cdot)$ is fully known. In the case of stereo vision, this is rather reasonable as the relative pose (and calibration) of the two camera views (or two eyes\footnote{The relative pose of our two eyes is well known to our brain.}) are usually known in advance. Hence, through the stereo image pairs, in principle we should be able to learn the distribution of 3D scenes, at least the ego-centric distribution of 3D scenes. However, the low-dimensional structures of the so-called learned distribution contains variation caused by changing the viewpoints. That is, the appearance of the stereo images varies when we change our viewpoints with respect to the same 3D scene. For many practical vision tasks (such as localization and navigation), it is important if we can decouple this variation of viewpoints from an invariant representation of (the distribution of) 3D scenes.\footnote{Note that this goal aligns well with Klein's Erlangen Program for modern geometry, which is to study invariants of a manifold under a group of transformations. Here, we may view the manifold of interest as the distribution of ego-centric representations of 3D scenes. We have learned that it admits a group of three-dimensional rigid-body motion acting on it. It is remarkable that our brain has learned to effectively decouple such transformations from the observed 3D world.} Notice that we have studied learning representations that are invariant to translation and rotation in a limited setting in Chapter \ref{ch:representation}. We know that the associated compression operators take the necessary form of convolution. Nevertheless, operators that lead to compression or denoising with respect to more general transformations remain elusive to characterize.  
 
-\paragraph{Seeking Invariant Representations.}
+\paragraph{Seeking invariant representations.}
 For the 3D vision problem in its most general setting, we know the change of our viewpoints can be well modeled as a rigid-body motion. However, the exact relative motion of our eyes between different viewpoints is usually not known. More generally, there could also be objects (e.g., cars, humans, hands) moving in the scene and we normally do not know their motion either. How can we generalize the problem of learning the distribution of 3D scenes with calibrated stereo pairs to such more general settings? More precisely, we want to learn a compact representation $\x$ of the 3D scenes that is invariant to the camera/eye motions. Once such a representation is learned, we could sample and generate a 3D scene and render images or stereo pairs from arbitrary poses. 
 
 % In fact, without specifying the ego-centric frame as the reference for each stereo pair, it might lead to a more compact representation of the 3D scene that is invariant to the ego-centric viewpoint (say, if the camera views are specified with respect to some canonical world frame of the scene). In fact, our brain seems to be able to learn such a representation that decouples objects in a 3D scene and the motion of the observer or the objects.
