@@ -1192,7 +1192,10 @@ $t_{\ell} = T\ell / L$, as for \Cref{eq:denoising-iteration-basic} in
 
 
 
-\subsection{Body Pose Generation Conditioned on Head and Hands} The type of conditional estimation or generation problems arise rather naturally in many practical applications. 
+\subsection{Body Pose Generation Conditioned on Head and Hands}\label{sub:ego-allo}
+The type of
+conditional estimation or generation problems arise rather naturally in many
+practical applications. 
 A typical problem of this kind is how to estimate and generate body pose and hand gesture conditioned on a given head pose and egocentric images, as illustrated in Figure \ref{fig:pose-teaser}. This is often the problem we need to solve when one is wearing a head-mounted device such as the Vision-pro from Apple or the Project Aria from Meta. The pose of the whole body and the gesture of the hands need to be inferred so that we can use the information to control virtual objects that the person interacts with.
 \begin{figure*}[t]
   \centering
@@ -1560,7 +1563,7 @@ a different weighting than what we present here, based on the fact that
 \eqref{eq:conditional-denoising-mmse-denoiser-paired-data} with
 a conditional denoiser. In fact, the weighting we derive and present here
 reflects modern practice, and in particular is used in state-of-the-art
-diffusion models such as StableDiffusion 3.5
+diffusion models such as Stable Diffusion 3.5
 \cite{DBLP:conf/icml/EsserKBEMSLLSBP24}.} To see how this structure arises, we
 begin with an `idealized' version of the classifier guidance denoiser
 $\bar{\vx}_{\theta}^{\mathrm{CG}}$ defined in
@@ -2028,8 +2031,9 @@ such low-dimensional structures.
   $P$ is sufficiently large---for example, if we consider a large-scale,
   asymptotic regime where $P, D \to \infty$ with their ratio $P/D$ converging to
   a fixed constant---we have for $t \approx 0$ that $\norm{\vx_t}_2$ is close to
-  $\sqrt{P}$, by the concentration of measure phenomenon\footnote{One of the few
-  \textit{blessings of dimensionality}---see \textcite{Wright-Ma-2022}.}. Then
+  $\sqrt{P}$, by the concentration of measure phenomenon\footnote{One of
+  a handful of \textit{blessings of dimensionality}---see
+  \textcite{Wright-Ma-2022}.}. Then
   by the argument in the previous paragraph, we have in this regime that for
   \textit{almost all} realizations of $\vx_t$, the following approximation
   holds:
@@ -2150,34 +2154,158 @@ in the largest-scale diffusion models, and shown how to parameterize them (in
 \Cref{example:denoising-gaussian-mixture-cfg}) in the special case of a low-rank
 Gaussian mixture model data distribution.
 One interesting byproduct of this example is that it highlights the crucial role
-of \textit{embeddings} of the class label $y$ into a common space with $\vx$ in
+of \textit{embeddings} of the class label $y$ into a common space with the image $\vx$ in
 order to provide a concise and unified scheme for parameterizing the optimal
 denoisers (conditional and unconditional).
-Actually, this basic scheme can be scaled to massive-scale datasets, and
-provides the basis for the majority of the most popular text-to-X models (where
-``X'' denotes image, video, ...), such as StableDiffusion
-\cite{DBLP:conf/icml/EsserKBEMSLLSBP24}.
-Below, we will describe an early such instantiation, called unCLIP, which
-underlies OpenAI's DALL-E 2 text-to-image system \cite{Ramesh2022-nu}.
+Below, we will describe an early such instantiation, which
+formed the basis for the original open-source Stable Diffusion implementation
+\cite{rombach2022high}.
+In this setting, the embedding and subsequent conditioning is performed not on
+a class label, but a text prompt, which describes the desired image content
+(\Cref{fig:text-to-image}). We denote the raw tokenized text prompt as $\vY \in
+\bR^{D \times N}$ in this context, since it corresponds to a sequence of
+vectors---in \Cref{sec:clm_text}, we describe the process of encoding a text
+sequence as a vector representation in detail.
 
-\begin{itemize}
-  \item Embed image and text in a common space. (Embeddings, CLIP, reference
-    ch7)
-  \item Diffusion model to generate the images. Using CLIP. How to train it.
-  \item How to parameterize the denoiser. Cross-attention discussion, comparison
-    to the example.
-  \item Other stuff (``prior'', which maps from CLIP text embeddings to CLIP
-    image embeddings. Because the model maps from a CLIP image embedding to its
-    corresponding image (also conditioned on text). )
-\end{itemize}
+\begin{figure}[tbp]
+  \centering
+  \begin{subfigure}{0.47\textwidth}
+    \includegraphics[width=\linewidth]{figs_chap6/tti-train.pdf}
+    \caption{}
+    % \label{}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.47\textwidth}
+    \includegraphics[width=\linewidth]{figs_chap6/tti-inf.pdf}
+    \caption{}
+    % \label{}
+  \end{subfigure}
+  % \includegraphics[width=0.8\linewidth]{figs_chap6/tti.pdf}
+
+  \caption{A high-level schematic of training and applying a text-to-image
+  generative model, via conditional generation with a text prompt. \textbf{Left:}
+  To train a text-to-image model, a large dataset of images paired with
+  corresponding text captions is used. An encoder is used to map the captions to
+  sequences of vectors, which are used as conditioning signals for a conditional
+  denoiser, trained as described in \Cref{sub:cfg}. The text encoder may be
+  pretrained and frozen, or jointly trained with the denoiser. \textbf{Right:}
+  When applying a trained model, a desired text prompt is used as conditioning,
+  then sampling is performed with the trained model, as in
+  \Cref{alg:iterative_denoising_conditional_CFG} (\textit{mutatis mutandis} for
+  use with an encoded text prompt). For full details of the process of encoding
+  text to a sequence of vectors, see \Cref{sec:clm_text}. \sdb{TODO: pngs}}
+  \label{fig:text-to-image}
+\end{figure}
+
+Stable Diffusion follows the conditional generation methodology we outline in
+\Cref{sub:cfg}, with two key modifications: (i) The conditioning signal is an
+encoded text prompt $\vY$, rather than a class label; (ii) Image denoising is
+performed in ``latent'' space rather than on raw pixels, using a specialized,
+pretrained variational autoencoder pair $f : \bR^{D_{\mathrm{img}}} \to
+\bR^{d_{\mathrm{img}}}$, $g : \bR^{d_{\mathrm{img}}} \to
+\bR^{D_{\mathrm{img}}}$ (see \Cref{sec:vae}), where $f$
+is the encoder and $g$ the decoder. Subsequent model development has shown that
+point (ii) is an efficiency issue, rather than a core conceptual one, so we will
+not focus on it, other than to mention that it simply leads to the following
+straightforward modifications to the text-to-image pipeline sketched in
+\Cref{fig:text-to-image}: 
+\begin{enumerate}
+  \item \textbf{At training time},
+    the encoder $f : \vx \mapsto \vz$ is used to generate the denoising targets, and
+    all denoising is performed on the encoded representations $\vz_t \in
+    \bR^{d_{\mathrm{img}}}$;
+  \item \textbf{At generation time}, sampling is performed on the representations $\vz_t$, and
+    the final image is generated by applying the decoder $g(\vz_0)$.
+\end{enumerate}
+In contrast, issue (i) is essential, and the approach proposed to treat it
+represents one of the lasting methodological innovations of
+\textcite{rombach2022high}.
+In the context of the iterative conditional denoising framework we have
+developed in \Cref{sub:cfg}, this concerns the parameterization of the denoisers
+$\bar{\vz}_{\theta}(t, \vz_t, \vY^+)$.\footnote{In the setting of text
+conditioning, the `augmented' label $\vY^+$, which is either the encoded text
+prompt or $\varnothing$, denoting unconditional denoising, is often implemented
+by mapping $\varnothing$ to the empty string ``'', then encoding this text
+prompt with the tokenizer as usual. This gives a simple, unified way to treat
+conditional and unconditional denoising with text conditioning.}
+\textcite{rombach2022high} implement text conditioning in the denoiser using
+a layer known as cross attention, inspired by the original encoder-decoder
+transformer architecture of \textcite{vaswani2017attention}. Cross attention is
+implemented as follows. We let $\tau : \bR^{D_{\mathrm{text}} \times N} \to
+\bR^{d_{\mathrm{model}} \times N_{\mathrm{text}}}$
+denote an encoding network for the text embeddings (often a causal
+transformer---see \Cref{sec:clm_text}), and let $\psi : \bR^{d_{\mathrm{img}}}
+\to \bR^{d_{\mathrm{model}} \times N_{\mathrm{img}}}$ denote the mapping corresponding to one of
+the intermediate representations in the denoiser.\footnote{In practice,
+text-conditioned denoisers add cross attention layers at regular intervals
+within the forward pass of the denoiser, so $\psi$ should be seen as
+layer-dependent, in contrast to $\tau$. See \textcite{rombach2022high} for
+details.} Here, $N_{\mathrm{text}}$ is the maximum tokenized text prompt length,
+and $N_{\mathrm{img}}$ roughly corresponds to the number of image channels
+(layer-dependent) in the representation, which is fixed if the input image
+resolution is fixed. Cross attention (with $K$ heads, and no bias) is defined as
+    \begin{equation}
+      \mathrm{MHCA}(\vz_t, \vY^+) \label{eq:mhca}
+        = \vU_{\out}\mat{\SA([\vU_{\query}^{1}]^{\top}\psi(\vz_t),
+        [\vU_{\key}^{1}]^{\top}\tau(\vY^+), [\vU_{\val}^{1}]^{\top}\tau(\vY^+)) \\ \vdots \\
+        \SA([\vU_{\query}^{K}]^{\top}\psi(\vz_t),
+        [\vU_{\key}^{K}]^{\top}\tau(\vY^+),
+        [\vU_{\val}^{K}]^{\top}\tau(\vY^+))}, %+ \vb_{\out}\vone_{n}^{\top},
+    \end{equation}
+where $\mathrm{SA}$ denotes the ubiquitous self attention operation
+in the transformer (which we recall in detail in \Cref{ch:applications}: see
+\Cref{eq:mhsa,eq:self_attention}), and $\vU_{*}^{k} \in \bR^{d_{\mathrm{model}}\times
+d_{\mathrm{attn}} }$ for $* \in \set{\mathrm{qry}, \mathrm{key}, \mathrm{val}}$
+(as well as the output projection $\vU_{\mathrm{out}}$) are the learnable
+parameters of the layer.
+
+Notice that, by the definition of the self-attention operation, cross attention
+\textit{outputs the value-projected text embeddings, weighted by correlations
+between the image features and the text embeddings.}
+In the denoiser architecture used by \textcite{rombach2022high}, 
+self-attention residual blocks in the denoiser architecture, applied to the
+image representation at the current layer and defined analogously
+to those in \Cref{eq:vit-res-block} for the vision transformer, are followed by cross
+attention residual blocks of the form \eqref{eq:mhca}.
+Such a structure requires the text encoder $\tau$ to, in a certain sense, share some
+structure in its output with the image feature embedding $\psi$: this can be
+enforced either by appropriate joint text-image pretraining (such as with CLIP
+\cite{Radford2021-ir}), or by joint training with
+the denoiser itself (which was proposed and demonstrated by
+\textcite{rombach2022high}, but has fallen out of favor due to high data and
+training costs for strong performance).
+Conceptually, this joint text-image embedding space and the cross attention
+layer itself bear a strong resemblance to the
+conditional mixture of Gaussians denoiser that we derived in the previous
+section (recall \eqref{eq:mog-conditional-denoising-unified-operator}), in the
+special case of a single token sequence. Deeper
+connections can be drawn in the multi-token setting following the rate reduction
+framework for deriving deep network architectures discussed in
+\Cref{ch:unrolling}.
+
+This same basic design has been further scaled to even larger model and dataset
+sizes, in particular in modern instantiations of Stable Diffusion
+\cite{DBLP:conf/icml/EsserKBEMSLLSBP24}, as well as in competing models such as
+FLUX.1 \cite{Labs2025-fb}, Imagen \cite{Saharia2022-na}, and DALL-E \cite{Ramesh2022-nu}.
+The conditioning mechanism of cross attention has also become ubiquitous in
+other applications, as in EgoAllo \Cref{sub:ego-allo}.
 
 
-
-
-An vignette for image generation conditioned on a given caption.  \sdb{TODO:
-Discuss the cross-attention-type operator here. Can get it by considering
-a joint denoising of $p(x, y)$, with Gaussian conditional models for $p(y \mid
-x)$ and $p(x \mid y)$...}
+% \begin{itemize}
+%   \item Embed image and text in a common space. (Embeddings, CLIP, reference
+%     ch7)
+%   \item Diffusion model to generate the images. Using CLIP. How to train it.
+%   \item How to parameterize the denoiser. Cross-attention discussion, comparison
+%     to the example.
+%   \item Other stuff (``prior'', which maps from CLIP text embeddings to CLIP
+%     image embeddings. Because the model maps from a CLIP image embedding to its
+%     corresponding image (also conditioned on text). )
+% \end{itemize}
+%
+% An vignette for image generation conditioned on a given caption.  \sdb{TODO:
+% Discuss the cross-attention-type operator here. Can get it by considering
+% a joint denoising of $p(x, y)$, with Gaussian conditional models for $p(y \mid
+% x)$ and $p(x \mid y)$...}
 
 % \sdb{Align Visual Data with Texts such as CLIP, with other attribures ControlNet, ... discuss dhariwal and nichol (classifier aware guidance), then mention DALLE type architecture for
 % text-conditioned image generation?} \yima{Actually the original work ``\href{https://arxiv.org/abs/2105.05233}{Diffusion Models Beat GANs on Image Synthesis}'', by Prafulla Dhariwal and Alex Nichol, proposed to compute the two matching functions proposed above. The follow-up work ``Classifer-Free Diffusion Guidance''  by
