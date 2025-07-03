@@ -1,0 +1,649 @@
+\documentclass[../../book-main.tex]{subfiles}
+\graphicspath{{\subfix{../..}}}
+
+\begin{document}
+
+\chapter{Entropy with Diffusion or Denoising}
+\label{app:diffusion-denoising}
+
+\begin{quote}
+``{\em The increase of disorder or entropy with time is one example of what is called an arrow of time, something that distinguishes the past from the future, giving a direction to time.}''
+
+$~$\hfill -- A Brief History of Time, Stephen Hawking
+ \end{quote}
+\vspace{5mm}
+
+
+In this appendix, we give formal proofs of the assertions connecting diffusion,
+denoising, and entropy encapsulated in \Cref{thm:diffusion-and-entropy} and
+\Cref{thm:conditioning_reduces_entropy}.
+These results rely on the theory of \textit{Markov diffusion processes}, an extremely rich area of mathematics that blends probability, analysis, and geometry, and which has recently been exploited as the foundation for diffusion generative models, as we have mentioned.
+For a general reference to this area of mathematics, consult \cite{Bakry2016-pl}.
+
+\section{An Important Note on Notation}
+
+In this appendix, we will dig into the mathematics underlying denoising,
+diffusion, and entropy. Adopting a mathematical focus demands that we adopt
+certain notational conventions which are unfortunately at odds with the
+notational conventions we have used in \Cref{ch:compression}, which emphasize
+connections to practical implementations of noise scheduling in diffusion models
+and other iterative denoising schemes.
+
+We call the reader's attention to three important changes that we will employ
+throughout these appendices. Both \Cref{thm:diffusion-and-entropy} and
+\Cref{thm:conditioning_reduces_entropy} concern themselves with the following
+setting:
+we observe
+a random variable $\vz_{\sigma} = \vz_o + \sigma \vg$, where $\vz_o$ is a random
+variable with finite variance and density $p$,\footnote{We will only need
+a density to exist for the proof of \Cref{thm:conditioning_reduces_entropy}. As
+we'll discuss, this can be seen as an assumption that $\vz_o$ has already had an
+(arbitrarily small) amount of Gaussian noise added to it. This leads us to
+interpret \Cref{thm:conditioning_reduces_entropy} as applying to entropy
+reduction via \textit{incremental denoising}, as we studied in
+\Cref{ch:compression}, at stages of the incremental denoising process where
+previously-added noise is being removed.} and we consider the corresponding
+minimum mean-squared error denoiser for this noise level, defined as
+\begin{equation*}
+  \vmu_{\sigma}(\vz_{\sigma}) = \bE[ \vz_o \mid \vz_{\sigma}
+  ] = \vz_{\sigma}
+  + \sigma^2 \nabla \log p_{\sigma}(\vz_{\sigma}),
+\end{equation*}
+where we applied Tweedie's formula (\Cref{thm:tweedie}).
+\textbf{Here is the change we will make to this notation in this appendix:}
+\textit{we will parameterize the noisy observation $\vz$, its density $p$, and
+the denoiser $\vmu$ in terms of variance $\sigma^2$, not standard deviation
+$\sigma$.} 
+% Indeed, the distribution of $\vz_{\sigma^2}$ conditional on $\vz_o$
+% is Gaussian with mean $\vz_o$ and covariance $\sigma^2\vI$.
+This entails the modified definitions
+\begin{enumerate}[label={\arabic*.}]
+  \item For the observations,
+    \begin{equation*}
+      \vz_{\sigma^2} = \vz_o + \sigma \vg;
+    \end{equation*}
+  \item For the density, $p_{\sigma^2}$ denotes the density of $\vz_{\sigma^2}$;
+  \item For the denoiser,
+    \begin{equation}\label{eq:appendix-mmse-denoiser}
+      \vmu_{\sigma^2}(\vz_{\sigma^2}) = \bE[ \vz_o \mid \vz_{\sigma^2}
+      ] = \vz_{\sigma^2}
+      + \sigma^2 \nabla \log p_{\sigma^2}(\vz_{\sigma^2}).
+    \end{equation}
+\end{enumerate}
+Again, we emphasize that these changes unfortunately conflict with the
+practically-motivated notation used in \Cref{ch:compression}, but will lead to
+far greater alignment with the mathematical formalism underlying diffusion and
+denoising that we will explore in this appendix while proving
+\Cref{thm:conditioning_reduces_entropy,thm:diffusion-and-entropy}.
+
+
+\section{Diffusion Process}
+
+% \Cref{thm:diffusion-and-entropy} concerns the following setting: we observe
+% a random variable $\vz_{\sigma^2} = \vz_o + \sigma \vg$, where $\vz_o$ is a random
+% variable with finite variance and density $p$. %
+%Note that $\mu$ itself need not be a density: for example, $\vz_o$ could be a discrete random variable in everything that follows.
+The following \textit{continuous time} perspective is helpful in analyzing the
+relationship between the entropy of $\vz_{\sigma^2}$ and $\vz_o$. Consider an
+auxiliary time variable $t \in [0, \sigma^2]$, and a random process $t\mapsto
+\vz_t$ such that for any $t$, one has $\vz_t | \vz_o \sim \cN(\vz_o, t\vI)$.
+Notice that at the terminal value of $t = \sigma^2$, this process is equal in
+distribution to the observation $\vz_{\sigma^2}$.
+
+Write $\mu$ for the distribution of $\vz_o$.
+We emphasize here that we do not assume that $\vz_o$ admits a density of its own
+with respect to the Lebesgue measure.
+By properties of Gaussian smoothing, for every $t > 0$,
+the random variable $\vz_t$ has a density $p_t$, which can be expressed
+analytically as $p_t = \varphi_{t} \mathop{\ast} \mu$, where $\varphi_t$ is the
+density of the standard Gaussian random variable with zero mean and covariance
+$t \vI$, and $\ast$ denotes convolution:
+\begin{equation}\label{eq:gaussian-smoothing}
+  p_t(\vz) = \int \varphi_t(\vz - \vz') \odif \mu(\vz').
+\end{equation}
+This fact is somewhat remarkable at first sight: even for a completely irregular
+distribution $\mu$ (say, a Bernoulli random variable, which does not have
+a Lebesgue density), its Gaussian smoothing admits a density for every
+(arbitrarily small) $t>0$.
+Later in this appendix, we will dig into further regularity properties of these
+Gaussian smoothings.
+
+
+A very fundamental fact about the densities $p_t$ is
+that they satisfy the \textit{heat equation}: specifically, the partial
+differential equation (PDE)
+\begin{equation*}
+    \partial_t p_t = \frac{1}{2} \Delta p_t,
+\end{equation*}
+where $\partial_t$ denotes differentiation in time, and $\Delta = \sum_{i=1}^d \partial^2_{\vz_i}$ denotes the Laplacian operator.
+The heat equation describes \textit{time derivatives} of the densities $p_t$ as
+functions of their instantaneous \textit{spatial derivatives} (in $\vz$), and it
+is an extremely useful, concise encapsulation of many regularity properties of
+the smoothed densities $p_t$.\footnote{In fact, with a suitable (generalized) definition of the Laplacian operator, the heat
+equation actualy holds true in extreme generality---far beyond the case of additive Gaussian
+noise \cite{Bakry2016-pl}. However, for the Gaussian setting, an explicit
+calculation using the Gaussian density can be used to prove the heat
+equation: if you haven't done this calculation before, you should check it
+now! (Exercise \ref{exercise:gaussian-heat})}
+Indeed, by exploiting the heat equation, we find a very simple proof that
+\textit{entropy increases as $t$ increases}, as claimed in
+\Cref{thm:diffusion-and-entropy}.
+
+\begin{proof}[Proof of {\Cref{thm:diffusion-and-entropy}}]
+  Calculate
+  \begin{equation}\label{eq:de-bruijn}
+    \begin{split}
+      \partial_t h(\vz_t)
+      &=
+      -\frac{1}{2} \int (1 + \log p_t(\vz)) \Delta p_t(\vz) \odif{\vz}
+      \\
+      &=
+      \frac{1}{2} \int \ip*{\nabla \log p_t(\vz)}{\nabla p_t(\vz)} \odif{\vz}
+      \\
+      &= \frac{1}{2} \int p_t(\vz) \norm{\nabla \log p_t(\vz)}_2^2
+      > 0,
+    \end{split}
+  \end{equation}
+  where the first line uses the chain rule, the heat equation, and the expression
+  $h(\vz_t) = -\int p_t(\vz) \log p_t(\vz) \odif{\vz}$; and the second line uses an integration by parts.
+  The identity in the final line of \Cref{eq:de-bruijn}, which equivalently
+  relates the \textit{Fisher information} of $\vz_t$ to the time derivative of its
+  entropy, is called de Bruijn's identity. 
+  To establish that the inequality is indeed strict, note that
+  \Cref{eq:gaussian-smoothing} shows that $p_t(\vz) > 0$
+  for every $\vz$ (since $\int \odif \mu(\vz) = 1$), so equality is only
+  possible when $\nabla \log p_t(\vz) = \mathbf{0}$ for every $\vz$; this would
+  imply that $\log p_t = c$ for some constant $c \in \R$, but this would
+  contradict the fact that $\int p_t(\vz) = 1$, so the inequality is indeed
+  strict.
+
+  Because $t=0$ and $t=\sigma^2$ correspond to our clean signal $\vz_o$ and the
+  noisy observation $\vz_{\sigma^2}$, respectively,
+  we can use \Cref{eq:de-bruijn} to prove \Cref{thm:diffusion-and-entropy}. 
+  Indeed, since $h(\vz_o)$ is finite, we can write with the fundamental theorem
+  of calculus
+  \begin{equation}\label{eq:de-bruijn-ftc}
+    \begin{split}
+    h(\vz_{\sigma^2}) &= h(\vz_o) + \int_0^{\sigma^2} \partial_t h(\vz_t) \odif t,
+    \\
+    &> h(\vz_o),
+    \end{split}
+  \end{equation}
+  by \Cref{eq:de-bruijn}, as desired.
+
+
+  % The case where $h(\vz_o)$ is not finite requires slightly more subtle arguments.
+  % We will argue in two steps:
+  % \begin{enumerate}[item={\arabic*.}]
+  %   \item Given the assumption that $\bE[\norm{\vz_o}_2^2] < +\infty$, the only
+  %     possibility is for $h(\vz_o) = -\infty$.
+  %   \item For every $t > 0$, $h(\vz_t)$ is finite.
+  % \end{enumerate}
+  % This will establish \Cref{thm:diffusion-and-entropy} for this case, completing
+  % the proof.
+  % Now, for the first claim above, we will use \Cref{thm:information-inequality} to
+  % provide a simple proof of the fact that under a variance constraint, 
+  % the Gaussian distribution has maximum differential entropy; since its
+  % differential entropy is finite, this suffices to show that $h(\vz_o) = -\infty$.
+  % To this end, let $\vmu = \bE[\vz_o]$ and $\vSigma = \bE[\vz_o \vz_o^\top]$
+  % denote the mean and covariance of $\vz_o$, respectively; each of these
+  % exist by the assumption that $\bE[\norm{\vz_o}_2^2] < +\infty$.
+  % Let $\varphi$ denote the density of a $\cN(\vmu, \vSigma)$ random variable.
+  % Then one has $D()$
+  %
+  %
+  % \Cref{thm:diffusion-and-entropy} immediately follows from \Cref{eq:de-bruijn}.
+  % In particular, for the case where $\vz_o$ does not admit a density with respect
+  % to the Lebesgue measure, 
+
+\end{proof}
+
+\begin{remark}\label{rem:gaussian-maxent}
+  To extend \Cref{thm:diffusion-and-entropy} to certain degenerate
+  distributions,
+  notice that we can use infinite divisibility of the Gaussian distribution to
+  take an infinite sequence of times $\sigma^2 > t_1 > t_2 > \cdots > 0$, and
+  repeatedly apply \Cref{thm:diffusion-and-entropy} to obtain that
+  $h(\vz_{\sigma^2}) > h(\vz_{t_1}) > \cdots > h(\vz_{t_n}) > \cdots$.
+  Indeed, this works because for any random variable $\vz_o$ with distribution
+  $\mu$ and coordinates having finite variance, Gaussian smoothing produces
+  a random variable with finite entropy. To see this, first note that by
+  Tonelli's theorem,
+  \begin{align*}
+    \bE[\norm{\vz_t}_2^2] 
+    &= \int \left[ \int \norm{\vz}_2^2 \varphi_t(\vz - \vz') \odif \vz
+    \right] \odif \mu(\vz')\\
+    &= \int \left[ \int \norm{\vz + \vz'}_2^2 \varphi_t(\vz) \odif \vz
+    \right] \odif \mu(\vz')\\
+    &= \int\left[dt + \norm{\vz'}_2^2 \right]\odif \mu(\vz') <+\infty,
+  \end{align*}
+  so every $\vz_t$ has finite squared $\ell^2$ norm, and in particular finite
+  mean and covariance.
+  We can then obtain a bound on the entropy of $\vz_t$ by the celebrated fact
+  that the Gaussian density has maximum differential entropy among all densities
+  with equal mean and covariance.
+  To prove this, we can use \Cref{thm:information-inequality}: first let $\vmu_t
+  = \bE[\vz_t]$ and $\vSigma_t = \bE[(\vz_t-\vmu_t) (\vz_t-\vmu_t)^\top]$, and let $q_t$ denote
+  the density of a $\cN(\vmu_t, \vSigma_t)$ random variable.
+  Then calculate for the KL divergence of $p_t$ to $q_t$
+  \begin{align*}
+    D(p_t || q_t) 
+    &= 
+    -h(\vz_t) - \int p_t(\vz) \log q_t(\vz) \odif \vz
+    \\
+    &=
+    -h(\vz_t) + \frac{1}{2}\left[
+      \int p_t(\vz) \left( \logdet(2\pi \vSigma_t) + (\vz - \vmu_t)^\top \vSigma_t^{-1} (\vz - \vmu_t) \right)\odif \vz
+    \right]
+  \\
+    &= -h(\vz_t) + \frac{1}{2} \left(
+      \logdet(2\pi \vSigma_t) 
+      + \ip*{\bE[(\vz - \vmu_t)(\vz - \vmu_t)^\top]}{\vSigma_t^{-1}}
+    \right)
+    \\
+    &= -h(\vz_t) + \frac{1}{2} \left(
+      \logdet(2\pi \vSigma_t) 
+      + d
+    \right)
+    \\
+    &= -h(\vz_t) + \frac{1}{2} \logdet(2\pi e \vSigma_t).
+  \end{align*}
+  In the third line above, we used the expression for a quadratic form $\vx^\top
+  \vA \vx = \sum_{ij} A_{ij} x_i x_j$ and linearity to write the integral as an
+  expectation of an inner product of matrices, where as usual $\ip{\vA}{\vB}
+  = \sum_{ij} A_{ij} B_{ij}$.
+  We recognize that the expression in the final line above is the difference of
+  the entropy of a $\cN(\vmu_t, \vSigma_t)$ random variable and $h(\vz_t)$.
+  Then since $D(p_t || q_t) \geq 0$, the above implies that $h(\vz_t)$ is no
+  larger than the entropy of a $\cN(\vmu_t, \vSigma_t)$ random variable, which
+  establishes that the Gaussian distribution is `maximum-entropy' in a precise
+  sense.
+  This bound on the entropy $h(\vz_t)$ is achieved by a Gaussian $\vz_t$ (hence,
+  it is tight).
+
+  Thus, the sequence $h(\vz_{t_n})$ is a decreasing sequence of real numbers, which
+  must either diverge to $-\infty$ or converge to a finite limit.
+  With a bit more work, it is possible to turn the bounds in
+  \Cref{eq:de-bruijn,eq:de-bruijn-ftc} into quantitative bounds that imply that
+  the sequence $h(\vz_{t_n}) \to_{n\to\infty} h(\vz_o)$, including in the case
+  where $h(\vz_o) = -\infty$.
+  For example, it is instructive to consider the case where $\vz_o$ is
+  equal to a constant random variable $\vmu \in \R^d$, which is a degenerate
+  distribution. Then $\vz_t \sim
+  \cN(\vmu, t\vI)$, and $\nabla \log p_t(\vz) = -(\vz - \vmu)/t$,
+  from which it follows that $\partial_t h(\vz_t) = d/2t$, whence from
+  \Cref{eq:de-bruijn-ftc}
+  \begin{equation*}
+    h(\vz_{t_n}) - h(\vz_{t_{n+1}}) = (d/2)\int_{t_{n+1}}^{t_{n}} (1/t) \odif t
+    =
+    (d/2) \log(t_{n} / t_{n+1}).
+  \end{equation*}
+  For example, if $t_n = 1/n$, this gives a lower bound of $d/4n$; summing over
+  all $n$ implies that $h(\vz_{t_n})$ is on the order of $-\log n$, hence
+  diverging to $-\infty$.
+  This same scheme can be instantiated in more general contexts to rigorously
+  establish that low-dimensional distributions have entropy $-\infty$ in
+  a precise sense.
+  Their entropy can moreover be identified with the sequence of
+  entropies of their noisy approximations as the level of noise goes to zero, as
+  in the Gaussian example.
+\end{remark}
+
+
+\section{Denoising Process}
+
+\Cref{thm:conditioning_reduces_entropy} concerns the corresponding ``inverse''
+process: we start with the noisy random variable $\vz_{\sigma^2}$, and we seek to
+compare its entropy to that of the \textit{denoised} random variable
+$\vmu_{\sigma^2}(\vz_{\sigma^2})$, following \Cref{eq:appendix-mmse-denoiser}.
+By Tweedie's formula, this can be seen as a perturbation of the distribution of
+the random variable $\vz_{\sigma^2}$ by the \textit{score function vector field},
+suggesting
+a connection to stochastic differential equations (SDEs) and the theory of
+diffusion models \cite{song2020score}.
+Indeed, a proof of
+\Cref{thm:conditioning_reduces_entropy} can be developed using this powerful
+machinery and a limiting argument (e.g., following
+the technical approach in the exposition of \cite{DBLP:conf/iclr/ChenC0LSZ23}).
+We will give a simpler proof here, which will use only elementary tools and 
+thereby illuminate some of the key quantities behind the process of entropy
+reduction via denoising.
+On the other hand, we will need to deal with some slightly technical
+calculations due to the fact that the denoising process in
+\Cref{thm:conditioning_reduces_entropy} does \textit{not} correspond exactly to
+the ``reverse'' process associated to the noise addition process that generates
+the observation $\vz_{\sigma^2}$.\footnote{For those familiar with diffusion
+models, we refer here to the time-reversed forward process not coinciding with
+the sequence of iterates generated by the process defined by
+\Cref{thm:conditioning_reduces_entropy}. These processes coincide in a certain
+limit where infinitely many steps of \Cref{thm:conditioning_reduces_entropy} are
+taken with infinitely small levels of noise added at each step; for general,
+finite steps, we must introduce some approximations regardless of the level of
+sophistication of our tools.}
+% We can
+% characterize how this perturbation affects the entropy of the distribution
+% by exploiting a deep connection between stochastic differential equations and
+% diffusion-denoising processes, 
+
+The key to our approach will be to exploit the fact that the denoising process
+applies a deterministic map to the random variable $\vz_{\sigma^2}$, namely, the
+update map $\vmu_{\sigma^2}$. As in the previous section, we define a family of
+maps $\vmu_t$ analogously to our definition of the intermediate noisy random
+variables $\vz_t$ for $t \in [0, \sigma^2]$.
+It turns out that under rather general assumptions on the distribution of
+$\vz_o$---namely, that it is not supported entirely on an affine subspace of
+positive codimension---the maps $\vmu_t$ are actually invertible for every
+$t>0$ \cite[Lemma II.1]{Gribonval2011-pf}.
+This implies that the density of the denoised signal $\vmu_t(\vz_t)$ is given
+precisely by
+\begin{equation*}
+  \frac{p_t \circ \vmu_t^{-1}}{\det(\vI + t \nabla^2 \log p_t)},
+\end{equation*}
+where $\nabla^2$ denotes the Hessian matrix operator; this follows from the
+change of variables formula.
+The proof will then follow readily from another application of the change of
+variables formula in the differential entropy, together with an assumption on
+the regularity of the score functions $\nabla \log p_t$.
+
+\begin{proof}[Proof of {\Cref{thm:conditioning_reduces_entropy}}.]
+  We will show that for all $t$ sufficiently small (corresponding to a choice of
+  the initial $\sigma^2$ sufficiently small), one has $h(\vmu_t(\vz_t)) \leq
+  h(\vz_t)$.
+  We will assume for simplicity that the initial random variable $\vz_o$ admits
+  a twice differentiable density $p$ with respect to
+  Lebesgue measure, which satisfies
+  \begin{enumerate}[label={\arabic*.}]
+    \item $p$ is strictly positive.
+    % \item $p(\vz)$ is uniformly bounded in $\vz$.
+    \item $\| \nabla p(\vz) \|_2$ is uniformly bounded in $\vz$.
+    \item $| \Delta p(\vz) |$ is uniformly bounded in $\vz$.
+    % \item $p$ is not supported entirely on an affine subspace of positive
+    %   codimension.
+  \end{enumerate}
+  It can be shown that these hypotheses are all satisfied by adding an
+  arbitrarily small amount of Gaussian noise to any random variable (see the
+  proof of Lemma \ref{lem:entropy-reduction-regularity}).
+
+  By the change of variables formula, for every $t>0$, the random variable
+  $\vmu_t(\vz_t)$ admits a density with respect to Lebesgue measure, which is
+  precisely
+  \begin{equation*}
+    \frac{p_t \circ \vmu_t^{-1}}{\det D \vmu_t}
+    =
+    \frac{p_t \circ \vmu_t^{-1}}{\det(\vI + t \nabla^2 \log p_t)},
+  \end{equation*}
+  where \(D\) is the Jacobian operator.
+  This expression is valid by an application of \cite[Lemma
+  II.1]{Gribonval2011-pf} given our assumption that $p$ is a density with respect
+  to the Lebesgue measure on $\R^d$,\footnote{If $p$ had support in an affine
+  subspace of $\R^d$ with strictly positive codimension, then $\int_{\R^d}
+  p(\vz)\odif \vz = 0$ would necessarily follow, contradicting the assumption that $p$ is
+  a density.} which implies
+  that the maps $\vmu_t$ are actually invertible for every $t>0$. As
+  a consequence, we have for the entropy of $\vmu_t(\vz_t)$
+  \begin{align*}
+    h(\vmu_t(\vz_t))
+    &=
+    - \int \frac{(p_t \circ \vmu_t^{-1})(\vz)}{\det[D \vmu_t(\vz)]}
+    \log \frac{(p_t \circ \vmu_t^{-1})(\vz)}{\det[D \vmu_t(\vz)]}\odif{\vz}
+    \\
+    &=
+    - \int \frac{(p_t \circ \vmu_t^{-1})(\vz)}{\det[D\vmu_t(\vz)]}
+    \log[(p_t \circ \vmu_t^{-1})(\vz)]\odif{\vz} \\
+    &\qquad +
+    \int \frac{(p_t \circ \vmu_t^{-1})(\vz)}{\det[D\vmu_t(\vz)]}
+    \logdet[D\vmu_t(\vz)]\odif{\vz}
+    \\
+    &=
+    h(\vz_t)
+    +
+    \int \frac{(p_t \circ \vmu_t^{-1})(\vz)}{\det[D\vmu_t(\vz)]}
+    \logdet[D\vmu_t(\vz)]\odif{\vz}
+  \end{align*}
+  Above, in the third line we applied a change of variables.
+  In particular, the difference in entropies is equal to the ``excess''
+  \begin{equation*}
+    h(\vmu_t(\vz_t))
+    -
+    h(\vz_t)
+    =
+    \int \frac{(p_t \circ \vmu_t^{-1})(\vz)}{\det[D\vmu_t(\vz)]}
+    \logdet[D\vmu_t(\vz)]\odif{\vz}
+  \end{equation*}
+  We have by Tweedie's formula
+  \begin{equation*}
+    \logdet {D \vmu_t}
+    =
+    \logdet \left(
+      \vI + t \nabla^2\log p_t
+    \right),
+  \end{equation*}
+  so we can write more directly
+  \begin{equation*}
+    h(\vmu_t(\vz_t))
+    -
+    h(\vz_t)
+    =
+    -\int
+    \frac{(p_t \circ {\vmu_t}^{-1})(\vz)}{\det( \vI + t \nabla^2 \log p_t(\vz))}
+    \log \left(
+    \frac{1}{\det( \vI + t \nabla^2 \log p_t(\vz))}
+    \right)\odif{\vz}.
+  \end{equation*}
+  We will estimate the RHS of this expression in order to establish that entropy
+  decreases for sufficiently small $t$, given sufficient regularity of the
+  density $p$ of $\vz_o$.
+  By concavity, one has $-x \log x \leq 1-x$ for every $x \geq 0$. Hence
+  \begin{align*}
+    h(\vmu_t(\vz_t))
+    -
+    h(\vz_t)
+    &\leq
+    \int
+    (p_t \circ {\vmu_t}^{-1})(\vz)\left(
+    1 - 1/\det\left( \vI + t \nabla^2 \log p_t(\vz) \right)
+    \right)\odif{\vz}
+    \\
+    &=
+    \int p_t(\vz) \det\left( \vI + t \nabla^2 \log p_t(\vz) \right)\odif{\vz}
+    - 1,
+  \end{align*}
+  where the second line applies a change of coordinates (recalling, as we used
+  before, that $D \vmu_t = \vI + t \nabla^2 \log p_t$).
+  Next, by the AM-GM inequality, we have for any semidefinite matrix $\vX$ the
+  bound $\det(\vX) \leq (\tr(\vX) / d)^d$.
+  The fact that the matrix
+  $\vI + t \nabla^2 \log p_t$ is semidefinite is a consequence of
+  \cite[Lemma A.1]{Gribonval2011-pf} and our assumptions.
+  Hence, we have
+  \begin{align*}
+    \int p_t(\vz) \det\left( \vI + t \nabla^2 \log p_t(\vz) \right) \odif{\vz}
+    &\leq
+    \int p_t(\vz) \left(
+    \tr\left[ \frac{1}{d} \left( \vI + t \nabla^2 \log p_t(\vz) \right) \right]
+    \right)^d \odif{\vz}
+    \\
+    &=
+    \int p_t(\vz) \left(
+    1 + \frac{t}{d} \tr\left(\nabla^2 \log p_t(\vz) \right)
+    \right)^d \odif{\vz}.
+    % \\
+    % &=
+    % \int p_t \left(
+    % 1 + \frac{t}{d} \tr\left(\nabla^2 \log p_t \right)
+    % \right)^d.
+  \end{align*}
+  We have $\tr(\nabla^2 \log p_t) = \Delta \log p_t$, by definition of the
+  Laplacian.
+  By our assumptions on $p$, we can apply
+  Lemma \ref{lem:entropy-reduction-regularity} to get
+  \begin{equation*}
+    \sup_{t\geq 0,\, \vz} | \Delta \log p_t(\vz) | < +\infty.
+  \end{equation*}
+  Calling the constant on the LHS of this bound $L$, we have for any $t \leq
+  1/L$
+  \begin{equation*}
+    -\frac{1}{d}
+    \leq
+    \frac{t}{d} \tr\left(\nabla^2 \log p_t \right)
+    \leq
+    \frac{1}{d}.
+  \end{equation*}
+  Meanwhile, the function $u \mapsto (1 + u)^d$ is convex, so for $-1/d \leq
+  u \leq 1/d$ we have
+  \begin{align*}
+    (1+u)^d &\leq \left( 1 - \frac{1}{d} \right)^d + 
+    \underbrace{\left[ \left(
+    1 + \frac{1}{d} \right)^d - \left( 1 - \frac{1}{d} \right)^d 
+    \right]}_{M} u
+    \\
+    &\leq 1 + Mu.
+  \end{align*}
+  Applying this bound, we get that for every $0 \leq t \leq 1/L$, one has
+  \begin{equation*}
+    \int p_t(\vz) \left(
+    1 + \frac{t}{d} \tr\left(\nabla^2 \log p_t(\vz) \right)
+    \right)^d\odif{\vz}
+    \leq
+    1 + \frac{Mt}{d}\int p_t(\vz) \Delta \log p_t(\vz)\odif{\vz}.
+  \end{equation*}
+  Combining this with our previous estimate, we get
+  \begin{equation*}
+    h(\vmu_t(\vz_t))
+    -
+    h(\vz_t)
+    \leq \frac{Mt}{d}\int p_t(\vz) \Delta \log p_t(\vz)\odif{\vz}.
+  \end{equation*}
+  Finally, via an integration by parts, we conclude
+  \begin{align*}
+    h(\vmu_t(\vz_t))
+    -
+    h(\vz_t)
+    &\leq
+    -\frac{Mt}{d} \int \ip{\nabla p_t(\vz)}{ \nabla \log p_t(\vz) }\odif{\vz}.
+    \\
+    &=
+    -\frac{Mt}{d} \int p_t(\vz) \norm*{\nabla \log p_t(\vz)}_2^2\odif{\vz} < 0,
+  \end{align*}
+  as claimed, because $M \geq 0$.
+  The strictness of the inequality follows by the same argument used in the
+  proof of \Cref{thm:diffusion-and-entropy} above (see \Cref{eq:de-bruijn}).
+\end{proof}
+
+% \begin{remark}\label{rem:removing-subspace-hypothesis}
+%   We stated in the proof of \Cref{thm:conditioning_reduces_entropy} above that
+%   the extra hypothesis that $p$ is not supported on an affine subspace of
+%   $\R^d$ of strictly positive codimension, which we made for convenience in
+%   the proof, can be removed.
+%   To see that this is indeed true, suppose that $p$ has support contained in
+%   an affine subspace $A = \va + U$, where $U$ is a subspace of dimension
+%   strictly less than $d$ and $\va$ is a vector (any affine subspace can be
+%   represented in this way).
+%   Then the smoothed density satisfies
+%   \begin{equation*}
+%     p_t(\vx) = \int_{A} \varphi_t(\vx - \vx') p(\vx') \mathrm{d} \vx',
+%   \end{equation*}
+%
+%
+% \end{remark}
+
+
+
+\begin{lemma}\label{lem:entropy-reduction-regularity}
+  Suppose $p$ is a density on $\R^d$ which is strictly positive.  Assume
+  moreover that
+  \begin{equation*}
+    \sup_{\vz} \| \nabla p(\vz) \|_2 < +\infty, \quad
+    \sup_{\vz} | \Delta p(\vz) | < +\infty.\footnote{A density $p$ satisfying
+    these hypotheses can be obtained by adding an arbitrarily small amount of
+    Gaussian noise to any random variable, as the proof will demonstrate.}
+  \end{equation*}
+  Then if $p_t$ is the density of $p$ with Gaussian noise of zero mean and
+  covariance $t\vI$ added, one has
+  \begin{equation*}
+    \sup_{t\geq0,\, \vz} \left| \Delta \log p_t(\vz) \right| < +\infty.
+  \end{equation*}
+\end{lemma}
+
+\begin{proof}
+  Throughout the proof, we write ``bounded'' to specifically mean ``bounded in
+  $L^\infty$'' (in line with the hypothesis and desired conclusion of the
+  lemma).
+  We will prove the result by considering the expression for the Laplacian of
+  $\log p_t$ for $t>0$, calculated with the chain rule and the Leibniz rule as
+  \begin{equation}\label{eq:log-laplacian-identity}
+    \Delta \log p_t = (1/p_t) \Delta p_t - \| (1/p_t) \nabla p_t \|_2^2.
+  \end{equation}
+  whenever all constituent functions are defined. We will show that these
+  constituent functions are defined for all $t>0$ by Gaussian smoothing, which
+  together with our hypotheses about $p$ (covering the case of $t=0$) will imply
+  the claim.
+  The smoothed density satisfies
+  \begin{equation*}
+    p_t(\vz) = \int_{\R^d} \varphi_{t}(\vz') p(\vz - \vz') \mathrm{d} \vz',
+  \end{equation*}
+  and {differentiating under the integral} and linearity give
+  % \begin{align*}
+  %   \nabla p_t(\vz) &= -\frac{1}{t} \int_{\R^d} (\vz - \vz') \varphi_{t}(\vz - \vz') p(\vz') \mathrm{d} \vz',
+  %   \\
+  %   \nabla^2 p_t(\vz)
+  %   &= \int_{\R^d} \left[
+  %     \frac{1}{t^2} (\vz-\vz')(\vz-\vz')\adj
+  %     - \frac{1}{t} \vI
+  %     \right]
+  %   \varphi_{t}(\vz - \vz') p(\vz') \mathrm{d} \vz',
+  % \end{align*}
+  % so
+  % \begin{equation*}
+  %   \Delta p_t(\vz)
+  %   =
+  %   \int_{\R^d} \left[
+  %     \frac{1}{t^2} \norm{\vz-\vz'}_2^2
+  %     - \frac{d}{t}
+  %     \right]
+  %   \varphi_{t}(\vz - \vz') p(\vz') \mathrm{d} \vz'.
+  % \end{equation*}
+  \begin{align*}
+    \nabla p_t(\vz) &= \int_{\R^d} \varphi_{t}(\vz') \nabla p(\vz-\vz') \mathrm{d} \vz',
+    \\
+    \Delta p_t(\vz)
+    &= \int_{\R^d} \varphi_{t}(\vz') \Delta p(\vz - \vz') \mathrm{d} \vz'.
+  \end{align*}
+  Using H\"{o}lder's inequality and our hypotheses on boundedness of $\nabla
+  p$ and $\Delta p$, it follows from these expressions that $\norm{\nabla
+  p_t}_2$ and $\Delta p_t$ are bounded
+  for all $t>0$.\footnote{Notice that, by Fubini's theorem, this same
+  integrability argument justifies the differentiation under the integral for
+  all $t$ in any compact subinterval of $[0, +\infty)$.}
+  Meanwhile, because $\int p(\vz)\odif \vz = 1$ and the Gaussian density is strictly positive
+  for all $\vz \in \R^d$, it follows that $p_t > 0$ for all $t>0$.
+  We conclude from \Cref{eq:log-laplacian-identity} and the preceding facts the
+  desired claim.
+
+
+\end{proof}
+
+
+
+\section{Exercises}
+
+\begin{exercise}\label{exercise:gaussian-heat}
+  Let $\varphi_t$ denote the density associated to a Gaussian random variable on
+  $\R^d$
+  with zero mean and isotropic covariance $t\vI$, so that $\varphi_t(\vz)
+  = (2\pi t)^{-d/2} \exp(-\norm{\vz}_2^2/2t)$.
+  Show that $\varphi_t$ satisfies the \textit{heat equation}: that is,
+  prove that $\varphi_t$ satisfies the PDE
+  \begin{equation*}
+    \partial_t \varphi_t = \frac{1}{2}\Delta \varphi_t
+  \end{equation*}
+  for every $t > 0$, where $\partial_t$ denotes differentiation in time and
+  $\Delta$ denotes the standard Euclidean Laplacian operator.
+
+  \textit{Hint: To get started, notice that the heat equation is linear, and
+  differentiate under the integral in the convolution defining $p_t$ to reduce the
+  calculation to verifying the heat equation for the Gaussian density. See the
+  proof of Lemma \ref{lem:entropy-reduction-regularity} for a further hint.}
+\end{exercise}
+
+\end{document}
