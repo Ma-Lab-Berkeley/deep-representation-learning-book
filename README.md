@@ -91,6 +91,8 @@ git push -u origin my_new_branch
 - For code: please examine current code files and see the coding patterns.
 - For LaTeX: please examine current LaTeX files and see the coding patterns.
 
+Note: While this repository is private (i.e., "beta version") you are technically allowed to push to `main` directly. **Please do not.**
+
 ## Citation Information
 
 Many thanks!
