@@ -6,8 +6,8 @@ If you just want to read the book, _you should not need this repository_. We hav
 
 Generally, you should be accessing the source code for one of the following purposes:
 - You want to build the book, or one of its chapters, from scratch. See [this section](#building-the-book-or-chapter).
-- You want to contribute some content, for example a translation, or some technical content within one or more chapters. See 
-- You want to use the source code that generated a figure in the book.
+- You want to use the source code that generated a figure in the book. See [this section](#using-the-code).
+- You want to contribute some content, for example a translation, or some technical content within one or more chapters. See [this section](#making-a-contribution).
 
 ## Building the Book or a Chapter
 
@@ -43,7 +43,7 @@ and read `chapters/chapter2/classic-models.pdf`.
 ### Prerequisites for Making a Contribution
 
 - Minimally, a text editor and GitHub account. 
-- But you probably also want to be able to [build the book and/or chapter](#) or [edit and run the code]().
+- But you probably also want to be able to [build the book and/or chapter](#building-the-book-or-a-chapter) and/or [edit and run the code](#using-the-code).
 
 ### How to Make a Contribution
 
