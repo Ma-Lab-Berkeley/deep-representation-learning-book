@@ -1246,26 +1246,18 @@ in \ref{sub:pca} for the PCA problem and the MSP algorithm
 %\sdb{Yi's suggestion is to write a quick summary section here, which could emphasize the power iteration as a tool for pursuing low-dim structures.}
 %\yima{Maybe not an independent subsection. A good summary at the end of the last section could be good too. In the above, each algorithm, PCA, ICA, or Complete DL, should be presented with a pseudocode.}
 
-\section{A Mixture of Overcomplete Low-Dimensional  Subspaces}
+\section{A Mixture of Overcomplete Low-Dimensional Subspaces}
 \label{sec:dictionary_learning}
-As we have seen, complete dictionary learning enjoys an elegant computational theory of compressive autoencoding in which we maintain a symmetric autoencoding structure $\cE(\vx) = \vU^\top \vx$, $\cD(\vz) = \vU \vz$, with a scalable power-method-like algorithm (the MSP algorithm) for learning an orthogonal dictionary/codebook $\vU$ from data. Nevertheless, for learning representations of general high-dimensional data distributions, one must expand the size of the codebook beyond the orthogonality requirement---meaning that we must have $\vA \in \R^{D \times m}$, with $m \gg D$, corresponding to the case of an \textit{overcomplete} dictionary/codebook,\footnote{We change the notation here from $\vU$ to $\vA$ in order to emphasize the non-orthogonality and non-square-shape of the overcomplete dictionary $\vA$.} and the signal model
+As we have seen, complete dictionary learning enjoys an elegant computational theory in which we maintain a symmetric autoencoding structure $\cE(\vx) = \vU^\top \vx$, $\cD(\vz) = \vU \vz$, with a scalable power-method-like algorithm (the MSP algorithm) for learning an orthogonal dictionary/codebook $\vU$ from data. Nevertheless, for learning representations of general high-dimensional data distributions, one must expand the size of the codebook beyond the orthogonality requirement---meaning that we must have $\vA \in \R^{D \times m}$, with $m \gg D$, corresponding to the case of an \textit{overcomplete} dictionary/codebook,\footnote{We change the notation here from $\vU$ to $\vA$ in order to emphasize the non-orthogonality and non-square-shape of the overcomplete dictionary $\vA$.} and the signal model
 \begin{equation}\label{eq:model-DL-overcomplete}
     \vx =  \vA \vz + \veps,
     \quad
     \norm{\vz}_0 = d \ll m.
 \end{equation}
-
 There are both geometric and physical/modeling motivations for passing to the overcomplete case. 
 Geometrically, recall that in our original reduction from the mixture of subspace data model to the sparse dictionary model, a mixture of $K$ subspaces in $\R^D$, each of dimension $d$, led to a dictionary of shape $\vA \in \R^{D \times Kd}$.
 In other words, overcomplete dictionaries correspond to \textit{richer} mixtures of subspaces, with more distinct modes of variability for modeling the high-dimensional data distribution.
 On the modeling side, we may run a computational experiment on real-world data that reveals the additional modeling power conferred by an overcomplete representation.
-\begin{example}
-Given sampled images of hand-written digits, Figure \ref{fig:ReconMNIST}(a) shows the result of fitting an orthogonal dictionary to the dataset. 
-%\sdb{describe the codes... describe the representations}
-In contrast, Figure \ref{fig:ReconMNIST}(b) shows the result of running an
-    optimization algorithm for learning overcomplete dictionaries on these samples.\footnote{By the end of this section, we will have developed the conceptual and computational foundations to implement this algorithm ourselves.} 
-Notice that the representations become far sparser and the codebooks far more interpretable---they consist of fundamental primitives for the strokes composing the digits, i.e.\ oriented edges.
-\end{example}
 
 \begin{figure}[t]
 \centering
@@ -1304,25 +1296,45 @@ Notice that the representations become far sparser and the codebooks far more in
     \label{fig:ReconMNIST}
 \end{figure}
 
+\begin{example}
+Given sampled images of hand-written digits, Figure \ref{fig:ReconMNIST}(a) shows the result of fitting an orthogonal dictionary to the dataset. 
+%\sdb{describe the codes... describe the representations}
+In contrast, Figure \ref{fig:ReconMNIST}(b) shows the result of running an
+    optimization algorithm for learning overcomplete dictionaries on these samples.\footnote{By the end of this section, we will have developed the conceptual and computational foundations to implement this algorithm ourselves.} 
+Notice that the representations become far sparser and the codebooks far more interpretable---they consist of fundamental primitives for the strokes composing the digits, i.e.\ oriented edges.
+\end{example}
+
+
 In fact, overcomplete dictionary learning was originally proposed as a biologically plausible algorithm for image representation based on empirical evidence of how early stages of the visual cortex represent visual stimuli \cite{Olshausen1996-ap,Olshausen1997-yv}. 
 
-In the remainder of this section, we will develop the conceptual and computational foundations of overcomplete dictionary learning.
-In analogy to the orthogonal dictionary learning problem \eqref{eqn:autoencoding-DL}, we state the compressive autoencoding problem for sparsely-used overcomplete dictionaries. Namely, supposing that the model \eqref{eq:model-DL-overcomplete} is satisfied with data \(\vx\), overcomplete dictionary \(\vA\), and sparsity level \(d\), and given samples \(\vX = [\vx_1, \dots, \vx_N]\) of \(\vx\), we want to learn an encoder \(\cE : \R^D \to \R^m\) mapping each \(\vx\) to its \textit{sparse code} \(\vz\), and a decoder \(\cD(\vz) = \vA \vz\) reconstructing each \(\vx\) from its sparse code, so that \(\cE(\vx)\) and \(\cD(\vz) = \vA\vz\) forms a lossy autoencoding pair for \(\vx\). Pictorially:
+In the remainder of this section, we will overview the conceptual and computational foundations of overcomplete dictionary learning.
+% In analogy to the orthogonal dictionary learning problem \eqref{eqn:autoencoding-DL}, we state the compressive autoencoding problem for sparsely-used overcomplete dictionaries. 
+Supposing that the model \eqref{eq:model-DL-overcomplete} is satisfied with
+sparse codes \(\vz\), overcomplete dictionary \(\vA\), and sparsity level \(d\),
+and given samples \(\vX = [\vx_1, \dots, \vx_N]\) of \(\vx\), we want to learn
+an encoder \(\cE : \R^D \to \R^m\) mapping each \(\vx\) to its {sparse code}
+\(\vz\), and a decoder \(\cD(\vz) = \vA \vz\) reconstructing each \(\vx\) from
+its sparse code. %
+% so that \(\cE(\vx)\) and \(\cD(\vz) = \vA\vz\) forms a lossy
+% autoencoding pair for \(\vx\). 
+In diagram form:
 \begin{equation}
 \x \xrightarrow{\hspace{4mm} \mathcal{E} \hspace{4mm}}  \z \xrightarrow{\hspace{2mm} \mathcal{D} = \vA \hspace{2mm}}   \hat{\x}.  
 \label{eqn:autoencoding-DL-overcomplete}
 \end{equation}    
+
 We will start from the construction of the encoder $\cE$.
 We will work incrementally: first, \textit{given the true dictionary $\vA$}, we will show how the problem of \textit{sparse coding} gives an elegant, scalable, and provably-correct algorithm for recovering the sparse code $\vz$ of $\vx$.
 Although this problem is NP-hard in the worst case, it can be solved efficiently and scalably for dictionaries $\vA$ which are \textit{incoherent}, i.e.\ having columns that are not too correlated.
 The encoder architecture encompassed by this solution will no longer be symmetric: we will see it has the form of a primitive deep network, which depends on the dictionary $\vA$.
+
 Then we will proceed to the task of learning the decoder $\cD$, or equivalently the overcomplete dictionary $\vA$.
 We will derive an algorithm for overcomplete dictionary learning that allows us 
 to simultaneously learn the codebook $\vA$ and the sparse codes $\vz$, using ideas from sparse coding.
 Finally, we will discuss a more modern perspective on learnable sparse coding that leads us to a fully asymmetric encoder-decoder structure, as an alternative to \eqref{eqn:autoencoding-DL-overcomplete}.
-Here, the decoder will correspond to an incremental solution to the sparse dictionary learning problem, and yield for the first time a pair of deep network-like encoder decoders for sparse dictionary learning.
-This structure will foreshadow many developments to come in the remainder of the monograph.
-
+Here, the decoder will correspond to an incremental solution to the sparse dictionary learning problem, and yield a pair of deep network-like encoder decoders for sparse dictionary learning.
+This structure will foreshadow many developments to come in the remainder of the
+monograph, as we progress from analytical models to modern neural networks.
 
 
 %Previously, we had modeled our data, in \(\R^{D}\) as coming from one subspace (Section \ref{sec:lowrank}) or a mixture of up to \(D\) subspaces (Section \ref{sec:ica}). However, this does not yet consider every case where the data has linear structure. Consider the following relevant case. Suppose we have a dataset \(\{\vx_{i}\}_{i = 1}^{N}\) in which the data share certain characteristics; for example, suppose they are all natural images of bedrooms. Then there are a set of common, repeating \textit{motifs} or \textit{patterns} present in nearly all the data: wall painting patterns, beds, dressers, etc. We want to extract those patterns and understand how they combine to form the data. While this seems like a toy example, it occurs all the time in image processing. Famously, the patterns extracted from natural image data using the methods which follow in this chapter are similar to those found in the brain when processing the same data. \DP{cite bruno's paper which applies DL to extract Gabor wavelets from brain data}
