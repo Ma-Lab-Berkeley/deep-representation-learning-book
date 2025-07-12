@@ -1347,59 +1347,83 @@ monograph, as we progress from analytical models to modern neural networks.
 
 In this section, we will consider the data model
 \eqref{eq:model-DL-overcomplete}, which accommodates sparse linear combinations
-of many motifs, or \textit{atoms}. Mechanically, this suggests that we consider
-the following data model. We say that data \(\{\vx_{i}\}_{i = 1}^{N} \subseteq
-\R^{D}\) have (approximate) \(s\)-sparse coding structure if and only if there
-exists a matrix \(\vA = \mat{\va_{1}, \dots, \va_{d}} \in \R^{D \times d}\),
-vectors \(\{\vz_{i}\}_{i = 1}^{N} \subseteq \R^{d}\) with \(\norm{\vz_{i}}_{0}
-\leq s\) for all \(i\), and small vectors \(\{\veps_{i}\}_{i = 1}^{N} \subseteq
-\R^{D}\) such that
+of many motifs, or \textit{atoms}. Given data \(\{\vx_{i}\}_{i = 1}^{N} \subseteq
+\R^{D}\) satisfying this model, i.e.\ expressible as
 \begin{equation}\label{eq:vectorized_sparse_dl_dgp}
-    \vx_{i} = \vA\vz_{i} + \veps_{i}, \qquad \forall i \in [N].
+    \vx_{i} = \vA\vz_{i} + \veps_{i}, \qquad \forall i \in [N]
 \end{equation}
-Note the mechanical difference between the sparse coding structure and the principal components structure: 1. the low-dimensional representations \(\vz_{i}\) are required to be \(s\) sparse, and 2. \(\vA\) is not required to be orthogonal. 
+for some dictionary $\vA \in \bR^{D \times m}$ with $m$ atoms, sparse codes
+$\vz_i$ such that $\norm{\vz_i}_0 \leq d$, and small errors $\veps_i$,
+the sparse coding problem is to recover the codes $\vz_i$ as accurately as
+possible from the data $\vx_i$, given the dictionary $\vA$.
+Efficient algorithms to solve this problem succeed when
+the dictionary \(\vA\) is \textit{incoherent} in the sense that the inner
+products \(\va_{i}^{\top}\va_{j}\) are uniformly small, hence the atoms are
+nearly orthogonal.\footnote{As it turns out, in a high-dimensional space, it is
+rather easy to pack a number of nearly orthogonal vectors that is much larger
+than the ambient dimension \cite{Wright-Ma-2022}. } 
 
-The \(s\)-sparsity condition comes from the desire for each data point to be representable by a linear combination of a small number \(s\) of atoms (i.e. columns of \(\vA\)). This essentially imposes that the intrinsic dimension of the data distribution is lower than \(s\).
-
-The relaxing of the orthogonality condition is because, as in our covering example above, \(d\) is much larger than \(D\) and it is impossible to build an orthogonal matrix of size \(D \times d\). Nevertheless, the dictionary \(\vA\), which is either given or learned, is often \textit{incoherent} in the sense that products \(\va_{i}^{\top}\va_{j}\) are often small, hence nearly orthogonal.\footnote{As it turns out, in a high-dimensional space, it is rather easy to pack a number of nearly orthogonal vectors that is much larger than the ambient dimension \cite{Wright-Ma-2022}. } 
+% Note the mechanical difference between the sparse coding structure and the principal components structure: 1. the low-dimensional representations \(\vz_{i}\) are required to be \(s\) sparse, and 2. \(\vA\) is not required to be orthogonal. 
+% The \(s\)-sparsity condition comes from the desire for each data point to be representable by a linear combination of a small number \(s\) of atoms (i.e. columns of \(\vA\)). This essentially imposes that the intrinsic dimension of the data distribution is lower than \(s\).
+% The relaxing of the orthogonality condition is because, as in our covering example above, \(d\) is much larger than \(D\) and it is impossible to build an orthogonal matrix of size \(D \times d\). 
 
 Note that we can collect the \(\vx_{i}\) into \(\vX = \mat{\vx_{1}, \dots, \vx_{N}} \in \R^{D \times N}\), collect the \(\vz_{i}\) into \(\vZ = \mat{\vz_{1}, \dots, \vz_{N}} \in \R^{d  \times N}\), and collect the \(\veps_{i}\) into \(\vE = \mat{\veps_{1}, \dots, \veps_{N}} \in \R^{D \times N}\), to rewrite \eqref{eq:vectorized_sparse_dl_dgp} as 
 \begin{equation}\label{eq:sparse_dl_dgp}
     \vX = \vA\vZ + \vE.
 \end{equation}
-The first problem we consider is: what if we know the \(\vA\) matrix, and want to represent our data \(\vX\) using the \(\vA\)? This is the purview of \textit{sparse coding}. Similar to orthogonal dictionary learning, we attempt to find the sparsest signals that are consistent with our observations, and this naturally leads to the following optimization problem:
+A natural approach to solving the sparse coding problem is to seek the sparsest
+signals that are consistent with our observations, and this naturally leads to
+the following optimization problem:
 \begin{equation}\label{eq:sparse_dl_lasso}
-    \min_{\vZ \in \R^{d \times N}}\bc{\norm{\vX - \vA\vZ}_{2}^{2} + \lambda \norm{\vZ}_{1}},
+    \min_{\vZ \in \R^{d \times N}}\bc{\norm{\vX - \vA\vZ}_{F}^{2} + \lambda \norm{\vZ}_{1}},
 \end{equation}
-where the \(\ell^1\) norm \(\norm{\vZ}_{1}\) is known to promote sparsity of the solution \cite{Wright-Ma-2022}. 
-This problem is known as the LASSO problem. However, unlike the PCA or the
-complete dictionary learning case, there is no clear power iteration-type
+where the \(\ell^1\) norm \(\norm{\vZ}_{1}\), taken elementwise, is known to promote sparsity of the solution \cite{Wright-Ma-2022}. 
+This optimization problem is known as the LASSO problem. 
+
+However, unlike PCA or the
+complete dictionary learning problem, there is no clear power iteration-type
 algorithm to recover \(\vZ^{\star}\). A natural alternative is to consider
 solving the above optimization problem with gradient descent type algorithms.
 Let \(f(\vZ) = \norm{\vX - \vA\vZ}_{2}^{2} + \lambda \norm{\vZ}_{1}\).
-Conceptually we could try to find \(\vZ^{\star}\) with the following iterations:
+Conceptually, we could try to find \(\vZ^{\star}\) with the following iterations:
 \begin{equation}
     \vZ_{t+1} \leftarrow \vZ_t + \eta \nabla f(\vZ_t).
 \end{equation}
-
-However, because the term associated with the \(\ell^1\) norm \(\norm{\vZ}_{1}\) is non-smooth, we cannot just run gradient descent. For this type of functions, we need to replace the gradient \(\nabla f(\vZ)\) with something that generalizes the notion of gradient, known as the subgradient \(\partial f(\vZ)\):
+However, because the term associated with the \(\ell^1\) norm \(\norm{\vZ}_{1}\)
+is non-smooth, we cannot just run gradient descent. For this type of function,
+we need to replace the gradient \(\nabla f(\vZ)\) with something that
+generalizes the notion of gradient, known as the subgradient \(\partial
+f(\vZ)\):
 \begin{equation}
     \vZ_{t+1} \leftarrow \vZ_t + \eta \partial f(\vZ_t).
 \end{equation}
-However, it is known that the convergence of subgradient descent is usually very slow. Hence, for this type of optimization problems, it is conventional to adopt a so-called {\em proximal gradient descent}-type algorithm. One may refer to \cite{Wright-Ma-2022} for a detailed introduction to this method. 
+However, it is known that the convergence of subgradient descent is usually very
+slow. Hence, for this type of optimization problems, it is conventional to adopt
+a so-called {\em proximal gradient descent}-type algorithm. We give a technical
+overview of this method in \Cref{subsec:pgd}.
 
-Applying proximal gradient to the LASSO objective function \eqref{eq:sparse_dl_lasso}, it leads to the classic \textit{iterative shrinkage-thresholding algorithm} (ISTA), which implements the iteration
+Applying proximal gradient to the LASSO objective function
+\eqref{eq:sparse_dl_lasso} leads to the classic \textit{iterative
+shrinkage-thresholding algorithm} (ISTA), which implements the iteration
 \begin{eqnarray}
     \vZ_{1} &\sim& \dNorm(\vzero, \vI), \\
     \vZ_{t + 1} &=& S_{\eta\lambda}\rp{\vZ_{t} - 2\eta \vA^{\top}(\vA\vZ_{t} - \vX)}, \quad \forall t \geq 1,\label{eq:ista_update}
 \end{eqnarray}
 with step size \(\eta \geq 0\), and the soft-thresholding operator \(S_{\alpha}\) defined on scalars by
-\begin{equation}
-    S_{\alpha}(x) \doteq \begin{cases}x - \alpha, & x \geq \alpha, \\ 0, & -\alpha < x < \alpha, \\ x + \alpha, & x \leq -\alpha\end{cases},
-\end{equation}
-and applied element-wise to the input matrix.  As a proximal gradient descent algorithm applied to a convex problem, convergence to a global optimum is assured, and convergence rate can be derived straightforwardly \cite{Wright-Ma-2022}. 
+\begin{align}
+    S_{\alpha}(x) &
+    \doteq \begin{cases}x - \alpha, & x \geq \alpha, \\ 0,
+    & -\alpha < x < \alpha, \\ x + \alpha, & x \leq -\alpha\end{cases}
+    \\
+    &=
+    \sign(x) \max \set{\abs{x} - \alpha, 0},
+\end{align}
+and applied element-wise to the input matrix.  As a proximal gradient descent
+algorithm applied to a convex problem, convergence to a global optimum is
+assured, and a precise convergence rate can be derived straightforwardly
+\cite{Wright-Ma-2022}. 
 
-We now take a moment to remark on the functional form of the update operator in \eqref{eq:ista_update}, it takes the form 
+We now take a moment to remark on the functional form of the update operator in \eqref{eq:ista_update}. It takes the form 
 \begin{equation}
     \vZ_{t + 1} = \texttt{nonlinearity}(\vZ_{t} + \texttt{linear}^{\top}(\texttt{linear}(\vZ_{t}) + \texttt{bias})).
 \end{equation}
@@ -1407,7 +1431,12 @@ This functional form is very similar to that of a residual network layer, namely
 \begin{equation}
     \vZ_{t + 1} = \vZ_{t} + \texttt{linear}_{1}^{\top}(\texttt{nonlinearity}(\texttt{linear}_{2}(\vZ_{t}) + \texttt{bias}_{1}) + \texttt{bias}_{2},
 \end{equation}
-only decoupling the linear maps (i.e., matrix multiplications), adding a bias, and moving the nonlinearity. The ISTA, then, can be viewed as a forward pass of a primitive (recurrent one-layer) neural network. We argue in Chapter \ref{ch:representation} that such operations are essential to deep representation learning.
+only decoupling the linear maps (i.e., matrix multiplications), adding a bias, and moving the nonlinearity. 
+The nonlinearity in \eqref{eq:ista_update} is notably similar to the
+commonly-used ReLU activation function $x \mapsto \max\set{x, 0}$ in deep
+learning---in particular, the soft-thresholding operator is like a ``signed''
+ReLU activation, which is also shifted by a bias.
+The ISTA, then, can be viewed as a forward pass of a primitive (recurrent one-layer) neural network. We argue in Chapter \ref{ch:representation} that such operations are essential to deep representation learning.
 
 % Mixture of low-dim linear independent structures.... Lasso and L1 minimization. Introduce basic algorithm for sparse coding such as ISTA.
 
@@ -1499,7 +1528,10 @@ Mention early history of using autoassociative or autoencoding neural networks t
 
 Mention the work from John Wright and Qing Qu etc. on the over-complete dictionary learning.
 
-Mention early generalizations to multiple subspaces (e.g. GPCA) and their limitations, and connections to later chapters on Rate Reduction.
+Mention early generalizations to multiple subspaces (e.g. GPCA) and their
+limitations, and connections to later chapters on Rate Reduction. \sdb{Here put
+a reference to the way we ``relaxed'' the mixture of subspaces model to the
+dictionary model.}
 
 
 \section{Exercises and Extensions}
