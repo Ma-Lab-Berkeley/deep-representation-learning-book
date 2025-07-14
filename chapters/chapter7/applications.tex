@@ -50,8 +50,8 @@ Let us define the set of possible data as \(\cD\) (eventually this will be the s
 \begin{itemize}
     \item An \textit{encoder} architecture, parameterized by \(\theta\), which is composed of several components:
     \begin{itemize}
-        \item An \textit{embedding} \(f_{\theta}^{\emb} \colon \cD \to (\R^{d})^{*}\), which converts the input data \(\cD\) into a series of \textit{tokens} which are embedded in \(D\)-dimensional space.
-        \item An \textit{encoder backbone} \(f_{\theta}^{\backbone} \colon (\R^{d})^{*} \to (\R^{d})^{*}\), which processes the series of tokens using a sequence-to-sequence operation. This backbone is implemented by the network architectures discussed in the previous chapters, but we will give a more formal description as we go along.
+        \item An \textit{embedding} \(f_{\theta}^{\emb} \colon \cD \to (\R^{d})^{*}\), which converts the input data \(\cD\) into a series of \textit{tokens} which are mapped into, or \textit{embedded} in, \(D\)-dimensional space. \textit{In the rest of the chapter, we will often identify tokens and embeddings with each other.}
+        \item An \textit{encoder backbone} \(f_{\theta}^{\backbone} \colon (\R^{d})^{*} \to (\R^{d})^{*}\), which processes the series of embeddings using a sequence-to-sequence operation. This backbone is implemented by the network architectures discussed in the previous chapters, but we will give a more formal description as we go along.
         \item A \textit{aggregate feature extractor} \(f_{\theta}^{\ext} \colon (\R^{d})^{*} \to \R^{d}\), which extracts an aggregate representation of the whole sequence. This is used to define a single feature for the entire data sample.
         \item A \textit{task-specific head} \(h_{\theta} \colon \R^{d} \to \R^{m}\), which extracts an \(m\)-dimensional output for prediction.
     \end{itemize}
@@ -59,7 +59,7 @@ Let us define the set of possible data as \(\cD\) (eventually this will be the s
     \item An \textit{autoencoder} architecture, which is composed of several components:
     \begin{itemize}
         \item An \textit{embedding} \(f_{\theta}^{\emb} \colon \cD \to (\R^{d})^{*}\), which converts the input data \(\cD\) into a series of \textit{tokens} which are embedded in \(D\)-dimensional space.
-        \item An \textit{encoder backbone} \(f_{\theta}^{\backbone} \colon (\R^{d})^{*} \to (\R^{d})^{*}\), which processes the series of tokens using a sequence-to-sequence operation.
+        \item An \textit{encoder backbone} \(f_{\theta}^{\backbone} \colon (\R^{d})^{*} \to (\R^{d})^{*}\), which processes the series of embeddings using a sequence-to-sequence operation.
         \item A \textit{decoder backbone} \(g_{\eta}^{\backbone} \colon (\R^{d})^{*} \to (\R^{d})^{*}\), which conceptually undoes the operation of the encoder backbone.
         \item An \textit{unembedding} \(g_{\eta}^{\unemb} \colon (\R^{d})^{*} \to \cD\), which acts as an inverse of the embedding.
     \end{itemize}
@@ -346,7 +346,7 @@ Using the surrogate (``empirical'') loss transforms our intractable optimization
 
 \paragraph{Optimizing SimDINO.} The simplified DINO population-level objective is very similar in spirit but much simpler in execution, i.e.,
 \begin{equation}\label{eq:simdino_loss_teacherstudent}
-    \cL_{\simdino-\student\teacher}(\theta_{\student}, \theta_{\teacher}) :=  \Ex\rs{d_{\ell^{2}}(\vz_{\theta_{\teacher}}(\vX_{g}), \vz_{\theta_{\student}}(\vX_{c}))} + \frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{\theta_{\student}}(\vX_{g})))}.
+    \cL_{\simdino-\student\teacher}(\theta_{\student}, \theta_{\teacher}) :=  \Ex\rs{d_{\ell^{2}}(\vz_{\theta_{\teacher}}(\vX_{g}), \vz_{\theta_{\student}}(\vX_{c}))} - \frac{\gamma}{2}\logdet\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{\theta_{\student}}(\vX_{g})))}.
 \end{equation}
 Thus, as elaborated in \Cref{fig:simdino_pipeline}, the SimDINO pipeline is strictly simpler than the DINO pipeline. We can use a simpler version of the DINO training pipeline to optimize SimDINO. At each timestep \(k\), we:
 \begin{itemize}
@@ -357,7 +357,7 @@ Thus, as elaborated in \Cref{fig:simdino_pipeline}, the SimDINO pipeline is stri
     \begin{align}\label{eq:simdino_loss_teacherstudent_empirical}
         &\hat{\cL}_{\simdino{}-\student\teacher}^{(k)}(\theta_{\student}, \theta_{\teacher}) :=
         \frac{1}{BM_{\glo}(M_{\glo} + M_{\loc} - 1)}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\Bigg[\sum_{j = 1}^{M_{\loc}}d_{\ell^{2}}(\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}), \vz_{\theta_{\student}}(\vX_{b, \ell}^{(k), j})) \\ 
-        &\qquad \qquad + \sum_{j = 1}^{M_{\glo}}d_{\ell^{2}}(\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}), \vz_{\theta_{\student}}(\vX_{b, g}^{(k), j}))\Bigg] + \frac{\gamma}{M_{\glo}}\sum_{i = 1}^{M_{\glo}}R_{\eps}([\vz_{\theta_{\student}}(\vX_{1, g}^{(k), i}), \dots, \vz_{\theta_{\student}}(\vX_{B, g}^{(k), i})])\nonumber
+        &\qquad \qquad + \sum_{j = 1}^{M_{\glo}}d_{\ell^{2}}(\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}), \vz_{\theta_{\student}}(\vX_{b, g}^{(k), j}))\Bigg] - \frac{\gamma}{M_{\glo}}\sum_{i = 1}^{M_{\glo}}R_{\eps}([\vz_{\theta_{\student}}(\vX_{1, g}^{(k), i}), \dots, \vz_{\theta_{\student}}(\vX_{B, g}^{(k), i})])\nonumber
     \end{align}
     where \(R_{\eps}\) is the Gaussian coding rate estimated on finite samples, described in \Cref{ch:representation}. The gradient of \(\hat{\cL}_{\simdino-\student\teacher}^{(k)}\) with respect to \(\theta_{\student}\) should (again) be computed, under the assumption that \(\theta_{\teacher}\) is constant.
     \item Update the student parameters \(\theta_{\student}\) via an iterative gradient-based optimization algorithm, and update \(\theta_{\teacher}\) via an exponential moving average with decay parameter \(\nu^{(k)}\), i.e., 
@@ -369,14 +369,6 @@ Thus, as elaborated in \Cref{fig:simdino_pipeline}, the SimDINO pipeline is stri
     \end{align}
 \end{itemize}
 Again, we re-iterate that the gradient is only taken w.r.t.~\(\theta_{\student}\), treating \(\theta_{\teacher}\) as a constant. Here, note that while the choice of \(\nu\) is still a design decision, the hyperparameters \(\rho\) and \(\tau\) is removed.
-
-\begin{exercise}
-    This exercise considers the implementation of stochastic optimization algorithms to minimize losses involving expectations.
-    \begin{enumerate}[(a)]
-        \item Propose an alternative to the term involving \(R_{\eps}\) in \eqref{eq:simdino_loss_teacherstudent_empirical} for approximating the covariance regularization term in \eqref{eq:simdino_loss_teacherstudent}. Evaluate the time complexity required to compute your proposed term and its gradient. Include analysis for computing it on a single compute node vs.~multiple nodes.
-        \item  Evaluate the time complexity required to compute the existing term in \eqref{eq:simdino_loss_teacherstudent_empirical} and its gradient.
-    \end{enumerate}
-\end{exercise}
 
 
 \subsection{Evaluation Methodology}\label{sub:contrastive_learning_evals}
@@ -392,7 +384,7 @@ so that the final shape is \((C, S_{\cc}, S_{\cc})\). Notice that the view \(v_{
 
 The first, and most architecture-agnostic, way to evaluate an encoder model \(\vX \mapsto \vz_{\theta}(\vX)\) is to employ \textit{linear probing}. Linear probing is, in a sentence, running logistic regression on the aggregate features computed by the encoder. This tells us how much semantic information exists in the representations, as well as how easily extractable this information is. (That is: to what extent do the features of images with different semantics live on different subspaces of the feature space?)
 
-More formally, let us suppose that we want to evaluate the quality and faithfulness of the features of the encoder on image-label data \((\vX, \vy)\), where there are \(Q\) classes and \(\vy \in \{0, 1\}^{N_{\cls}}\) is a ``one-hot encoding'' (namely, zeros in all positions except a \(1\) in the \(i\th\) position if \(\vX\) is in the \(i\th\) class). One way to do this is to solve the logistic regression problem 
+More formally, let us suppose that we want to evaluate the quality and faithfulness of the features of the encoder on image-label data \((\vX, \vy)\), where there are \(N_{\cls}\) classes and \(\vy \in \{0, 1\}^{N_{\cls}}\) is a ``one-hot encoding'' (namely, zeros in all positions except a \(1\) in the \(i\th\) position if \(\vX\) is in the \(i\th\) class). One way to do this is to solve the logistic regression problem 
 \begin{equation}\label{eq:linear_probing}
     \min_{\vW \in \R^{N_{\cls} \times d}}\Ex[\CE(\vy, \vW \vz_{\theta}(\vX_{\cc}))].
 \end{equation}
@@ -401,10 +393,6 @@ More practically, if we have labeled data \(\{(\vX_{b}, \vy_{b})\}_{b = 1}^{B}\)
     \min_{\vW \in \R^{N_{\cls} \times d}}\frac{1}{B}\sum_{b = 1}^{B}\CE(\vy_{b}, \vW \vz_{\theta}(\vX_{b, \cc})).
 \end{equation}
 This problem is a convex optimization problem in \(\vW\), and thus can be solved efficiently via (stochastic) gradient descent or a litany of other algorithms. This linear probe, together with the encoder, may be used as a classifier, and we can evaluate the classification accuracy. The usual practice is to train the model first on a large dataset (such as ImageNet-1K), then train the linear probe on a dataset (such as the training dataset of CIFAR-10), and evaluate it on a third (``holdout'') dataset which is drawn from the same distribution as the second one (such as the evaluation dataset of CIFAR-10).
-
-\begin{exercise}
-    Prove that \eqref{eq:linear_probing} and \eqref{eq:linear_probing_empirical} are convex optimization problems.
-\end{exercise}
 
 \paragraph{\(k\)-nearest neighbors.}  We can also evaluate the performance of the features on classification tasks \textit{without needing to explicitly train a classifier} by using the \(k\)-nearest neighbor algorithm to get an average predicted label. Namely, given a dataset \(\{\vz_{b}\}_{b = 1}^{B} \subseteq \R^{d}\), define the \(k\)-nearest neighbors of another point \(\vz \in \R^{d}\) as \(\operatorname{NN}_{k}(\vz, \{\vz_{b}\}_{b = 1}^{B})\). Using this notation, we can compute the predicted label \(\hat{\vy}_{\theta}(\vX \mid \{(\vX_{b}, \vy_{b})\}_{b = 1}^{B})\) as 
 \begin{equation}
@@ -497,14 +485,6 @@ For linear probing, the linear probe is usually trained using the AdamW optimize
 
 \paragraph{Evaluation results.} In terms of downsream classification performance, we obtain the performance in \Cref{tab:dino_imagenet_linear_probing}. We observe that the performance of SimDINO is much higher than in DINO under fair comparison. Also, it is much more stable: the prescribed settings of DINO cannot train a ViT-L(arge) model. On the other hand, \Cref{fig:dino_attention_maps_saliency} shows visualizations of the average saliency maps in DINO and our simplified DINO, observing that the saliency maps look quite similar across models, indicating that the models learn features which are at least as good at capturing fine-grained details. The segmentation and object detection performances in \Cref{tab:dino_segmentation} confirm this claim quantitatively, where SimDINO features show substantive improvement over those of DINO.
 
-
-\begin{exercise}
-    Read the DINO paper \cite{caron2021emerging}.
-\end{exercise}
-
-\begin{exercise}
-    DINO v2 \cite{oquab2023dinov2} uses everything from DINO v1 but also, during the data augmentation phase, randomly masks out patches within each view. This kind of augmentation should enforce that the features of images with similar local information are similar. Formulate an optimization problem which promotes this in the encoder, and implement it.
-\end{exercise}
 
 
 \section{Image Classification}\label{sec:image_classification}
@@ -698,11 +678,11 @@ Note how similar this is to a classification loss (say for images); one uses the
 
 Optimizing this loss is usually called ``pre-training'' in the language model community (contrast with ``post-training'' and, more recently, ``mid-training'', which are methodologies to modify a next-token-predictor for useful tasks).
 
-\textit{Side note:} Why does the first term of \eqref{eq:clm_loss} predict \(\vone(\vx_{2})\), and there is no term which measures the loss to predict the first token? It's because if we wanted to predict the first token, we would have the \textit{empty sequence} as context, and therefore make this first token prediction using a qualitatively different mechanism than that which applies to the other tokens. So actually this model is not trained to predict the \textit{very first} token of any document. The reason this is OK is due to an implementation detail of the tokenizer: often, after building the tokenizer, we insert a \textit{special} token into its vocabulary, called the \textit{beginning-of-string (or document)} token and labeled \texttt{<|bos|>}.\footnote{There are usually several special tokens for different purposes. Existing text containing the special tokens are duly escaped.} Then, while processing each document, we add the \texttt{<|bos|>} token at the beginning of the document's token sequence, increasing the length of the tokenized sequence by \(1\). Thus the above causal language modeling objective has a term which involves trying to predict the first token of the document given only the \texttt{<|bos|>} token as context, and so it is a conceptually correct loss.
+\textit{Side note:} Why does the first term of \eqref{eq:clm_loss} predict \(\vone(\vx_{2})\), and there is no term which measures the loss to predict the first token? It's because if we wanted to predict the first token, we would have the \textit{empty sequence} as context, and therefore make this first token prediction using a qualitatively different mechanism than that which applies to the other tokens. So actually this model is not trained to predict the \textit{very first} token of any document. The reason this is OK is due to an implementation detail of the tokenizer: often, after building the tokenizer, we insert a \textit{special} token into its vocabulary, called the \textit{beginning-of-string (or document)} token and labeled \texttt{<|bos|>}.\footnote{There are usually several special tokens for different purposes. Existing text containing the special tokens are specially processed.} Then, while processing each document, we add the \texttt{<|bos|>} token at the beginning of the document's token sequence, increasing the length of the tokenized sequence by \(1\). Thus the above causal language modeling objective has a term which involves trying to predict the first token of the document given only the \texttt{<|bos|>} token as context, and so it is a conceptually correct loss.
 
 \subsection{Architecture: Causal CRATE}
 
-For the architecture, we use a standard GPT-2 style transformer, substituting CRATE layers in for the transformer layers.\footnote{Amusingly, in direct contravention of the conventions in this book and those of many other communities, the NLP community calls such GPT-2 style transformers (encompassing nearly all current LLMs) as ``decoder-only'' transformers. ``Encoder-only'' transformers have a different architecture, and ``encoder-decoder'' transformers concatenate an ``encoder-only'' transformer with a ``decoder-only'' transformer. This despite the fact that ``decoder-only'' transformers \textit{also} compute an encoding of the data!} For completeness, we specify the architecture here.
+For the architecture, we use a standard GPT-2 style transformer, substituting CRATE layers in for the transformer layers.\footnote{In direct contravention of the conventions in this book and those of many other communities, the NLP community calls such GPT-2 style transformers (encompassing nearly all current LLMs) as ``decoder-only'' transformers. ``Encoder-only'' transformers have a different architecture, and ``encoder-decoder'' transformers concatenate an ``encoder-only'' transformer with a ``decoder-only'' transformer. This despite the fact that ``decoder-only'' transformers \textit{also} compute an encoding of the data!} For completeness, we specify the architecture here.
 
 \paragraph{Embedding.} We first embed the token sequence \(\vX \in [V]^{N}\) to Euclidean space. This is often done by associating each index in \([V]\) with a vector in \(\R^{d}\) using a \textit{massive}\footnote{By ``massive'' we mean that such a structure is often a large fraction of the language model's total size.} array \(\vE \in \R^{V \times d}\), and directly forming the sequence \([\vE_{\vx_{1}}, \dots, \vE_{\vx_{N}}] \in \R^{d \times N}\). The full embedding map \(f_{\theta}^{\emb}\) also applies a positional encoding \(\vE^{\pos} \in \R^{d  \times N_{\max}}\) where \(N_{\max}\) is the maximum number of tokens which are possible to process,\footnote{Modern positional encoding methods have since taken care of this issue and allowed for (in theory) infinite extrapolation, but such methods are more complex to develop, and for simplicity we only introduce the absolute additive positional encoding here.} which yields the embedding map 
 \begin{equation}
@@ -1230,1096 +1210,54 @@ For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100
     \label{fig:crate_mae_semantic_heads}
 \end{figure}
 
-\section{Masked Completion for Text Data}\label{sec:text_completion}
+% \section{Masked Completion for Text Data}\label{sec:text_completion}
 
-\section{Closed-Loop Transcription for Images}\label{sec:ctrl}
+% \section{Closed-Loop Transcription for Images}\label{sec:ctrl}
 
 
-\section{Tips for Training Large-Scale Models}\label{sec:training_tips}
+% \section{Tips for Training Large-Scale Models}\label{sec:training_tips}
 
+\section{Summary and Notes}
 
-%%% START JOURNAL DUMP
-% \section{Experimental Evaluations }\label{sec:exp}
+All work in this chapter is downstream of the Transformer architecture, which was introduced by \citet{vaswani2017attention}. The Transformer architecture is formally described in \Cref{sec:contrastive_learning}. A main empirical innovation in recent years, spurred by the prevalence and performance of the transformer architecture, is to formulate a given learning problem as a sequence-to-sequence problem and apply the transformer architecture. This has enabled the transformer architecture to be essentially ubiquitous in (almost) all deep learning applications. As such, direct improvements to the transformer can propagate to become solutions to many problems and have considerable impact; similarly, we can apply our white-box understanding of transformer-like architectures to many modern problems. The material covered in this Chapter is merely a subset of the work which has already been done; other work includes masked completion for text data (i.e., BERT) \citep{devlin2019bert,yu2024white}, (mechanistic) interpretability of language and vision models \citep{bai2024improving}, and error correcting coding \citep{zheng2025white}. There is much more to do.
 
-% In this section, we conduct experiments to study the empirical performance of our proposed white-box transformer CRATE on real-world datasets and tasks. As the analysis in \Cref{sec:encoding} and \Cref{sec:autoencoding} suggests, the compression/denoising and sparsification steps can each be achieved through various alternative design choices or optimization strategies. The current CRATE adopts arguably the most basic choices. So our goal with the experiments is \textit{not} to compete, using such a rudimentary design, with other empirically-designed transformer architectures which are heavily engineered on these tasks. Rather, the goal is to convince the reader that \textit{our transformer-like architecture CRATE obtains promising performance on large-scale datasets, while being fully white-box---both mathematically and empirically interpretable---and theoretically principled.}
+There is also much more theory specifically about the practice of scaling neural networks, which is enormously practically viable, and we at least remark on it here. This line of work was popularized by the ``Tensor Programs'' line of work \citep{yang2022tensor}. The basic prescription is that we want the initial gradient updates in a transformer to be constant size, and by working through the backpropagation equations (\Cref{app:optimization}) carefully, we can determine the scale of the initialization and learning rates (chosen layer-wise) that are required to achieve this. In practice, such prescriptions greatly increase the stability and convergence of training at large scales; they also prescribe a way to find the ``optimal''\footnote{The word ``optimal'' is used in quotes because the work on this merely uses some desiderata about the weight size, feature size, and gradient size at initialization to determine ``optimality'', as opposed to, say, the test loss at convergence.} hyperparameters for large-scale training using only small-scale training. Follow-ups to this work attempt to accommodate the feature geometry \citep{bernstein2024oldoptimizernewnorm}, which could be informed by the work in this book about representation learning. Other follow-ups incorporate this weight-wise information into the optimizer itself to obtain these scaling benefits automatically, obtaining optimizers such as Muon \citep{jordan6muon}, which have recently been used for training trillion-parameter models very stably \citep{moonshot2025kimi}. Overall, the two approaches to deep learning theory are orthogonal or complementary.
 
-% We aim to achieve this goal through the following three demonstrations: 
-% \begin{itemize}
-%     \item First, we verify convincingly that the white-box transformer architecture, CRATE is practically effective and can achieve strong performance on many large-scale real-world datasets and tasks. These include supervised and self-supervised learning tasks on both vision and natural language data: ViT, MAE, DINO, BERT, and GPT. 
-%     \item Second, unlike most empirically designed black-box networks that can usually only be evaluated through their end-to-end performance, we show that the white-box design of our network allows us to \textit{look inside} the deep architecture and verify if individual layers and operators of the learned network indeed perform their design objective---say performing incremental optimization for the objective \Cref{eq:objective-sparse-rate-reduction-l1}. 
-%     \item Third, we study the white-box transformers through post hoc interpretability. Extensive qualitative and quantitative experimental results demonstrate that the internal representations of the white-box transformer are much more interpretable, with clear and easily-extractable semantic meaning, compared to black-box transformers.
-% \end{itemize}
-% In the remainder of this section we highlight a selection of results; additional experimental details and results can be found in \Cref{sec:appendix-exp}. PyTorch-like pseudocode is given in \Cref{app:code}.
 
+\section{Exercises and Extensions}
 
-% \subsection{Empirical Verification of \textsc{CRATE} on Many Practical Tasks}
-% \subsubsection{Supervised Image Classification via ViT}\label{subsubsec:image-classification-task}
-% We first study the performance of CRATE architecture on supervised image classification, where we apply CRATE as the backbone architecture. 
+\begin{exercise}
+    Read the DINO paper \cite{caron2021emerging}.
+\end{exercise}
 
-% \paragraph{Model architecture.} 
-% We implement the architecture that is described in \Cref{sub:architecture}, with minor modifications that are described in \Cref{app:subsec-experiment-supervise-classification-details}. Let \(C\) be the number of classes. We use the pre-processing map:
-% \begin{equation}
-%     f^{\pre}(\vX) = \mat{\vz_{\mathrm{cls}}^{1}, \vW^{\pre}\vX} + \vE_{\mathrm{pos}},
-% \end{equation}
-% where \(\vz_{\mathrm{cls}}^{1} \in \bR^{d}\) is a trainable \textit{class token} parameter, \(\vX = \mat{\x_{1}, \dots, \x_{N}} \in \bR^{D \times N}\) is the input image patches, \(\vW^{\pre} \in \bR^{d \times D}\) is a trainable matrix, and \(\vE_{\mathrm{pos}} \in \bR^{d \times n}\) is a trainable positional encoding matrix, where \(n = N + 1\). We also consider a classification head at the output of the CRATE model:
-% \begin{equation}
-%     f^{\mathrm{head}}(\mat{\vz_{1}, \dots, \vz_{n}}) = \vW^{\mathrm{head}}\vz_{1},
-% \end{equation}
-% where \(\vZ = \mat{\vz_{1}, \dots, \vz_{n}}\) is the output of the encoder CRATE, \(\vz_{1}\) in particular is the feature corresponding to the class token \(\vz_{\mathrm{cls}}^{1}\), and \(\vW^{\mathrm{head}} \in \bR^{C \times d}\) is a trainable classification head. The output of \(f^{\mathrm{head}}\) is a set of unnormalized log-probabilities for the different classes. 
+\begin{exercise}
+    DINO v2 \cite{oquab2023dinov2} uses everything from DINO v1 but also, during the data augmentation phase, randomly masks out patches within each view. This kind of augmentation should enforce that the features of images with similar local information are similar. Formulate an optimization problem which promotes this in the encoder, and implement it.
+\end{exercise}
 
-% We consider different model sizes of CRATE by varying the token dimension $d$, number of heads $K$, and the number of layers $L$. 
-% We consider four model sizes in this work: CRATE{-Tiny}, CRATE{-Small}, CRATE{-Base}, and CRATE{-Large}. 
-% We provide details about model configurations of CRATE in Table~\ref{tab:model_configs_classification}.
-% More implementation details can be found in \Cref{app:subsec-experiment-supervise-classification-details}; PyTorch-style pseudocode can be found in \Cref{app:code}. %\yima{reference?}
 
-% \paragraph{Pre-training methodology.}
-% Let \(H \colon \Delta_{C} \times \Delta_{C} \to \bR\), where \(\Delta_{C}\) is the set of probability distributions on \([C]\), be the cross-entropy function, defined as
-% \begin{equation}\label{eq:cross_entropy}
-%     H(\vp, \vq) = \mathbb{E}_{x \sim \vp}[-\log \vq(x)] = -\sum_{c = 1}^{C}p_{c}\log(q_{c}).
-% \end{equation}
-% The pre-training loss is 
-% \begin{equation}\label{eq:loss_cross_entropy}
-%     \cL_{\CE}(f, f^{\mathrm{head}}) \doteq \mathbb{E}_{\vX, \vy}\mathopen{}\left[H\big(\vy, \operatorname{softmax}\big\{(f^{\mathrm{head}} \circ f)(\vX)\big\}\big)\right].
-% \end{equation}
-% We pre-train on ImageNet-1K~\cite{deng2009imagenet}, using the Lion optimizer \cite{chen2023symbolic}. More details about the training and datasets can be found in \Cref{app:subsec-experiment-supervise-classification-details}.
+\begin{exercise}
+    This exercise considers the implementation of stochastic optimization algorithms to minimize losses involving expectations.
+    \begin{enumerate}[(a)]
+        \item Propose an alternative to the term involving \(R_{\eps}\) in \eqref{eq:simdino_loss_teacherstudent_empirical} for approximating the covariance regularization term in \eqref{eq:simdino_loss_teacherstudent}. Evaluate the time complexity required to compute your proposed term and its gradient. Include analysis for computing it on a single compute node vs.~multiple nodes.
+        \item  Evaluate the time complexity required to compute the existing term in \eqref{eq:simdino_loss_teacherstudent_empirical} and its gradient.
+    \end{enumerate}
+\end{exercise}
 
-% \paragraph{Fine-tuning methodology.} For fine-tuning (possibly on a different dataset with a different number of classes), we re-initialize \(f^{\mathrm{head}}\) using parameters with the appropriate value of \(C\), and train on the cross-entropy loss in \Cref{eq:loss_cross_entropy}, updating both \(f\) and \(f^{\mathrm{head}}\). Again, we train using the Lion optimizer \cite{chen2023symbolic}, this time on a variety of commonly used datasets: CIFAR10/CIFAR100 \cite{krizhevsky2009learning}, Oxford Flowers \cite{nilsback2008automated}, and Oxford-IIIT-Pets \cite{parkhi2012cats}. More details about the training and datasets can be found in \Cref{app:subsec-experiment-supervise-classification-details}.
+\begin{exercise}
+    Prove that \eqref{eq:linear_probing} and \eqref{eq:linear_probing_empirical} are convex optimization problems.
+\end{exercise}
 
-
-
-% \paragraph{Classification accuracy.} We study the empirical performance of the proposed networks by measuring their top-1 accuracy on ImageNet-1K as well as transfer learning performance on several widely used downstream datasets. 
-% We summarize the results in \Cref{tab:Comparison_with_Sota}. Our transfer learning methodology is to fine-tune using \Cref{eq:loss_cross_entropy} starting from the pre-trained \(f\) and a re-initialized \(f^{\mathrm{head}}\).
-
-% As our designed architecture leverages parameter sharing in both the attention block (\texttt{MSSA}) and the nonlinearity block (\texttt{ISTA}), our CRATE{-Base} model (22.80 million) 
-% % \DP{@YY: here 22.08, in table 22.80. which is it?} 
-% has a similar number of parameters to the ViT-Small (22.05 million), and \textit{less than 30\% of the parameters of an identically configured ViT-Base} (86.54 million). From \Cref{tab:Comparison_with_Sota}, we find that with a similar number of model parameters, our proposed network achieves similar ImageNet-1K and transfer learning performance as ViT, while having a simple and principled design. 
-% %For comparison, when using the same token dimension and number of layers as CRATE{-Base}, ViT-Base has 86.54 million parameters.
-% % \DP{@YY: Need comparison between CRATE-Base and ViT-Base model size (not obvious from table).} 
-% Moreover, with the same set of training hyperparameters, we observe promising scaling behavior in CRATE---we consistently improve the performance by scaling up the model size. 
-% For comparison, directly scaling ViT on ImageNet-1K does not always lead to consistent performance improvement measured by top-1 accuracy, even while such scaling behavior is touted as one of the main benefits of the transformer architecture~\cite{dosovitskiy2020image}. 
-% Furthermore, we also study the performance of CRATE when pre-training on a larger dataset---ImageNet-21K~\cite{deng2009imagenet}. We then fine-tune the pre-trained CRATE models on downstream tasks including the ImageNet-1K dataset. The results are summarized in Table~\ref{tab:Comparison_with_VIT_IN21k}. 
-% In particular, the CRATE{-B} achieves 79.5\% top-1 accuracy on ImageNet-1K.
-% To summarize, we achieve promising performance on real-world large-scale datasets by directly implementing our principled architecture.
-
-
-
-% \begin{table*}[t!]
-% \centering
-% \caption{\small Top-1 classification accuracy of CRATE on various datasets with different model scales 
-% when pre-trained on ImageNet-1K. For ImageNet-1K/ImageNet-1K ReaL, we directly evaluate the top-1 accuracy. For other datasets, we use models that are pre-trained on ImageNet as initialization and the evaluate the transfer learning performance via fine-tuning.}
-% \label{tab:Comparison_with_Sota}
-% \small
-%     \setlength{\tabcolsep}{13.6pt}
-% \resizebox{0.98\textwidth}{!}{%
-% \begin{tabular}{@{}lcccc|cc@{}}
-% \toprule
-% \textbf{Model} & CRATE{-T}  &  CRATE{-S} & CRATE{-B} & CRATE{-L} & { \color{gray} ViT-T} &  { \color{gray}ViT-S } \\ 
-% \midrule
-% \midrule
-%  \# parameters & 6.09M & 13.12M & 22.80M & 77.64M & { \color{gray} 5.72M} & { \color{gray} 22.05M} \\
-% \midrule
-%  ImageNet-1K & 66.7 & 69.2 & 70.8 & 71.3 & { \color{gray} 71.5} & { \color{gray} 72.4} \\
-%  ImageNet-1K ReaL & 74.0 & 76.0 & 76.5 & 77.4 & { \color{gray} 78.3 } & { \color{gray} 78.4} \\
-%  \midrule
-%  CIFAR10 & 95.5 & 96.0 & 96.8 & 97.2 & { \color{gray} 96.6} & { \color{gray} 97.2} \\
-%  CIFAR100 & 78.9 & 81.0 & 82.7 & 83.6 & { \color{gray} 81.8} & { \color{gray} 83.2}\\
-%  Oxford Flowers-102 & 84.6 & 87.1 & 88.7 & 88.3 & { \color{gray} 85.1} & { \color{gray} 88.5}\\
-%  Oxford-IIIT-Pets & 81.4 & 84.9 & 85.3 & 87.4 & { \color{gray} 88.5} & { \color{gray} 88.6} \\
-%  \bottomrule
-% \end{tabular}%
-% }
-% \end{table*}
-
-
-
-% \subsubsection{Image Completion via Masked Autoencoding}
-% \label{subsubsec:image-completion-task}
-
-% Now, we study how we can use the full autoencoder architecture based on CRATE
-% described in \Cref{sec:autoencoding}, including both the CRATE encoder defined
-% in \Cref{sub:architecture} and the CRATE decoder defined in
-% \Cref{sub:structured_diffusion_impl}, to perform \textit{masked autoencoding}
-% \cite{He2021-lb}---an unsupervised masked image completion task. 
-% As shorthand, we call the CRATE-masked autoencoder CRATE{-MAE}.
-
-% \paragraph{Model architecture.}
-% We implement the encoder and decoder architectures described in \Cref{sec:autoencoding}, with a few changes detailed in \Cref{app:subsec-experiment-MAE}. We use the pre-processing map:
-% \begin{equation}
-%     f^{\pre}(\vX) = \vW^{\pre}\vX + \vE_{\mathrm{pos}},
-% \end{equation}
-% where \(\vX = \mat{\x_{1}, \dots, \x_{N}} \in \bR^{D \times N}\), \(\W^{\pre} \in \bR^{d \times D}\) is a trainable matrix, and \(\vE_{\mathrm{pos}} \in \bR^{d \times n}\) is a trainable positional encoding matrix, where \(n = N\). Similarly we use the post-processing map:
-% \begin{equation}
-%     g^{\mathrm{pos}t}(\tilde{\vZ}) = \vW^{\mathrm{pos}t}(\tilde{\vZ} - \vE_{\mathrm{pos}}),
-% \end{equation}
-% where \(\vW^{\mathrm{pos}t} \in \bR^{D \times d}\) is another trainable matrix. 
-
-% We consider different model sizes of CRATE by varying the token dimension \(d\), number of heads \(K\), and number of layers \(L\); such parameters will be kept the same for the encoder and decoder. 
-% This choice is is different from the proposed MAE architecture in
-% \cite{He2021-lb}, which uses an asymmetric encoder-decoder setup where the decoder is significantly smaller and more lightweight. 
-% This asymmetric approach is conceptually messier, whereas our symmetric approach is totally in line with our white-box derivation. 
-% We consider three model sizes: CRATE{-MAE}-Small, CRATE{-MAE}-Base, and CRATE{-MAE}-Large. \Cref{tab:model_configs} displays the model configurations and number of parameters, with a comparison to MAE, showing that \textit{CRATE uses around 30\% of the parameters of MAE with the same model configuration (e.g., layers \(L\), token dimension \(d\), and number of heads \(K\))}.
-
-% \begin{figure}
-%     \centering
-%     % \includegraphics[width=0.95\textwidth]{figs/mae_vis/crate_mae_autoencoding-compressed.pdf}
-%     \caption{\small Autoencoding visualization comparison of CRATE-Base to
-%     MAE-Base \cite{He2021-lb} with 75\% patches masked. We observe that the reconstructions from CRATE-Base are on par with the reconstructions from MAE-Base, despite using fewer than \(1/3\) of the parameters.%{\color{red}Yi: maybe in the future?} \DP{sure, once yaodong gets back from China he will have the computational resources to pretrain MAE... it is hard to do it without enough resources.} %\DP{a little hard, since I don't think we have pretrained MAE for those percentages -- we trained CRATE-MAE for lower percentage, though.}
-%     }
-%     \label{fig:mae_autoencoding}
-% \end{figure}
-
-% \paragraph{Pre-training methodology.}
-% \textit{Masked autoencoding}~\cite{He2021-lb} ``masks out'' a large percentage of randomly selected input image tokens in the input \(\vX = \mat{\vx_{1}, \dots, \vx_{N}} \in \bR^{D \times N}\) and then attempts to reconstruct the whole image, measuring success by the resulting autoencoding reconstruction loss and performance on downstream tasks. 
-% The regular masked autoencoding (MAE) loss \cite{He2021-lb} is defined as  
-% \begin{equation}\label{eq:mae_loss_unreg}
-%     \cL_{\mathrm{MAE}}(f, g) \doteq \mathbb{E}_{\vX, \Omega}\big[\norm{(g \circ f)(\operatorname{\texttt{Mask}}_{\Omega}(\vX)) - \vX}_{2}^{2}\big],
-% \end{equation}
-% where \(\texttt{Mask}_{\Omega}(\cdot)\) replaces all tokens in \(\vX\) whose indices are in \(\Omega\) with the same masked token. Namely, for each data point, we sample a subset \(\Omega \subseteq [N]\) of a fixed size, and set \(\vX^{\mathrm{mask}} = \mat{\vx_{1}^{\mathrm{mask}}, \dots, \vx_{N}^{\mathrm{mask}}}\), where \(\vx_{i}^{\mathrm{mask}} = \vx_{\mathrm{mask}}\) if \(i \in \Omega\) and \(\vx_{i}^{\mathrm{mask}} = \vx_{i}\) if \(i \notin \Omega\), where \(\vx_{\mathrm{mask}} \in \bR^{D}\) is a trainable mask token.
-
-% %As described in \Cref{sec:autoencoding}, because we have chosen to employ a nearly-symmetric encoder-decoder architecture for \(f\) and \(g\), 
-% %it may be the case that optimization of \Cref{eq:mae_loss_unreg} produces a suboptimal representation from the perspective of \Cref{eq:sparse-rr}. Because the autoencoding objective treats the composite network \(g \circ f\) as a single unit. 
-% %This means that, in contrast to the supervised setting  applied in \Cref{subsubsec:image-classification-task}, where simple cross-entropy training was sufficient for strong classification accuracy \textit{and} representations that optimize \Cref{eq:sparse-rr}, CRATE{-MAE} benefits from additional regularization during training. The precise form of regularization is a design choice, and we use arguably the simplest choice that is consistent with the design of the CRATE: 
-% %namely, we add an \(\ell^{0}\) penalty on the learned representation \(\vZ = f(\vX)\) to our masked autoencoding objective. 
-% %For \(\gamma > 0\), our overall objective is given below:
-% %\begin{equation}
-% %    \cL_{\text{MAE}}^{0}(f, g) \doteq  \mathbb{E}_{\vX, \Omega}\big[\norm{(g \circ f)(\operatorname{\texttt{Mask}}_{\Omega}(\vX)) - \vX}_{2}^{2} + \gamma\norm{f(\operatorname{\texttt{Mask}}_{\Omega}(\vX))}_{0}\big].
-% %\end{equation}
-% %In practice the \(\ell^{0}\) norm is relaxed to the \(\ell^{1}\) norm for computational purposes:
-% %\begin{equation}\label{eq:mae_loss}
-% %    \cL_{\text{MAE}}^{1}(f, g) \doteq \mathbb{E}_{\vX, \Omega}\big[\norm{(g \circ f)(\operatorname{\texttt{Mask}}_{\Omega}(\vX)) - \vX}_{2}^{2} + \gamma\norm{f(\operatorname{\texttt{Mask}}_{\Omega}(\vX))}_{1}\big].
-% %\end{equation} 
-% %% Further implementation details of this architecture are discussed in \Cref{app:experiment_clarifications,app:experiment_pseudocode}.
-% %We emphasize that the imposition of regularization to encourage the learned representations to optimize the sparse rate reduction
-% %should be seen as a consequence of the \textit{specific training strategy used for backward learning} of the model parameters---a design choice---rather than a component of the forward-optimized representation \(f\) for the data distribution.
-% %All autoencoding training frameworks contend with this issue in some form, from
-% %the imposition of a `bottleneck' in classical autoencoders
-% %\cite{kramer1991nonlinear}, to regularization or highly asymmetric
-% %encoder-decoder architectures in frameworks such as variational
-% %autoencoders~\cite{Kingma2013-sb,Rezende2014-vr} or MAE~\cite{He2021-lb}, respectively. 
-
-% For pre-training, we employ the AdamW optimizer~\cite{loshchilov2017decoupled}. We mainly use ImageNet-1K \cite{deng2009imagenet} as the main pre-training dataset. More details about training and datasets can be found in \Cref{app:subsec-experiment-MAE}. 
-% %We provide an empirical verification of the consequence of regularization, showing that it indeed produces representations \(\vZ\) that optimize \Cref{eq:sparse-rr}. \DP{we do not include this plot, or else include it in the next section, so commented it out }
-
-% \paragraph{Fine-tuning methodology.} Following \cite{He2021-lb}, we fine-tune using supervised classification to examine the linear separability of the features. To do this, we use either full-model fine-tuning or linear probing. The classification head is a ``global pooling'' head:
-% \begin{equation}
-%     f^{\mathrm{head}}(\vZ) = \vW^{\mathrm{head}}\left(\frac{1}{n}\sum_{i = 1}^{n}\vz_{i}\right) = \frac{1}{n}\vW^{\mathrm{head}}\vZ\,\bm{1}_{n}, \qquad \text{where}\ \vZ = \mat{\vz_{1}, \dots, \vz_{n}},
-% \end{equation}
-% where \(\bm{1}_{n}\) is the all-ones vector in \(\bR^{n}\); note that this is different to the classification setup in \Cref{subsubsec:image-classification-task}, owing to not incorporating a class token. We train using the cross-entropy loss, where \(H\) is defined in \Cref{eq:cross_entropy}:
-% \begin{equation}
-%     \cL_{\CE}(f, f^{\mathrm{head}}) \doteq \mathbb{E}_{\vX, \vy}\mathopen{}\left[H(\vy, \operatorname{softmax}\{(f^{\mathrm{head}} \circ f)(\vX)\})\right].
-% \end{equation}
-% For full fine-tuning, we update both \(f\) and \(f^{\mathrm{head}}\). For linear probing, we update only \(f^{\mathrm{head}}\). We fine-tune CRATE{-MAE} on several commonly used downstream datasets: CIFAR10/CIFAR100 \cite{krizhevsky2009learning}, Oxford Flowers \cite{nilsback2008automated}, and Oxford-IIIT-Pets \cite{parkhi2012cats}. For fine-tuning \(f^{\mathrm{head}}\), we use the AdamW optimizer on minibatches~\cite{loshchilov2017decoupled}. For linear probing, we use a logistic regresion solver to compute \(f^{\mathrm{head}}\) in one shot using the full dataset. More details about training can be found in \Cref{app:subsec-experiment-MAE}. 
-% %\yima{Is the above fine-tuning needed before evaluating the autoencoding performance? If not, why it goes first? Second, How is the above fine-tuning related to the fine-tuning mentioned in the transfer learning evaluation paragraph after the autoencoding performance? As far as I can tell, they seem to be different. One uses a class token, one does not. EXACTLY what you did in experiments?} \DP{Regarding the conflicting thing you mentioned, I removed it, sorry for the confusion... Regarding the organization: everywhere else in the experiments section, it is most clean to discuss the pretraining and finetuning setups before any experimental results; this is the one place where they can be plausibly separated, but I keep it this way for consistency.}
-
-% \paragraph{Autoencoding performance.} 
-% We analyze the autoencoding reconstruction performance of CRATE{-MAE} and
-% compare with the original MAE in \cite{He2021-lb}. 
-% In \Cref{fig:mae_autoencoding}, we qualitatively compare the masked autoencoding
-% performance of CRATE{-MAE}-Base to MAE-Base \cite{He2021-lb}. We observe that both models are able to reconstruct the data well, despite CRATE using less than a third of the parameters of MAE. In  \Cref{tab:reconstruction_loss}, we display the average reconstruction loss of CRATE{-MAE}-Base and MAE-Base, showing a similar quantitative conclusion. %\DP{keep this snippet?} \yaodong{Yes, I think might be good to keep this.}
-
-
-% % We configure the learning rate as $3\times 10^{-5}$, weight decay as \(0.1\), and batch size as \(4,096\).
-% % \DP{Need to figure out whether to put the optimization details to appendix or not (it's in appendix for classification section.)}
-
-
-
-% \begin{table*}[t!]
-%     \centering
-%     \caption{\small Average reconstruction loss over the training and validation sets of ImageNet-1K as a function of architecture model size. We see that the performance of CRATE-Base, while a bit worse than MAE-Base, obtains promising performance on the challenging masked autoencoding task. 
-%     }
-%     \label{tab:reconstruction_loss}
-%     \footnotesize
-%     \setlength{\tabcolsep}{13.6pt}
-%     % \setlength{\tabcolsep}{20pt}
-%     %\resizebox{0.6\textwidth}{!}{%
-%         \begin{tabular}{@{}lcc@{}}
-%             \toprule
-
-%             \textbf{Reconstruction Loss} & CRATE-Base & MAE-Base
-%             % & Oxford Flowers 
-%             \\ 
-%             \midrule
-%             \midrule
-%             Training & 0.266 &
-%             0.240
-%             \\
-%             \midrule
-%             Validation & 0.303 & 0.267 
-%             \\
-%             \bottomrule
-%         \end{tabular}%
-%     %}
-% \end{table*}
-
-
-% \paragraph{Fine-tuning performance.} 
-
-% % We prove qualitatively and quantitatively that the CRATE encoder learns high-quality features that match our theoretical understanding. 
-% In \Cref{tab:autoencode_finetuning_logreg}, we compare the fine-tuning and linear probing performance of CRATE{-MAE} models pretrained on ImageNet-1K across different model sizes and datasets. We demonstrate that CRATE{-MAE} has comparable finetuning performance to the usual MAE models while also saving many parameters. This demonstrates that our representations are highly geometrically and statistically structured (e.g., having linear structure), and carry semantic content that is useful for downstream tasks. 
-
-% \begin{table*}[t!]
-%     \centering
-%     \caption{\small Top-1 classification accuracy of CRATE{-MAE}-Small, CRATE{-MAE}-Base, (ViT-)MAE-Small, and (ViT-)MAE-Base when pre-trained on ImageNet-1K and fine-tuned on classification (either on the whole network, or using logistic regression a.k.a.~full-batch linear probing) for several smaller datasets. 
-%     % {\color{red} Yi: What is Logistic Regression doing? Why it is so low? The lower or higher the better? Why Large is the lowest? No explanation in the caption nor in the main body.} \DP{added brief explanation (longer explanation in \Cref{app:experiment_clarifications}), but Yaodong and I think the large model logistic regression performance is a bug. Leaving until it's fixed.} 
-%     Our results show that the representation learning in CRATE is useful for downstream tasks on a level comparable to that of the regular MAE, on top of having several side benefits such as parameter efficiency and emergent properties (as discussed in the sequel).
-%         %{\color{red} What does it mean "random init"? The network was not trained at all?} 
-%         %{\color{red}Yaodong: @Ziyang, @Tianzhe: maybe put a baseline result here: CRATE models trained from random init.}
-%     }
-%     \label{tab:autoencode_finetuning_logreg}
-%     \footnotesize
-%     \setlength{\tabcolsep}{13.6pt}
-%     \begin{tabular}{@{}lcc|cc@{}}
-%         \toprule 
-%         \textbf{Model} & CRATE{-MAE}-S & CRATE{-MAE}-B & {\color{gray} ViT-MAE-S} & {\color{gray} ViT-MAE-B} \\
-%         \midrule
-%         \midrule
-%         \# parameters & 25.4M & 44.6M & 47.6M & {\color{gray}143.8M} \\
-%         \midrule
-%         \underline{\textit{Fine-Tuning}} & & & \\
-%         CIFAR10 & 96.2 & 96.8 & {\color{gray} 97.6} & {\color{gray} 98.5} \\
-%         CIFAR100 & 79.0 & 80.3 & {\color{gray} 83.0} & {\color{gray} 87.0} \\
-%         Oxford Flowers-102 & 71.7 & 78.5 & {\color{gray} 84.2} & {\color{gray} 92.5} \\
-%         Oxford-IIIT-Pets & 73.7 & 76.7 & {\color{gray} 81.7} & {\color{gray} 90.3} \\
-%         \midrule 
-%         \underline{\textit{Linear Probing}} & & & \\
-%         CIFAR10 & 79.4 & 80.9 & {\color{gray} 79.9} & {\color{gray} 87.9} \\
-%         CIFAR100 & 56.6 & 60.1 & {\color{gray} 62.3} & {\color{gray} 68.0} \\
-%         Oxford Flowers-102 & 57.7 & 61.8 & {\color{gray} 66.8} & {\color{gray} 66.4} \\
-%         Oxford-IIIT-Pets & 40.6 & 46.2 & {\color{gray} 51.8} & {\color{gray} 80.1} \\
-%         \bottomrule
-%     \end{tabular}
-% \end{table*}
-
-
-% \subsubsection{Self-Supervised Learning via DINO Training Method}\label{sec:experiment-DINO}
-
-% Self-supervised learning (SSL) has gained increasing popularity and become a dominant approach for pre-training deep networks. In this part, we study whether the success of SSL in transformers can be applied to the proposed CRATE architecture. Specifically, we train CRATE backbones with DINO~\cite{caron2021emerging}, a widely used SSL framework for ViTs that demonstrate great feature learning capabilities.
-
-% \paragraph{Model architecture.} 
-% To start with, we briefly introduce the self-supervised learning method DINO (self-\textbf{di}stillation with \textbf{no} labels)~\cite{caron2021emerging}. 
-% DINO applies knowledge distillation~\cite{hinton2015distilling}, with a ``teacher'' encoder network $f_{t}^{\mathrm{proj}} \circ f_{t}$ and ``student'' encoder network  $f_{s}^{\mathrm{proj}} \circ f_{s}$, to learn from two different ``views'' of an image. Here, for each ``backbone'' model \(f\) (either \(f_{s}\) or \(f_{t}\)), we can write (as in other experimental settings) \(f = f^{L} \circ \cdots \circ f^{1} \circ f^{\pre}\), where the pre-processing map $f^{\pre}: \bR^{D \times N} \to \bR^{d \times n}$ is defined as
-% \begin{equation}
-%     f^{\pre}(\vX) = \mat{\vz_{\mathrm{cls}}^{1}, \vW^{\pre}\vX} + \vE_{\mathrm{pos}},
-% \end{equation}
-% where $n = N + 1$ and $\vz_{\mathrm{cls}}^{1} \in \bR^{d}$,  $\vW^{\pre} \in \bR^{d \times D}$ and $\vE_{\mathrm{pos}} \in \bR^{d \times n}$ are trainable parameters, and each layer \(f^{\ell} \colon \bR^{d \times n} \to \bR^{d \times n}\) is a transformer layer, such as the CRATE layer or ViT layer. Each projection map \(f^{\mathrm{proj}} \colon \bR^{d \times n} \to \bR^{d}\) (either \(f_{s}^{\mathrm{proj}}\) or \(f_{t}^{\mathrm{proj}}\)) is defined, as in \cite{caron2021emerging}, as 
-% \begin{equation}\label{eq:dino_head}
-%     f^{\mathrm{proj}}(\mat{\vz_{1}, \dots, \vz_{n}}) = \vW_{3}^{\mathrm{proj}}\operatorname{ReLU}(\vW_{2}^{\mathrm{proj}}\operatorname{ReLU}(\vW_{1}^{\mathrm{proj}}\vz_{1} + \vb_{1}^{\mathrm{proj}}) + \vb_{2}^{\mathrm{proj}}) + \vb_{3}^{\mathrm{proj}},
-% \end{equation}
-% where $\vW_{i}^{\mathrm{proj}} \in \bR^{d \times d}$ are trainable weights and $\vb_{i}^{\mathrm{proj}} \in \bR^{d}$ are trainable biases. 
-
-% In our experiments, for the ``backbone'' layers \(f^{\ell} \circ \cdots \circ f^{1}\) for the teacher and student models, we adopt the same model configuration as in the supervised learning experiments introduced in \Cref{subsubsec:image-classification-task}. Specially, due to the heavy computational demand for DINO, we train with two smaller model sizes for this task: CRATE{-Small} and CRATE{-Base} (note CRATE{-Base} has a similar number of parameters as as ViT-Small). Refer to \cite{caron2021emerging} for more implementation details about DINO, including additional small task-specific alterations.
-
-% \paragraph{Pre-training methodology.} 
-
-% We parameterize \((f_{s}, f_{s}^{\mathrm{proj}})\) by a parameter set \(\vtheta_{s}\), and similarly parameterize \((f_{t}, f_{t}^{\mathrm{proj}})\) by a parameter set \(\vtheta_{t}\). Note that by construction, \(\vtheta_{s}\) and \(\vtheta_{t}\) parameterize the same architecture and thus are elements of the same Euclidean space. The training objective is to minimize
-% \begin{equation}\label{eq:dino-objective}
-%     L(\vtheta_{s}, \vtheta_{t}) \doteq \mathbb{E}_{\vX}\big[ H(P(\underbrace{\texttt{Aug}_{\texttt{g}}(\vX)}_{\text{view 1}}; \vtheta_{t}, \tau_{t}), P(\underbrace{\texttt{Aug}_{\texttt{l}}(\vX)}_{\text{view 2}}; \vtheta_{s}, \tau_{s}))\big],
-% \end{equation}
-% where $\texttt{Aug}_{\texttt{g}}(\cdot)$ denotes a \textit{global} view augmentation and  $\texttt{Aug}_{\texttt{l}}(\cdot)$ denotes a \textit{local} view augmentation\footnote{We follow the multi-crop strategy~\cite{caron2020unsupervised}. The views are distorted crops of the original image. A global view is a high-resolution (e.g. $224\times 224$) crop that covers a large (e.g. $>50\%$) area of the input image while a local view is of lower resolution (e.g. $96\times 96$) and covers a smaller (e.g. $<50\%$) area of the original image.} %R\DP{@YY @ZYW: what are these? can you give details/examples} \ZW{Explanation added in the footnote}
-% , and the probability $P(\cdot; \cdot, \cdot)$ is defined as
-% \begin{equation}\label{eq:dino-def-P}
-%     P(\vX; \vtheta, \tau) = \softmax{\tau^{-1}(f_{\vtheta}^{\mathrm{head}} \circ f_{\vtheta})(\vX)},
-% \end{equation}
-% where \(f_{\vtheta_{s}} = f_{s}\), and so on, and \(\tau > 0\) is the softmax temperature which controls how sharply the softmax concentrates about its largest values. By passing two different views (local and global) of the same image to the student network and teacher network respectively, the DINO objective is designed to encourage ``local-to-global'' correspondences---the features of the local view $\texttt{Aug}_{\texttt{l}}(\vX)$ for the student network are encouraged to be similar to the features of the global view $\texttt{Aug}_{\texttt{g}}(\vX)$ for the teacher network. 
-
-% The training is done in the following (slightly unintuitive) way using exponential moving averages:
-% \begin{align}
-%     \vtheta_{s}^{k + 1}
-%     &= \vtheta_{s}^{k} - \eta \nabla_{\vtheta_{s}}L(\vtheta_{s}^{k}, \vtheta_{t}^{k}), \\
-%     \vtheta_{t}^{k + 1}
-%     &= \lambda \vtheta_{t}^{k} + (1 - \lambda) \vtheta_{s}^{k + 1},
-% \end{align}
-% where \(\eta > 0\) is a learning rate, \(\lambda \in (0, 1)\) is an exponential moving average parameter, and \(k\) is the training iteration. \cite{caron2021emerging} applies the stop-gradient operator on the teacher network, so gradients are propagated only through the student network and not the teacher. In reality, \(L\) is replaced with an empirical version over mini-batches, and the iteration for \(\vtheta_{s}\) can use a more complex algorithm than stochastic gradient descent. In particular, we adopt a similar training recipe as reported in \cite{caron2021emerging}; we train on ImageNet-1K~\cite{deng2009imagenet} and use the AdamW optimizer \cite{loshchilov2017decoupled}, with a learning rate schedule that is composed of a linear warm-up phase followed by a cosine decay schedule. Due to the differences in the backbone architecture, we only alter the choice of base learning rates and weight decay parameters in our experiments. 
-% More details can be found in \Cref{app:subsec-experiment-dino}.
- 
-
-% % \ZW{@Yaodong: specific choices of base lr and wd.} \yaodong{lr=0.001, and wd=0.005.}
-% % In our experiments, we choose the base learning rate to be $0.001$ and the weight decay parameter to be $0.005$.
-% % Other hyper-parameters such as the temperature parameters $\tau_t$ and $\tau_s$ are chosen to exactly match with the publicly available implementation of DINO\footnote{\url{https://github.com/facebookresearch/dino}}. Due to computational limitations, we only train our models for 100 epochs, compared to 400 to 800 epochs of training for the official implementation.
-
-% \paragraph{Fine-tuning methodology.}
-% Similar to the evaluation protocol of~\cite{caron2021emerging}, we evaluate the classification performance using the features of the pre-trained networks. Precisely, we consider the extracted class token feature \(\vz_{t}\) from the pre-trained teacher network \(f_{t}\) in the following way. Specifically, we obtain
-% \begin{equation}
-%     \vz_{t} \gets \vz_{1} \qquad \text{where}\ \mat{\vz_{1}, \dots, \vz_{n}} = f_{t}(\vX).
-% \end{equation}
-% From here, we fine-tune on supervised classification in two different ways.
-
-% First, we use the feature vectors \(\vz_{t}\) to form a weighted \(k\)-nearest neighbor classifier \cite{wu2018unsupervised}. That is, with \(C\) classes we build a classification head \(f_{k}^{\mathrm{head}} \colon \bR^{d} \to [C]\) which performs weighted \(k\)-nearest neighbors with respect to the training dataset. We do this for several choices of \(k\), and in our shown results we select the classifier \(f_{k}^{\mathrm{head}} \circ f_{t}\) with the highest accuracy on the training set. 
-
-% Second, we use the feature vectors \(\vz_{t}\) to build a linear probing model. That is, with \(C\) classes we build a classification head \(f^{\mathrm{head}} \colon \bR^{d} \to \bR^{C}\) defined as 
-% \begin{equation}
-%     f^{\mathrm{head}}(\vz) = \vW^{\mathrm{head}}\vz,
-% \end{equation}
-% for a trainable parameter \(\vW^{\mathrm{head}} \in \bR^{C \times d}\), by minimizing the cross-entropy loss \Cref{eq:loss_cross_entropy}
-% \begin{equation}
-%     \cL_{\CE}(f, f^{\mathrm{head}}) \doteq \mathbb{E}_{\vX, \vy}\mathopen{}\left[H(\vy, \operatorname{softmax}\{(f^{\mathrm{head}} \circ  f)(\vX)\})\right],
-% \end{equation}
-% over \(f^{\mathrm{head}}\) (leaving $f$ fixed). We do this by using a logistic regression solver to compute \(f^{\mathrm{head}}\) in one shot using the full fine-tuning dataset. 
-
-% The fine-tuning dataset in our experiments is the same as the training dataset, i.e., ImageNet-1K \cite{deng2009imagenet}.
-
-
-% \paragraph{Fine-tuning results.} 
-% %\DP{@YY @ZYW: is this teacher or student network?} \ZW{This is the teacher network. Fixed now.} 
-% We report the Top-1 test accuracy of both our fine-tuning methodologies on ImageNet-1K in~\Cref{tab:dino_linear_probe}. These results show that, with only minimal changes of hyper-parameter settings, the proposed CRATE architecture can learn meaningful and informative features via self-supervised learning.
-
-% Later in Section \ref{sec:emergence}, we will show how the features learned by the self-supervised  DINO can already produce good image segmentation results, see Figure \ref{fig:maskcut_visualization}. 
-
-% \begin{table*}[t!]
-%     \centering
-%     \caption{\small Top-1 classification accuracy on ImageNet-1K of CRATE-Small, CRATE-Base, and ViT-Small when pre-trained using the DINO objective. }
-%     \label{tab:dino_linear_probe}
-%     \footnotesize
-%     \setlength{\tabcolsep}{13.6pt}
-%         \begin{tabular}{@{}lcccc@{}}
-%             \toprule
-%             \textbf{Model} & \#parameters & $k$-NN & Linear Probing
-%             \\ 
-%             \midrule
-%             CRATE-Small/16 & 13.12M & 53.02\% &
-%             58.41\% 
-%             \\
-%             \midrule
-%             CRATE-Base/8 & 22.80M & 59.91\% &
-%             67.42\%
-%             \\
-%             % \midrule
-%             % CRATE-Large/8 & 77.64M & - & - 
-%             % \\
-%             \midrule
-%             ViT-Small/16 & 22.05M & 69.36\% & 72.02\%  
-%             \\
-%             \midrule
-%             ViT-Small/8 & 22.05M & 71.98\% & 75.63\% 
-%             \\
-%             \bottomrule
-%         \end{tabular}%
-%     %}
-% \end{table*}
-
-% \subsubsection{Pre-Training Language Models via BERT and GPT} 
-
-% % \yaodong{@Jack}
-% % \noindent
-% % \yaodong{Outline for this subsection}
-% % {\color{blue}
-% % \begin{enumerate}
-% %     \item Goal: what's the goal of the experiments? Study whether CRATE can be used for learning from text data, (or something else).
-% %     \item Describe the setup (data, model, how to evaluate).
-% %     \item Present the evaluation results.
-% %     \item Discuss the results (highlight interesting observations, etc).
-% % \end{enumerate}
-% % }
-
-% We now study the performance of CRATE architectures on text data. 
-% Specifically, we consider two widely used pre-training tasks for learning language representations---Bidirectional Encoder Representations from
-% Transformers (BERT) pre-training~\cite{devlin2018bert, liu2019roberta} and Generative Pre-Training (GPT) pre-training~\cite{radford2019language}.
-
-% % care about both \textit{bidirectional attention} architectures like BERT \cite{devlin2018bert} and RoBERTa \cite{liu2019roberta}, and \textit{causal attention} architectures like GPT-2 \cite{radford2019language}.
-
-
-% % This section discusses about the generalizability of the CRATE architecture on text. Specifically, we care about both \textit{bidirectional attention} architectures like BERT \cite{devlin2018bert} and RoBERTa \cite{liu2019roberta}, and \textit{causal attention} architectures like GPT-2 \cite{radford2019language}.
-
-% \paragraph{CRATE-BERT model architecture.} 
-
-% For BERT pre-training, we apply the RoBERTa tokenizer~\cite{sennrich2015neural,liu2019roberta} with vocabulary size $V=50,265$ as the default tokenizer. We implement the CRATE architecture that is used in image classification \Cref{subsubsec:image-classification-task}, except for the pre-processing layer and the task-specific head. Specifically, the pre-processing layer is described as:
-% \begin{equation}\label{eq:free-pre-text}
-%     f^{\pre}(\vX) = f^{\mathrm{embed}}(\vX) + \vE_{\mathrm{pos}},
-% \end{equation}
-% where $f^{\mathrm{embed}}$ is an embedding function which maps input tokens \(\vx_{i}\) to embedding vectors in \(\bR^{d}\), 
-% % \DP{@YY @YZ @HB: what is the form of this \(f\)?} 
-% and $\vE_{\mathrm{pos}}\in\mathbb{R}^{d\times n}$ is the sinusoid positional embedding defined in \cite{vaswani2017attention}.
-% The final output layer takes the form of a linear head:
-% \begin{equation}\label{eq:f-head-text}
-%     f^{\mathrm{head}}(\vZ) = \vW^{\mathrm{head}}\vZ,
-% \end{equation}
-% where \(\vW^{\mathrm{head}} \in \bR^{V \times d}\).
-
-% We denote the CRATE model with BERT pre-training as CRATE{-BERT}.
-% We summarize the configurations of CRATE{-BERT} models in \Cref{tab:configs-crate-text} (upper). For CRATE{-BERT-Base}, we use the same width, number of attention heads, and depth as BERT-Base~\cite{liu2019roberta}. CRATE{-BERT-Base} uses 60.9M parameters, while BERT-Base uses 110M parameters, nearly twice as many.
-
-% \paragraph{CRATE-BERT pre-training methodology.}
-% The training loss for CRATE-BERT is masked language modeling (masked LM)\footnote{The original BERT pre-training tasks also contain next sentence prediction, but we discard this task due to observations shown by~\cite{liu2019roberta}.}, which is defined as
-% \begin{equation}\label{eq:training-loss-bert}
-%   \cL_{\text{BERT}}(f, f^{\mathrm{head}}) = \mathbb{E}_{\vX, \Omega}\left[\frac{1}{\abs{\Omega}}\sum_{i\in \Omega}  H(\bm{1}(\vx_{i}), \operatorname{softmax}\{(f^{\mathrm{head}} \circ f)(\vX)_{i}\})\right],
-% \end{equation}
-% where \((f^{\mathrm{head}} \circ f)(\vX)_{i} \in \bR^{V}\) denotes the \(i\th\) index of the model output---that is, the log-probabilities of each potential token in the vocabulary to take up the \(i\th\) index in the sequence \(\vX\). Similarly $\mathbf{1}(\vx_i) \in \{0, 1\}^{V}$ represents the one-hot embedding vector of the token \(\vx_{i}\) in the vocabulary. 
-
-% To pre-train, we use the Adam optimizer \cite{kingma2014adam}. We use the same pre-training dataset as BERT ~\cite{devlin2018bert}, including BooksCorpus~\cite{zhu2015aligning} and English Wikipedia.  Refer to \cite{devlin2018bert} for more details about the pre-training tasks.
-
-% \paragraph{CRATE-GPT model architecture.} 
-
-% For CRATE-GPT pretraining, following the setup in the GPT-2 paper \cite{radford2019language}, we modify our CRATE architecture to align with the next word prediction task used in GPT. 
-% Specifically, we replace the attention in \texttt{MSSA} with a causally masked self-attention, i.e., replacing 
-% \begin{align}
-%     \softmax{(\vU_{k}\adj\vZ)\adj(\vU_{k}\adj\vZ)} 
-%     &\to \softmax{\texttt{CausalMask}((\vU_{k}\adj\vZ)\adj(\vU_{k}\adj\vZ))}, \\
-%     \text{where}\ \texttt{CausalMask}(\vA)_{ij} 
-%     &= \begin{cases}A_{ij}, & i \leq j \\ -\infty, & i > j.\end{cases}
-% \end{align}
-% in \Cref{eq:SSA}. We use the same pre-processing and head architecture as CRATE{-BERT}:
-% \begin{equation}
-%     f^{\pre}(\vX) = f^{\mathrm{embed}}(\vX) + \vE_{\mathrm{pos}}, \qquad f^{\mathrm{head}}(\vZ) = \vW^{\mathrm{head}}\vZ.
-% \end{equation}
-% We denote the CRATE model for GPT pre-training as CRATE{-GPT}. We summarize the configurations of GPT models in \Cref{tab:configs-crate-text} (lower), and set the model architecture parameters such that CRATE{-GPT} has the same layer specifications as GPT2 with parameter size 60M (c.f.~GPT2's 124M, more than twice as many).
-
-% \paragraph{CRATE-GPT pre-training methodology.}
-% The training objective of GPT is next word prediction (causal language modeling, causal LM), which is defined as
-% \begin{equation}\label{eq:training-loss-gpt}
-%   \cL_{\text{GPT}}(f, f^{\text{head}}) = \mathbb{E}_{\vX}\bigg[\frac{1}{\abs{\vX} -1} \sum_{i = 1}^{\abs{\vX} - 1} H(\bm{1}(\vx_{i + 1}), \operatorname{softmax}\{(f^{\mathrm{head}} \circ f)(\vX)_{i}\}) \bigg],
-% \end{equation}
-% where $\abs{\vX}$ denotes the total number of tokens in the input sample $\vX$.
-% For GPT pretraining, we mainly follow the implementations in \cite{nanogpt}; in particular we set the block size as 1,024. 
-% We pre-train CRATE{-GPT} models on OpenWebText~\cite{Gokaslan2019OpenWeb} using the Adam optimizer \cite{kingma2014adam}. Refer to \cite{radford2019language} for more details about the pre-training tasks.
-
-% As usual, we defer the pre-training setup details of CRATE-BERT and CRATE-GPT to \Cref{app:subsec-experiment-text}.
-
-% %\paragraph{Datasets and optimization.} 
-% % , which is the same setup as described in \cite{liu2019roberta}. 
-% %\DP{We have to decide whether to keep this here or appendix, since in classification section it is here. Also, edit for grammar.}
-% %\yaodong{moved the optimizer details to appendix.}
-
-
-
-% % For CRATE{-BERT}, We have the BERT model configs shown in Table \ref{tab:bert_configs}. Specifically, we configure CRATE-BERT-Base so that it has the same width, number of attention heads, depth, and vocabulary size as RoBERTa-Base, with parameter size 60.9M. Note that we use the RoBERTa tokenizer (vocabulary size 50K), instead of the BERT tokenizer (vocabulary size 30K), to make the performance more stable.
-
-% % \paragraph{Setup.} We experimented on both CRATE applied on the BERT (encoder-only) and GPT-2 (decoder-only) Transformer architectures, denoted by CRATE-BERT and CRATE-GPT2, respectively. Our layer/head specification is set to be equivalent to the official versions of BERT and GPT-2.
-
-% % \textit{CRATE-BERT.} We have the BERT model configs shown in Table \ref{tab:bert_configs}. Specifically, we configure CRATE-BERT-Base so that it has the same width, number of attention heads, depth, and vocabulary size as RoBERTa-Base, with parameter size 60.9M. Note that we use the RoBERTa tokenizer (vocabulary size 50K), instead of the BERT tokenizer (vocabulary size 30K), to make the performance more stable.
-
-% % For pretraining, we use the same setup as described in the RoBERTa paper. Specifically, we use a batch size of $8,096$ and train for 30K steps. For the Adam optimizer, we use $\epsilon = 10^{-6}, \beta_1=0.9, \beta_2=0.98$, and a weight decay of $0.01$. For the learning rate scheduler, we use linear warm up and linear decay, where the peak learning rate is reached at $1,800$ steps with value $\alpha=10^{-3}$. The pretraining dataset is same as BERT, which includes BooksCorpus (800M words) and English Wikipedia (2,500M words).
-
-
-
-% % \begin{table*}[t!]
-% %     \centering
-% %     \caption{\small (\textit{upper}) Configuration of the CRATE BERT-family models. (\textit{lower}) Configuration of the CRATE GPT-family models. $d$ represents the dimension of the token, $K$ represents the number of attentions head in the attention block, $L$ represents the model depth, and $h$ represents the hidden dimension of the MLP block in standard transformers. For CRATE models, there is no hidden dimension.}
-% %     \label{tab:configs-crate-text}
-% %     \vspace{-0.1in}
-% %     \footnotesize
-% %     \setlength{\tabcolsep}{9.6pt}
-% %         \begin{tabular}{llcccccc}
-% %             \toprule
-% %             {Model Size} & Pre-training & $d$ & $K$ & $L$ & $h$ & CRATE & BERT 
-% %             % & RoBERTa 
-% %             \\ 
-% %             \midrule
-% %             Medium & Masked LM & 512 & 8 & 8 & 2,048 &  33M & 41M 
-% %             % & 52M
-% %             \\
-% %             Base & Masked LM & 768 & 12 & 12 & 3,072 &  61M & 110M 
-% %             % & 125M
-% %             \\
-% %             Large & Masked LM & 1,024 & 16 & 24 & 4,096 &  129M & 335M 
-% %             % & 355M
-% %             \\
-% %             \midrule
-% %             \midrule
-% %             {Model Size} & Pre-training & $d$ & $K$ & $L$ & $h$ & CRATE & GPT-2 
-% %             % &  
-% %             \\
-% %             \midrule
-% %             Base & Causal LM & 768 & 12 & 12 & 3,072 & 60M  & 124M
-% %             \\
-% %             Large & Causal LM & 1,280 & 20 & 36 & 5,120 & 242M & 774M
-% %             \\
-% %             \bottomrule
-% %         \end{tabular}%
-% %     %}
-% %     \vspace{-0.05in}
-% % \end{table*}
-
-
-% % \begin{table*}[t!]
-% % \def\arraystretch{1.1}
-% %     \centering
-% %     \begin{tabular}{c|cccc|ccc}
-% %     \multirow{2}{*}{\textbf{\shortstack[c]{Size}}} & \multicolumn{4}{c}{\textbf{Config}} & \multicolumn{3}{c}{\textbf{Parameter Size}} \\
-% %       & $d$ & $K$ & $L$ & Hidden Dim & BERT & RoBERTa & CRATE-BERT \\
-% %      \hline
-% %      Medium & 512 & 8 & 8 & 2048 & 41M & 52M & 33M \\
-% %      Base & 768 & 12 & 12 & 3072 & 110M & 125M & {61M} \\
-% %      Large & 1024 & 16 & 24 & 4096 & 335M & 355M & 129M \\
-% %      \hline
-% %     \end{tabular}
-
-% %     \vspace{5mm}
-    
-% %     \begin{tabular}{c|cccc|cc}
-% %     \multirow{2}{*}{\textbf{\shortstack[c]{Size}}} & \multicolumn{4}{c}{\textbf{Config}} & \multicolumn{2}{c}{\textbf{Parameter Size}} \\
-% %       & $d$ & $K$ & $L$ & Hidden Dim & GPT-2 & CRATE-GPT2 \\
-% %      \hline
-% %      Base & 768 & 12 & 12 & 2048 & 124M & \textbf{60M} \\
-% %      % Medium & 1024 & 16 & 24 & 3072 & 355M & 127M \\
-% %      Large & 1280 & 20 & 36 & 4096 & 774M & 224M\\
-% %      \hline
-% %     \end{tabular}
-% %     \caption{\textit{Up:} Configuration of the CRATE BERT-family models. \textit{Down:} Configuration of the CRATE GPT-family models. $d$ represents the dimension of the token, $K$ represents the number of attentions head in the attention block, $L$ represents the model depth, and \textit{Hidden Dim} represents the hidden dimension of the MLP block in standard transformers. For CRATE models, there is no hidden dimension parameters.  
-% %     % \textbf{D}epth and \textbf{H}idden size.
-% %     % Note that CRATE-BERT doesn't have the hidden layer in MLP so it has no hidden size.
-% %     % \yaodong{fix the medium/base/large term in above table.}
-% %     }
-% %     \label{tab:configs}
-% %     \vspace{-0.1in}
-% % \end{table*}
-
-% % \textit{CRATE-GPT2.} We have the GPT-2 model configs shown in Table \ref{tab:gpt_configs}. Similar to CRATE-BERT, we configure CRATE-GPT2-Base so it has the same layer specifications as GPT2-Base, with parameter size 60M. 
-
-% % For pretraining, we use a batch size of 384 (instead of the official config 512 due to restrictions to computational resources) and train for 600K steps. For the Adam optimizer, we use $\beta_1=0.9, \beta_2=0.95$, and weight decay of $0.1$. For the learning rate scheduler, we use a linear warmup and cosine decay, with a peak value of $6\times 10^{-4}$ at the $2,000$ iteration, and minimum value $6\times 10^{-5}$. For optimization, we use a block size of $1,024$.
-
-% % \begin{table*}[t!]
-% % \def\arraystretch{1.1}
-% %     \centering
-% %     \begin{tabular}{c|cccc|cc}
-% %     \multirow{2}{*}{\textbf{\shortstack[c]{Size}}} & \multicolumn{4}{c}{\textbf{Config}} & \multicolumn{2}{c}{\textbf{Parameter Size}} \\
-% %       & W & A & D & H & GPT-2 & CRATE-GPT2 \\
-% %      \hline
-% %      Base & 768 & 12 & 12 & 2048 & 124M & \textbf{60M} \\
-% %      Medium & 1024 & 16 & 24 & 3072 & 355M & 127M \\
-% %      Large & 1280 & 20 & 36 & 4096 & 774M & 224M\\
-% %      \hline
-% %     \end{tabular}
-% %     \caption{Configuration of the CRATE GPT-family models. 
-% %     The abbreviations stand for \textbf{W}idth, \textbf{A}ttention head number, \textbf{D}epth and \textbf{H}idden size. 
-% %     % Note that CRATE-GPT2 doesn't have the hidden layer in MLP so it has no hidden size.
-% %     }
-% %     \label{tab:gpt_configs}
-% %     \vspace{-0.05in}
-% % \end{table*}
-
-% % \paragraph{Pretraining Results.} We pretrain both CRATE-BERT and CRATE-GPT2 architectures on the standard tasks (masked language modeling and causal language modeling, respectively), and get the results below.
-
-% \paragraph{CRATE-BERT evaluation results.} 
-% Pre-training results of CRATE{-BERT} is summarized in Table~\ref{tab:bert-eval}. We use the officially released BERT checkpoints for BERT evaluation~\cite{huggingface_bert}. We evaluate the CRATE{-BERT} model by fine-tuning on downstream tasks from the GLUE benchmark~\cite{wang2018glue}. 
-% \textit{Single-task Finetuning} of Table~\ref{tab:bert-eval} means that we fine-tune the model only on the task we evaluate. 
-% In addition, following previous work~\cite{liu2019roberta}, models pre-trained only on the masked language modeling task should be further fine-tuned on MNLI before evaluating on MRPC, STS-B and RTE to be competitive to BERT. That is, first fine-tuning on MNLI improves the performance on these tasks.
-% Therefore, we also investigate this training recipe and include the corresponding results in the \textit{Further Finetuning after MNLI} section of \Cref{tab:bert-eval}. 
-% The \textit{AVG} score is the average of all GLUE tasks shown in the table.\footnote{We exclude the problematic CoLA task, as it has been reported multiple times that the performance depends heavily on the seed chosen for BERT \cite{huggingface_cola_issue}.}
-% We also present the pre-training loss and GLUE evaluation scores of CRATE{-BERT} with respect to progressing pre-training steps in \Cref{fig:crate-text-evals}~(left and middle). 
-% The progressing GLUE average scores are calculated under the \textit{single-task finetuning} setting.\footnote{We use 3 epochs (instead of 8) for the MNLI task for all evaluation except the 24,000 and 30,000 steps because it suffices to get a good score.}
-% From Table~\ref{tab:bert-eval}, we find that CRATE{-BERT-Base} can achieve competitive performance compared to BERT models realized by standard transformers.
-
-
-% \begin{table*}[t!]
-% \small
-% \setlength{\tabcolsep}{3pt} 
-% \def\arraystretch{1.1}
-%     \centering
-%     \caption{\small Performance on the GLUE benchmark (higher is better). All scores are obtained using the HuggingFace evaluation script~\cite{huggingface_transformers}. 
-%     % (\url{https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification}).  
-%     F1 scores are reported for QQP and MRPC, Spearman correlations are reported for STS-B, and accuracy scores are reported for the other tasks.}
-%     \begin{tabular}{l@{\hspace{6pt}}@{\hspace{6pt}}c@{\hspace{6pt}}c@{\hspace{6pt}}c@{\hspace{6pt}}c@{\hspace{6pt}}c@{\hspace{6pt}}c@{\hspace{6pt}}c@{\hspace{6pt}}c@{\hspace{6pt}}c@{\hspace{6pt}}c}
-%     \hline
-%     &  \textbf{SST-2} & \textbf{MRPC} & \textbf{STS-B} & \textbf{QQP} & \textbf{MNLI} & \textbf{QNLI} & \textbf{RTE} & \textbf{WNLI} & \textbf{Avg} \\[-0.5em]
-%     & \scriptsize \textsc{Acc} & \scriptsize \textsc{F1} & \scriptsize \textsc{Sprm} & \scriptsize \textsc{F1} & \scriptsize \textsc{M/MM} & \scriptsize \textsc{Acc} & \scriptsize \textsc{Acc} & \scriptsize \textsc{Acc} & \scriptsize \textsc{All} \\
-%      \hline
-%      % BiLSTM-ELMo-Attn & \color{gray}33.6 & 90.4 & 84.4 & 72.3 & 84.3 & 74.5/74.1 & 79.8 & 58.9 & 65.1 & 71.7 \\
-%      \multicolumn{10}{c}{\textit{Single-task Finetuning}} \\
-%      \hline
-%      \scriptsize BERT-Medium (41M) & 90.5 & 87.8 & 87.6 & 86.2 & 80.8/81.2 & 88.6 & 64.6 & 30.1 & 77.5 \\
-%      \scriptsize BERT-Base (110M) & 92.3 & 90.9 & 88.5 & 88.2 & 84.4/84.6 & 91.7 & 64.3 & 53.5 & 82.0 \\
-%      \scriptsize CRATE{-BERT-Base} (61M) & 85.9 & 80.0 & 73.0 & 85.8 & 76.1/75.3 & 83.4 & 53.8 & 56.3 & 74.4 \\
-%      % RoBERTa-Base & \color{gray}67.8 & 96.7 & 92.3 & 92.2 & 90.2 & 90.8/90.2 & 98.9 & 88.2 & 89.0 & 89.6 \\
-%      \hline
-%      \multicolumn{10}{c}{\textit{Further Finetuning after MNLI}} \\
-%      \hline
-%      \scriptsize BERT-Medium (41M) & \color{gray} 90.5 & 89.6 & 88.0 & \color{gray} 86.2 & \color{gray} 80.8/81.2 & \color{gray} 88.6 & 72.6 & \color{gray} 30.1 & 78.6 \\
-%      \scriptsize BERT-Base (110M) & \color{gray} 92.3 & 90.3 & 86.8 & \color{gray} 88.2 & \color{gray} 84.4/84.6 & \color{gray} 91.7 & 79.4 & \color{gray} 53.5 & 83.5 \\
-%      \scriptsize CRATE{-BERT-Base} (61M)  & \color{gray} 85.9 & 84.7 & 83.2 & \color{gray} 85.8 & \color{gray} 76.1/75.3 & \color{gray} 83.4 & 65.0 & \color{gray} 56.3 & 77.3 \\
-%      \hline
-%     \end{tabular}
-%     \label{tab:bert-eval}
-% \end{table*}
-
-
-
-
-% % \begin{figure}[!htp]
-% %     \centering
-% %     % \includegraphics[width=1.0\linewidth]{figs/crate4text/bert-step-eval.png}
-% %     \vspace{-2em}
-% %     \caption{GLUE scores evaluated after each pretraining checkpoint of CRATE-BERT. Core AVG is the average of SST-2, QQP, MNLI, and QNLI. AVG is the average of MRPC, STS-B, SST-2, QQP, MNLI, QNLI, WNLI, and RTE. For MRPC, QQP and MNLI, we consider both evaluation scores. For STS-B, we consider only spearman correlation.}
-% %     \label{fig:bert-step-eval}
-% %     \vspace{-1em}
-% % \end{figure}
-
-% \begin{figure}[t!]
-%      \centering
-%     %  \begin{subfigure}[b]{0.32\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/crate4text/bert_step_loss.pdf}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.32\textwidth}
-%     %      \centering
-%     % % % \includegraphics[width=\textwidth]{figs/crate4text/bert_step_eval.pdf}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.32\textwidth}
-%     %      \centering
-%     % % % \includegraphics[width=\textwidth]{figs/crate4text/gpt-loss.pdf}
-%     %  \end{subfigure}
-%         \caption{\small (\textit{left}) The training loss curve of CRATE-BERT-Base trained on the Wikipedia and BookCorpus datasets. 
-%         (\textit{middle}) GLUE single-task finetuning scores evaluated after each pretraining checkpoint of CRATE-BERT-Base. 
-%         (\textit{right}) The loss curve of CRATE-GPT-Base trained on the OpenWebText dataset.}
-%         \label{fig:crate-text-evals}
-% \end{figure}
-
-% \paragraph{CRATE-GPT evaluation results.} 
-% We evaluate CRATE{-GPT} models by measuring the zero-shot cross-entropy loss on different datasets. 
-% We evaluate CRATE{-GPT-Base} on OpenWebText (OWT) as well as other datasets as shown in \cite{radford2019language}. 
-% We compare with the official release of GPT2-Base which is pre-trained on WebText \cite{huggingface_gpt}, while CRATE{-GPT-Base} is pre-trained on OWT. 
-% {Meanwhile, in order to compare CRATE{-GPT} and the GPT2 model under similar number of model parameters, we consider the GPT2 with a smaller model size, denoted by GPT2-Small, and apply the same training setup described in \cite{nanogpt}.}
-% Therefore, we first fine-tune GTP2-Base on OWT before evaluating on the OWT test dataset.
-% The evaluation results on the test datasets are shown in Table~\ref{tab:gpt-eval}. 
-% % The training and validation losses over iterations are shown in Figure~\ref{fig:crate-text-evals}~(right).
-% % The training/validation loss converges around $3.37$ after training with a batch size of 384 and 600,000 iterations. 
-% % In comparison, the open GPT-2 implementation is pre-trained on OpenWebText with a batch size of 512 and 600,000 steps, and converges to a validation loss of $2.85$. 
-% We also present the pre-training loss of CRATE{-GPT} with respect to progressing
-% pre-training steps in Figure~\ref{fig:crate-text-evals}~(right).
-% From both Table~\ref{tab:gpt-eval} and Figure~\ref{fig:crate-text-evals}~(right), we can observe that the CRATE architecture can be applied as backbones for generative language models and achieve competitive performance compared to GPT2. 
-
-% For more technical details about the evaluation of the pre-trained CRATE-BERT and CRATE-GPT, please refer to \Cref{app:subsec-experiment-text}.
-
-% % \DP{@YY: check if some of this discussion should be moved to the appendix, seems quite technical/optimization-focused.}
-
-% % \begin{figure}[!htp]
-% %     \centering
-% %     % \includegraphics[width=1.0\linewidth]{figs/crate4text/gpt-loss.jpg}
-% %     \vspace{-2em}
-% %     \caption{The loss curve of our model (CRATE-GPT-Base) trained on the OpenWebText dataset. The training loss is very close to the validation loss so they heavily overlap.}
-% %     \label{fig:gpt-loss}
-% %     \vspace{-1em}
-% % \end{figure}
-
-% \begin{table}[t!]
-% \def\arraystretch{1.1}
-%     \small
-%     \caption{\small Zero-shot cross-entropy loss of the CRATE-GPT2-Base model and GPT2-Small, GPT2-Base model evaluated on the test split of the datasets (lower is better). 
-%     }
-%     \centering
-%     \begin{tabular}{ccccccc}
-%     \hline
-%     & \#parameters & \textbf{OWT} & \textbf{LAMBADA} & \textbf{WikiText} & \textbf{PTB} & \textbf{Avg} \\
-%      \hline
-%      GPT2-Base  & {124M} & 2.85 & 4.12 & 3.89 & 4.63 & 3.87 \\
-%      {GPT2-Small } &  {64M} & {3.04} & {4.49} & {4.31} & {5.15} & {4.25} \\
-%      CRATE-GPT2-Base & {60M} & 3.37 & 4.91 & 4.61 & 5.53 & 4.61 \\
-%      \hline
-%     \end{tabular}
-%     \label{tab:gpt-eval}
-% \end{table}
-
-% % \paragraph{Learning Stability.} We observe a stable learning progress of CRATE on both bidirectional and causal attention architectures, as shown in Figure \ref{fig:evals}. Figure \ref{fig:evals} (left) shows a stable representation learning progress of CRATE-BERT on text. Figure \ref{fig:evals} (right) shows a stable loss reduction of the CRATE-GPT model.
-
-% % \paragraph{Comparable Performance.} We observe a comparable performance of CRATE and the standard language models (BERT/GPT2). Table \ref{tab:bert-eval} shows that CRATE is comparable to the same size of BERT model (BERT-Medium), and table \ref{tab:gpt-eval} shows the potential of CRATE on zero-shot causal language modeling tasks.
-
-% \paragraph{Generated texts by CRATE-BERT and CRATE-GPT.} 
-% We also explored some qualitative examples generated by CRATE-BERT and CRATE-GPT, as shown in Figure \ref{fig:eval-gpt-qual}. We observe a similar behavior of CRATE and the standard Transformers, where both answers make sense and the standard transformer slightly outperforms CRATE.
-
-% \begin{figure}
-%     \centering
-%     % \includegraphics[width=0.95\linewidth]{figs/crate4text/text_eval_qual.pdf}
-%     \caption{\small Examples of predictions made by our models and the official models. The token \textit{in Italic} is the ground truth token. We compare CRATE-GPT2-Base to GPT2-Base on the next word prediction task and CRATE-BERT-Base to BERT-Medium on the masked language modeling task.
-%     }
-%     \label{fig:eval-gpt-qual}
-% \end{figure}
-
-% % \noindent
-% % \begin{minipage}{.5\textwidth}
-% % \vspace{0.1in}
-% % \small
-% % \begin{mdframed}[roundcorner=5pt]
-% % [GPT2] When Mary and John went to the store, John gave a drink to \\ \textcolor{blue}{Mary} (59.1\%) \quad them (21.7\%) \quad the (5.85\%)
-% % \end{mdframed}
-% % \end{minipage}
-% % \begin{minipage}{.5\textwidth}
-% % \vspace{0.1in}
-% % \small
-% % \begin{mdframed}[roundcorner=5pt]
-% % [CRATE-GPT2] When Mary and John went to the store, John gave a drink to \\ the (29.8\%) \quad \textcolor{blue}{Mary} (28.0\%) \quad John (10.1\%)
-% % \end{mdframed}
-% % \end{minipage}
-% % \noindent
-% % \begin{minipage}{.5\textwidth}
-% % \small
-% % \begin{mdframed}[roundcorner=5pt]
-% % [BERT] He loved sitting between her brothers on the couch and watching \texttt{[MASK]}.  \\ \textcolor{blue}{tv} (59.7\%)\quad television (12.4\%)\quad her (11.0\%)
-% % \end{mdframed}
-% % \end{minipage}
-% % \begin{minipage}{.5\textwidth}
-% % \small
-% % \begin{mdframed}[roundcorner=5pt]
-% % [CRATE-BERT] He loved sitting between her brothers on the couch and watching \texttt{[MASK]}. \\ \textcolor{blue}{tv} (48.9\%) \quad couch (38.6\%) \quad room (2.31\%)
-% % \end{mdframed}
-% % \end{minipage}
-% % \vspace{-3mm}
-% % \captionof{figure}{Examples of predictions made by our models and the official models. The token \textcolor{blue}{in blue} is the ground truth token. We compare CRATE-GPT2-Base to GPT2-Base on the next word prediction task and CRATE-BERT-Base to BERT-Medium on the masked language modeling task.}
-% % \label{fig:eval-gpt-qual}
-
-
-
-% \subsection{Analysis and Visualization of Learned CRATE Layers}\label{subsec:exp-in-depth-analysis}
-% % \yaodong{@Yaodong, polish the text of the starting paragraph.}
-% % We now study the representations in each layer of CRATE and measure the design objective sparse rate reduction at every layer.  
-% We now study the internal representations of CRATE at different layers---\(\{\vZ^{\ell}\}_{\ell=1}^{L}\). 
-% We measure the designed representation learning objective, sparse rate reduction \Cref{eq:objective-sparse-rate-reduction}, of token representations from different layers. 
-% We mainly consider the CRATE encoder architectures on image classification tasks (\Cref{subsubsec:image-classification-task}) for the experiments in this subsection.
-
-% % %\subsection{In-depth Layer-wise Analysis of CRATE}
-% % \label{subsec:exp-in-depth-analysis}
-
-
-% \paragraph{Do layers of CRATE achieve their design goals?} 
-% As described in \Cref{sub:compression} and \Cref{sub:sparse}, the \texttt{MSSA} block is designed to optimize the compression term  $R^{c}(\vZ \mid \vU_{[K]})$ and the \texttt{ISTA} block to sparsify the token representations (corresponding to the sparsification term $\|\vZ\|_0$). 
-% To understand whether CRATE indeed optimizes these terms, for each layer $\ell$, we measure (i) the compression term $R^{c}(\vZ^{\ell+1/2} \mid \vU_{[K]}^{\ell})$ on the \texttt{MSSA} block outputs $\vZ^{\ell+1/2}$; and (ii) sparsity $\|\vZ^{\ell+1}\|_0$ on the \texttt{ISTA} block outputs $\vZ^{\ell+1}$. 
-% Specifically, we evaluate these two terms by using training/validation samples from ImageNet-1K. Both terms are evaluated at the per-sample level and averaged over \(B = 1000\) samples.
-
-
-
-% In \Cref{fig:exp-rc-sparisty-small} we show  the plots of these two key measures at all layers for the learned CRATE{-small} model. We find that as the layer index $\ell$ increases, both the compression and the sparsification terms improve in most cases. The increase in the sparsity measure of the last layer is caused by the extra linear layer for classification.\footnote{ Note that the learned sparse (tokens) features need to be mixed in the last layer for predicting the class. The phenomenon of increase in the sparsity measure  at the last layer suggests that each class of objects may be associated with a number of features, and some of these features are likely to be shared across different classes.} 
-% These results suggest that CRATE aligns well with the original design goals: once learned, it essentially learns to gradually compress and sparsity the representations through its layers. In addition, we also measure the compression and sparsification terms on CRATE models with different model sizes as well as intermediate model checkpoints and the results are shown by plots in \Cref{fig:appendix-exp-rc-sparisty-all-model-size} of \Cref{subsec:appendix-exp-results}. The observations are very consistent across all different model sizes---both the compression and sparsification terms improve in most scenarios. Models with more layers tend to optimize the objectives more effectively, confirming our understanding of each layer's roles. 
-
-% To see the effect of learning, we present the evaluations on CRATE{-Small} trained with different numbers of epochs in \Cref{fig:exp-rc-sparisty-small-epochs}. 
-% When the model is not trained enough (e.g.~untrained), the architecture does not optimize the objectives effectively. However, during training---learning better subspaces $\vU_{[K]}^{\ell}$ and dictionaries $\vD^{\ell}$---the designed blocks  start to optimize the objectives much more effectively. 
-
-
-% \begin{figure}[t!]
-%      \centering
-%     %  \begin{subfigure}[b]{0.47\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/Rhat/mcr2_trainval.pdf}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.482\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/Rhat/sparsity_trainval.pdf}
-%     %  \end{subfigure}
-%         \caption{\small \textit{Left}: The compression term $R^{c}(\vZ^{\ell+1/2} \mid \vU_{[K]}^{\ell})$ of the \texttt{MSSA} outputs at different layers. \textit{Right}: the sparsity of the \texttt{ISTA} output block, $\|\vZ^{\ell+1}\|_0 / (d\cdot N)$, at different layers. 
-%         (Model: CRATE{-Small}).}
-%         \label{fig:exp-rc-sparisty-small}
-% \end{figure}
-
-% \begin{figure}[t!]
-%      \centering
-%     %  \begin{subfigure}[b]{0.49\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/randinit/mcr2_crossepoch.pdf}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.49\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/randinit/sparsity_crossepoch.pdf}
-%     %  \end{subfigure}
-%         \caption{\small The compression term $R^c(\vZ^{\ell + 1/2} \mid \vU_{[K]}^{\ell})$ (\textit{left}) and sparsification term $\|\vZ^{\ell + 1}\|_0 / (d \cdot N)$ (\textit{right}) across models trained with different numbers of epochs. (Model: CRATE{-Base}).}
-%         \label{fig:exp-rc-sparisty-small-epochs}
-% \end{figure}
-
-
-
-% \begin{figure}[ht]
-%      \centering
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer1.pdf}
-%     %      \caption{$\ell=1$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer2.pdf}
-%     %      \caption{$\ell=2$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer3.pdf}
-%     %      \caption{$\ell=3$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer4.pdf}
-%     %      \caption{$\ell=4$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer5.pdf}
-%     %      \caption{$\ell=5$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer6.pdf}
-%     %      \caption{$\ell=6$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer7.pdf}
-%     %      \caption{$\ell=7$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer8.pdf}
-%     %      \caption{$\ell=8$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer9.pdf}
-%     %      \caption{$\ell=9$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer10.pdf}
-%     %      \caption{$\ell=10$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer11.pdf}
-%     %      \caption{$\ell=11$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialISTA/DTD_new_layer12.pdf}
-%     %      \caption{$\ell=12$.}
-%     %  \end{subfigure}
-%         \caption{\small Visualizing layer-wise token $\vZ^{\ell}$ representations at each layer $\ell$. To enhance the visual clarity, we randomly extract a 50$\times$50 sub-matrix from $\vZ^{\ell}$ for display purposes. (Model: CRATE{-Tiny})}
-%         \label{fig:appendix-exp-ista-sparsity-heatmap}
-% \end{figure}
-
-
-% \paragraph{Visualizing layer-wise token representations.} 
-% To gain a better understanding of the token representations of CRATE, we visualize the output of each \texttt{ISTA} block at layer $\ell$ in \Cref{fig:appendix-exp-ista-sparsity-heatmap}. 
-% Specifically, we visualize the $\vZ^{\ell+1}$ via heatmap plots. 
-% We observe that the output $\vZ^{\ell+1}$ becomes more sparse as the layer increases. 
-% Moreover, besides the sparsity, we also find that $\vZ^{\ell+1}$ becomes more structured (i.e., low-rank), which indicates that the set of token representations become closer to linear subspaces, confirming our mental picture of the geometry of each layer (as in \Cref{fig:encoder_compression_sparsification} and \Cref{fig:crate_autoencoding}). 
-% % \DP{@YY: this result is entirely displayed in appendix, should we keep this paragraph in main body?}
-
-
-% \begin{figure}[t!]
-%      \centering
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer1.pdf}
-%     %      \caption{$\ell=1$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer2.pdf}
-%     %      \caption{$\ell=2$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer3.pdf}
-%     %      \caption{$\ell=3$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer4.pdf}
-%     %      \caption{$\ell=4$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer5.pdf}
-%     %      \caption{$\ell=5$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer6.pdf}
-%     %      \caption{$\ell=6$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer7.pdf}
-%     %      \caption{$\ell=7$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer8.pdf}
-%     %      \caption{$\ell=8$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer9.pdf}
-%     %      \caption{$\ell=9$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer10.pdf}
-%     %      \caption{$\ell=10$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer11.pdf}
-%     %      \caption{$\ell=11$.}
-%     %  \end{subfigure}
-%     %  \begin{subfigure}[b]{0.24\textwidth}
-%     %      \centering
-%     % % \includegraphics[width=\textwidth]{figs/visualization/PartialDTD/SSA_DTD_layer12.pdf}
-%     %      \caption{$\ell=12$.}
-%     %  \end{subfigure}
-%         \caption{\small We visualize the $[\vU_1^{\ell}, \dots, \vU_K^{\ell}]^{\adj}[\vU_1^{\ell}, \dots, \vU_K^{\ell}] \in \bR^{pK \times pK}$ at different layers.  
-%         The $(i, j)$-th block in each sub-figure corresponds to $(\vU_i^{\ell})\adj\vU_j^{\ell}$ for $i, j \in [K]$ at a particular layer $\ell$. To enhance the visual clarity, for each subspace $\vU_i$, we randomly pick 4 directions for display purposes. (Model: CRATE{-Tiny})}
-%         \label{fig:appendix-exp-visualize-UiUj}
-% \end{figure}
-
-
-% \paragraph{Visualizing layer-wise subspaces in multi-head self-attention.} 
-% We now visualize the $\vU_{[K]}^{\ell}$ matrices used in the \texttt{MSSA} block. 
-% In \Cref{sub:compression}, we assumed that $\vU_{[K]}^{\ell}$ were incoherent to capture different ``views'' of the set of tokens. 
-% In Fig.~\ref{fig:appendix-exp-visualize-UiUj}, we first normalize the columns in each $\vU_k^{\ell}$, then we visualize the $[\vU_1^{\ell}, \dots, \vU_K^{\ell}]^{\adj}[\vU_1^{\ell}, \dots, \vU_K^{\ell}] \in \bR^{pK \times pK}$. 
-% The $(i, j)\th$ block in each sub-figure corresponds to $(\vU_i^{\ell})\adj\vU_j^{\ell}$ for $i, j \in [K]$ at a particular layer $\ell$. 
-% We find that the learned $\vU_{[K]}^{\ell}$ are approximately incoherent, which aligns well with our assumptions. One interesting observation is that the $\vU_{[K]}^{\ell}$ becomes more incoherent when the layer index $\ell$ is larger, which suggests that the token representations are more separable. This mirrors the situation in other popular deep networks \cite{he2022law}. 
-% % \DP{@YY: this result is entirely displayed in appendix, should we keep this paragraph in main body?}
-
-
-
-
-% \subsection{Emergence of Semantic Properties in Learned CRATE Attention Maps}
-% \label{sec:emergence}
-% % \yaodong{@Tianzhe, @Yaodong}
-
-% % \noindent
-% % \yaodong{Outline for this subsection}
-% % {\color{blue}
-% % \begin{enumerate}
-% %     \item Goal: what's the goal of the experiments? Study the interpretability of attentions maps in transformers.
-% %     \item Describe the setup (data, model, how to evaluate).
-% %     \item Present the results.
-% %     \item Discuss the results (highlight interesting observations, etc). For example, with only supervised training recipe, CRATE enjoys nice emergence segmentation properties.
-% % \end{enumerate}
-% % }
-% % \noindent
-% % In this subsection, we exhibit and study the emergence of segmentation in the attention maps of CRATE through qualitative and quantitative evaluations. 
-
-% \noindent
-% In this subsection, we analyze the attention maps within CRATE models trained on vision tasks. 
-% Previous work~\cite{caron2021emerging} use the self-attention in vision transformers to study semantic segmentation of the input image. 
-% \cite{caron2021emerging} demonstrated that a specific self-supervised training method, named DINO, can lead to the emergence of segmentation in vision transformers. On the other hand, ViTs trained with supervised learning do not have such properties. 
-% In contrast, as we will present in this subsection, we find that \textit{the white-box design of CRATE leads to the emergence of segmentation properties in the network’s self-attention maps, solely through a minimalistic supervised training recipe---the supervised classification training used in vanilla supervised ViTs}. 
-% We quantify the segmentation properties of CRATE both qualitatively and quantitatively and compare the results with ViTs. 
-% Through extensive evaluations, we find that the self-attention maps in white-box transformers (CRATE) are much more interpretable than vanilla black-box vision transformers.
-
-% \subsubsection{Experimental Setup}
-% \paragraph{Model architecture} We utilize the CRATE model as described in~\Cref{sub:architecture} at sizes -S/8 and -B/8 (that is, CRATE{-Small} and CRATE{-Base} with patch size \(8 \times 8\)). We similarly adopt the ViT model from \cite{dosovitskiy2020image} using the same scales (-S/8 and -B/8), ensuring consistent configurations between them. 
-% Refer to Table~\ref{tab:Comparison_with_VIT_IN21k} for detailed model performance evaluations on classification tasks. 
-
-% % We summarize the model performance on classification tasks in Table~\ref{tab:Comparison_with_VIT_IN21k}.
-% % \TC{tbd: setup appendix}
-% % One can see the details \Cref{??}.
-
-% \paragraph{Datasets.} In this subsection, all visual models are trained for classification tasks, using the methodology described in \Cref{subsubsec:image-classification-task}, on the complete ImageNet dataset~\cite{deng2009imagenet}, commonly referred to as ImageNet-21K. This dataset comprises 14,197,122 images distributed across 21,841 classes. We apply the MaskCut~\cite{wang2023cut} pipeline on the COCO {val2017}~\cite{lin2014microsoft}, which consists of 5,000 RGB images, and assess our models' performance for both object detection and instance segmentation tasks. \textit{All evaluation procedures are unsupervised, and we do not update the model weights during the detection and segmentation evaluation processes.}
-% % For training, each RGB image was resized to dimensions $3\times 224\times 224$, normalized using means of $(0.485, 0.456, 0.406)$ and standard deviations of $(0.229, 0.224, 0.225)$, and then subjected to center cropping and random flipping. 
-% % We set the mini-batch size as 4,096 and apply the Lion optimizer~\cite{chen2023symbolic} with learning rate $9.6\times 10^{-5}$ and weight decay $0.05$. 
-% % All the models, including CRATE{s} and ViTs are pre-trained with 90 epochs on ImageNet-21K.
-
-% \begin{figure}
-%     \centering
-%     % \includegraphics[width=0.95\linewidth]{figs/segmentation_vis/Teaser.pdf}
-%     \caption{\small \textbf{Self-attention maps from a supervised CRATE with $8\times
-%     8$ patches} trained using classification. 
-%     The CRATE architecture automatically learns to perform object segmentation without a complex self-supervised training recipe or any fine-tuning with segmentation-related annotations. 
-%     For each image pair, we visualize the original image on the left and the self-attention map of the image on the right. 
-%     }
-%     \label{fig:segmentation-teaser}
-% \end{figure}
-
-% \subsubsection{Measuring the Emergence of Segmentation}
-% \label{subsubsec:segmentation_measurement}
-% \paragraph{Visualizing self-attention maps.} To qualitatively measure the emergence phenomenon, we adopt the attention map approach based on the [\texttt{CLS}] token, which has been widely used as a way to interpret and visualize transformer-like architectures~\cite{abnar2020quantifying, caron2021emerging}. 
-% Indeed, we use the same methodology as \cite{abnar2020quantifying,caron2021emerging}, noting that in CRATE the query-key-value matrices are all the same; a more formal accounting is deferred to \Cref{app:attn_maps}. 
-% The visualization results of self-attention maps are summarized in \Cref{fig:segmentation-teaser}. 
-% We observe that the self-attention maps of the CRATE model correspond to semantic regions in the input image. 
-% Our results suggest that the CRATE model encodes a clear semantic segmentation of each image in the network's internal representations, which is similar to the self-supervised method DINO~\cite{caron2021emerging}. In contrast, as shown in~\Cref{appendix_fig:crate_vs_vit} in the Appendices, the vanilla ViT trained on supervised classification does not exhibit similar segmentation properties.
-
-% \paragraph{Object detection and fine-grained segmentation.}\label{subsec_method_maskcut}
-% To further validate and evaluate the rich semantic information captured by CRATE, we employ MaskCut~\cite{wang2023cut}, a recent effective approach for object detection and segmentation that does not require human annotations. As usual, we provide a more detailed methodological description in \Cref{app:attn_maps}.
-% This procedure allows us to extract more fine-grained segmentation for  an image based on the token representations learned by different methods. 
-% In Figure~\ref{fig:maskcut_visualization}, we visualize the fine-grained segmentation produced by MaskCut on features from ViT trained by classification, CRATE trained by classification as in Section \ref{subsubsec:image-classification-task}, and CRATE trained via DINO as in Section \ref{sec:experiment-DINO}, respectively. We compare the segmentation and detection performance in Table~\ref{tab: maskcut_main_result}.
-% Based on these results, we observe that MaskCut on features learned with supervised ViT  typically fails to produce good  segmentation masks, for example, the first image in Figure~\ref{fig:maskcut_visualization} and the ViT-S/8 row in Table~\ref{tab: maskcut_main_result}. On the other hand, we notice that, regardless of the training task  (supervised or unsupervised), CRATE is able to capture semantically meaningful boundaries of the main objects in an image.
-% Compared to ViT, CRATE provides better internal representation tokens for both segmentation and detection.
-
-
-
-
-% \begin{figure}[t!]
-%     \centering
-%     % \includegraphics[width=1.0\linewidth]{figs/segmentation_vis/maskcut_3row.pdf}
-%     \caption{\small \textbf{Visualization of segmentation with MaskCut on COCO {val2017}~\cite{lin2014microsoft}.}
-%     \textit{Top and Bottom Rows}: CRATE architecture clearly detects main objects in the image when trained using either supervised classification technique in Section \ref{subsubsec:image-classification-task} or the DINO self-supervised technique in Section \ref{sec:experiment-DINO} ~\cite{caron2021emerging}. \textit{Middle Row}: Note that compared to CRATE, ViT trained via classification often fails to detect main  objects in the images (columns 2, 3, 4). }
-%     \label{fig:maskcut_visualization}
-% \end{figure}
-
-% \begin{table*}[t!]
-% \caption{\small \textbf{Object detection and fine-grained segmentation via MaskCut on COCO {val2017}~\cite{lin2014microsoft}}. We consider models with different scales and evaluate the average precision measured by COCO's official evaluation metric. 
-% The first four models are pre-trained with image classification tasks under label supervision; the bottom three models are pre-trained via the DINO self-supervised technique~\cite{caron2021emerging}. CRATE conclusively performs better than the ViT at detection and segmentation metrics when both are trained using supervised classification. 
-% }
-% \centering
-% \small
-% \setlength{\tabcolsep}{8pt}
-% \resizebox{0.8\textwidth}{!}{\begin{tabular}{@{}llcccccccc@{}}
-% \toprule
-%  &  & \multicolumn{3}{c}{Detection} &  \multicolumn{3}{c}{Segmentation} \\ 
-% Model & Train & AP$_{50}$ & AP$_{75}$ & AP & AP$_{50}$ & AP$_{75}$ & AP  \\ 
-% \midrule
-% CRATE-S/8 & Supervised & 2.9 & 1.0 & 1.1 & 1.8 & 0.7 & 0.8 \\
-% CRATE-B/8 & Supervised & 2.9& 1.0 & 1.3 & 2.2 & 0.7 & 1.0 \\
-% ViT-S/8 & Supervised & 0.1& 0.1 & 0.0 & 0.0 & 0.0 & 0.0 \\
-% ViT-B/8 & Supervised & 0.8 & 0.2 & 0.4 & 0.7 & 0.5 & 0.4 \\
-% \midrule
-% %\rowcolor{lightgray!30}
-% \color{gray} CRATE-B/8 & \color{gray} DINO & \color{gray}3.5 & \color{gray}1.1 & \color{gray}1.6 & \color{gray}2.4 & \color{gray}0.5 & \color{gray}1.0 \\
-% %\rowcolor{lightgray!30}
-% \color{gray} ViT-S/8 & \color{gray} DINO & \color{gray}5.0 & \color{gray}2.0 & \color{gray}2.4 & \color{gray}4.0 & \color{gray}1.3 & \color{gray}1.7 \\
-% %\rowcolor{lightgray!30}
-% \color{gray} ViT-B/8 & \color{gray} DINO & \color{gray}5.1 & \color{gray}2.3 & \color{gray}2.5 & \color{gray}4.1 & \color{gray}1.3 & \color{gray}1.8 \\
-% \bottomrule
-% \end{tabular}}
-% \label{tab: maskcut_main_result}
-% \end{table*}
-
-
-% \begin{figure}[t!]
-%     \centering
-%     % \includegraphics[width=\textwidth]{figs/segmentation_vis/Semantic_head_small.pdf}
-%     \caption{\small \textbf{Visualization of semantic heads.}  We forward a mini-batch of images through a supervised CRATE and examine the attention maps from all the heads in the penultimate layer. 
-%     We visualize a selection of attention heads to show that certain heads convey specific semantic meaning, i.e. \textit{head 0} $\leftrightarrow$ \textit{``Legs''}, \textit{head 1} $\leftrightarrow$ \textit{``Body''}, \textit{head 3} $\leftrightarrow$ \textit{``Face''}, \textit{head 4} $\leftrightarrow$ \textit{``Ear''}. }
-%     \label{fig:semantic_heads}
-% \end{figure}
-
-
-% \subsubsection{Analysis of Segmentation in CRATE}
-% \paragraph{Segmentation emerges through minimalistic design.}
-% Our empirical results demonstrate that self-supervised learning, as well as the specialized design options in DINO~\cite{caron2021emerging} (e.g., momentum encoder, student and teacher networks, self-distillation, etc.) are not necessary for the emergence of segmentation. We contend that an equally-promising approach to promote segmentation properties in transformer is to \textit{design the transformer architecture with the structure of the input data in mind}. This finding of CRATE represents the \textit{first supervised vision model with emergent segmentation properties}, and establishes white-box transformers as a promising direction for interpretable data-driven representation learning in foundation models. 
-
-% \paragraph{Identifying semantic properties of attention heads.}\label{subsec:semantic_meaning}
-% We are interested in capturing the semantic meaning of certain attention \textit{heads}; this is an important task for interpretability and is already studied for language transformers \cite{olsson2022context}.
-% Intuitively, each head captures certain features of the data. 
-% Given a CRATE model, we first forward an input image (e.g.\ a horse image as in \Cref{fig:semantic_heads}) and select four attention heads which seem to have semantic meaning by manual inspection. After identifying the attention heads, we visualize the self-attention map of these heads on other input images. 
-% Interestingly, we find that each of the selected attention heads captures a different part of the object, and even a different semantic meaning. 
-% For example, the attention head displayed in the first column of \Cref{fig:semantic_heads} captures the legs of different animals, and the attention head displayed in the last column captures the ears and head. 
-% This parsing of the visual input into a part-whole hierarchy has been a fundamental goal of learning-based recognition architectures since deformable part models~\cite{Felzenszwalb2005-ma,Felzenszwalb2008-ui} and capsule networks~\cite{Hinton2011-yb,Sabour2017-xo}---strikingly, it emerges from the white-box design of CRATE within our simple supervised training setup.%\footnote{In this connection, we note that \cite{Hinton2021-fm} recently surmised that the query, key, and value projections in the transformer should be made equal for this reason---the design of CRATE and \Cref{fig:semantic_heads} confirm this. }
-
-% % \begin{figure}[h]
-% %     \centering
-% %     % \includegraphics[width=\textwidth]{figs/segmentation_vis/crate_vs_vit.pdf}
-% %     \vspace{-0.3in}
-% %     \caption{\textbf{More attention maps of supervised CRATE and ViT } on images from COCO {val2017}. We select the second-to-last layer attention maps for CRATE and the last layer for ViT.}
-% %     \label{fig:attentionmap_crate_vs_vit}
-% % \end{figure}
-
-
-
-% %%% END JOURNAL DUMP
-
-% \section{ViT for Image Classification}
-
-
-
-% \section{DINO for Image Segmentation}
-
-% \section{BERT for Text Completion}
-
-% \section{GPT for Text Prediction}
-
-% \section{Denoising and Diffusion}
-% To be done...
-
-% \section{MAE for Image Completion}
-
-% \section{Closed-Loop Transcription}
-% To be done... 
+\begin{exercise}
+    \phantom{}
+    \begin{enumerate}[(a)]
+        \item Implement the CRATE and CRATE-\(\alpha\) models.
+        \item Compare their performance and efficiency on the CIFAR-10 dataset.
+        \item Compare their interpretability in two ways:
+        \begin{itemize}
+            \item The sparsity \(\norm{\vZ}_{0}\) of the representation \(\vZ\).
+            \item The attention maps \(\va_{\theta}^{k, \ell}\).
+        \end{itemize}
+    \end{enumerate}
+\end{exercise}
 
 \end{document}
