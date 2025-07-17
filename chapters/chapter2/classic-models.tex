@@ -1450,46 +1450,176 @@ The ISTA, then, can be viewed as a forward pass of a primitive (recurrent one-la
 \subsection{Overcomplete Dictionary Learning} 
 
 Recall that we have the data model 
-\begin{equation}
+\begin{equation}\label{eq:overcomplete-dl-section-data-model}
     \vX = \vA\vZ + \vE,
 \end{equation}
-where \(\vZ\) is sparse, and our goal previously was to estimate \(\vZ\) given knowledge of the data \(\vX\) and the dictionary atoms \(\vA\). Now we turn to the more usual, more natural, and more difficult case where we do not know either \(\vA\) or \(\vZ\) and seek to learn them from a large dataset. In particular, we solve the problem
+where \(\vZ\) is sparse, and our goal previously was to estimate \(\vZ\) given
+knowledge of the data \(\vX\) and the dictionary atoms \(\vA\). Now we turn to
+the more practical and more difficult case where we do not know
+either \(\vA\) or \(\vZ\) and seek to learn them from a large dataset. 
+
+A direct generalization of \Cref{eq:sparse_dl_lasso} suggests solving the problem
 \begin{equation}
     \min_{\tilde{\vA}, \tilde{\vZ}}\bc{\norm{\vX - \tilde{\vA}\tilde{\vZ}}_{F}^{2} + \lambda \norm{\tilde{\vZ}}_{1}}.
+    \label{eqn:DL-overcomplete-try}
+\end{equation}
+However, the bilinear term in \Cref{eqn:DL-overcomplete-try} introduces a scale
+ambiguity that hinders convergence: given any point $(\tilde{\vA},
+\tilde{\vZ})$ and any constant $c>0$, the substitution
+$(c^{-1}\tilde{\vA}, c\tilde{\vZ})$ gives loss value
+\begin{equation}
+    \norm{\vX - \tilde{\vA}\tilde{\vZ}}_{F}^{2} + c\lambda \norm{\tilde{\vZ}}_{1}.
+\end{equation}
+This loss is evidently minimized over $c$ by taking $c \to 0$, which corresponds
+to making the rescaled dictionary $c^{-1} \tilde{\vA}$ go `to infinity'. In
+particular, the iterates of any optimization algorithm solving
+\eqref{eqn:DL-overcomplete-try} will not converge.
+
+This issue with \eqref{eqn:DL-overcomplete-try} is dealt with by adding
+a constraint on the scale of the columns of the dictionary $\tilde{\vA}$.
+For example, it is common to assume that each column $\vA_j$ of the dictionary
+$\vA$ in \eqref{eq:overcomplete-dl-section-data-model} has bounded $\ell^2$
+norm---say, without loss of generality, by $1$.
+We then enforce this as a constraint, giving the objective
+\begin{equation}
+    \min_{\tilde{\vZ}, \tilde{\vA} \,:\, \norm{\tilde{\vA}_j}_2 \leq 1}
+    \bc{\norm{\vX - \tilde{\vA}\tilde{\vZ}}_{F}^{2} + \lambda \norm{\tilde{\vZ}}_{1}}.
     \label{eqn:DL-overcomplete}
 \end{equation}
-\begin{remark}[$\ell^4$ maximation versus $\ell^1$ minimization]
-Note that the above problem formulation follows naturally from the LASSO formulation \eqref{eq:sparse_dl_lasso} for sparse coding. We promote the sparsity of the solution with minimizing the \(\ell^1\) norm. Nevertheless, if we are only interested in recovering the over-complete dictionary \(\vA\), the \(\ell^4\) maximization scheme introduced in Section \ref{sec:complete-dictionary} also generalizes to the over-complete case, without any significant modification. Interested readers may refer to the work of \cite{Qu2020Geometric}. 
+Constrained optimization problems such as \eqref{eqn:DL-overcomplete}
+can be solved by a host of sophisticated algorithms
+\cite{nocedal2006numerical}. However, a simple and scalable one is actually
+furnished by the same proximal gradient descent algorithm that we used to solve
+the sparse coding problem in the previous section.
+We can encode each constraint as additional regularization term, via the
+characteristic function for the constraint set---details are given in
+\Cref{example:prox-of-characteristic-function}.
+Applying proximal gradient descent to the resulting regularized problem is
+equivalent to \textit{projected gradient descent}, in which, at each iteration,
+the iterates after taking a gradient descent step are projected onto the
+constraint set.
+
+\begin{remark}[$\ell^4$ maximization versus $\ell^1$ minimization]
+Note that the above problem formulation follows naturally from the LASSO
+    formulation \eqref{eq:sparse_dl_lasso} for sparse coding. We promote the
+    sparsity of the solution via the \(\ell^1\) norm. Nevertheless, if we are only interested in recovering the over-complete dictionary \(\vA\), the \(\ell^4\) maximization scheme introduced in Section \ref{sec:complete-dictionary} also generalizes to the over-complete case, without any significant modification. Interested readers may refer to the work of \cite{Qu2020Geometric}. 
 \end{remark}
 
-The above problem \eqref{eqn:DL-overcomplete}, which we call \textit{overcomplete dictionary learning}, is nonconvex as here both \(\vA\) and \(\vZ\) are unknown now. We cannot be solved easily by the standard convex optimization toolkit. Nevertheless, because it is interesting, simple to state, and practically important, there have been many important works dedicated to different algorithms and theoretical analysis for this problem. Here, for the interest of this book, we present an idiomatic approach to solve this problem which is closer to the spirit of deep learning.
+The above problem \eqref{eqn:DL-overcomplete}, which we call
+\textit{overcomplete dictionary learning}, is nonconvex as here both \(\vA\) and
+\(\vZ\) are unknown. It cannot be solved easily by the standard convex
+optimization toolkit. Nevertheless, because it is interesting, simple to state,
+and practically important, there have been many important works dedicated to
+different algorithms and theoretical analysis for this problem. Here, for the
+interest of this manuscript, we present an idiomatic approach to solve this problem
+which is closer to the spirit of deep learning.
 
-From our experience with the LASSO problem above, it is easy to see that, for the two unknowns \(\vA\) and \(\vZ\), if we fix one and optimize the other, each subproblem is in fact convex and easy to solve. This naturally suggests that we could attempt to solve the above program \eqref{eqn:DL-overcomplete} by minimizing against \(\vZ\) or \(\vA\) alternatively, say using gradient descent. This leads to the following iterative scheme:
+From our experience with the LASSO problem above, it is easy to see that, for
+the two unknowns \(\vA\) and \(\vZ\), if we fix one and optimize the other, each
+subproblem is in fact convex and easy to solve. This naturally suggests that we
+could attempt to solve the above program \eqref{eqn:DL-overcomplete} by
+minimizing against \(\vZ\) or \(\vA\) alternatively, say using gradient descent.
+Coupled with a natural choice of initialization, this leads to the following
+iterative scheme:
 \begin{align}
-    & \vZ^{1}
-     \sim \dNorm(\vzero, \vI), \quad \vA_{1}
-     \sim \dNorm(\vzero, \vI), \\ 
-    &\vZ^{\ell + 1} = S_{\eta\lambda}\rp{\vZ^{\ell} - 2\eta\vA_{t}^{\top}(\vA_{t}\vZ^{\ell} - \vX)}, \qquad \forall \ell \in [L] \label{eqn:ISTA-update}\\ 
-    &\vA_{t + 1} = \vA_{t} - 2\nu (\vA_{t}\vZ^{\ell + 1} - \vX)\vZ^{\ell + 1}, \qquad\;\; \forall t \in [T].\label{eqn:DL-update}
+    % & \vZ^{1}
+    %  = \Zero, \quad (\vA_{1})_j
+    %  \simiid \dNorm(\vzero, \tfrac{1}{D}\vI), \enspace \forall j \in [m], \\ 
+    &\vZ^{\ell + 1} = S_{\eta\lambda}\rp{\vZ^{\ell}
+    - 2\eta\vA_{+}^{\top}(\vA_{+}\vZ^{\ell} - \vX)},
+    \quad \vZ^1 = \Zero,
+    \quad \forall \ell \in [L] \label{eqn:ISTA-update}\\ 
+    &\vZ^+ = \vZ^L,\\
+    &\vA_{t + 1} = \proj_{\norm{(\,\cdot\,)_j}_2 \leq 1,\,\forall j}\left(
+    \vA_{t} - 2\nu (\vA_{t}\vZ^+ - \vX)(\vZ^+)^\top
+    \right), 
+    \quad (\vA_{1})_j \simiid \dNorm(\vzero, \tfrac{1}{D}\vI), \enspace \forall
+    j \in [m], 
+    \quad\;\; \forall t \in [T],\label{eqn:DL-update}\\
+    &\vA_+ = \vA_T,
 \end{align}
-Here, unlike typically alternating minimization scheme, we here use two separate indices $\{t\}$ and $\{\ell\}$ to indicate the iterations. As we will see later, this allows us to interpret the two updates separately in the context of deep learning. Despite the dictionary learning problem is a nonconvex problem, it has been shown that the above alternating minimization type algorithms indeed converge to the correct solution, at least locally, see for example \cite{alekh-2016}.
+where the projection operation in the update for $\vA$ ensures each column has
+at most unit $\ell^2$ norm, via $\vA_j \mapsto \vA_j / \max \set{\norm{\vA_j}_2,
+1}$, and where $\vA_+$ is initialized with each column i.i.d.\ $\cN(\Zero,
+\tfrac{1}{D} \vI)$.
+The above consists of one `block' of alternating minimization, and we repeatedly
+perform such blocks, each with independent initializations, until convergence.
+Above, we have used two separate indices $\{t\}$ and $\{\ell\}$ to indicate the
+iterations. As we will see later, this allows us to interpret the two updates
+separately in the context of deep learning. 
+
+Despite the dictionary learning problem being a nonconvex problem, it has been
+shown that alternating minimization type algorithms indeed converge to
+the correct solution, at least locally. See, for example, \cite{alekh-2016}.
+As a practical demonstration, the above algorithm (with $L = T = 1$) was used to
+generate the results for overcomplete dictionary learning in
+\Cref{fig:ReconMNIST}.
 
 %\yima{Sam, please fix this as a vanilla algorithm for solving the over-complete dictionary learning problem. State results regarding understanding the correctness of such an approach... Complete this subsection.}
 
 \subsection{Learned Deep Sparse Coding}
 \label{sec:LISTA}
-The main observation from the above approach is to notice that \textit{when we fix \(\vA\), the ISTA update for $\vZ^\ell$ \eqref{eqn:ISTA-update} looks like the forward pass of a deep neural network with weights given by \(\vA\) (and \(\vA^{\top}\))}. But in general, we do not know the true $\vA_o$, and the current estimate $\vA_t$ could be erroneous. Hence it needs to be further updated using \eqref{eqn:DL-update} based on the residual of using the current $\vA_t$ and $\vZ^{\ell +1}$ to recover $\vX$. 
+The main observation from the alternating minimization algorithm for
+overcomplete dictionary learning in the previous section
+(\Cref{eqn:ISTA-update,eqn:DL-update}) is to notice that \textit{when we
+fix \(\vA\), the ISTA update for $\vZ^\ell$ \eqref{eqn:ISTA-update} looks like
+the forward pass of a deep neural network with weights given by \(\vA\) (and
+\(\vA^{\top}\))}. But in general, we do not know the true $\vA$, and the current
+estimate $\vA_+$ could be erroneous. Hence it needs to be further updated using
+\eqref{eqn:DL-update} based on the residual of using the current estimate of the
+sparse codes $\vZ^+$ to reconstruct $\vX$. 
+
+The alternating minimization scheme
+above randomly re-initializes the dictionary $\vA_1$ on every such update.
+A possible improvement, which brings us closer in spirit to the construction of
+deep neural networks, uses instead \textit{warm starting}, where the residual is
+generated using the previous estimate $\vA_+$ for the dictionary.
 
 
 \paragraph{Layerwise learned sparse coding.}
-Hence, if we view each ISTA update \eqref{eqn:ISTA-update} as a layer and allow the associated dictionary, now denoted as $\vA_t^\ell$, to update in time, this leads to a  ``layerwise-learnable'' sparse coding scheme:
+Hence, if we view each ISTA update \eqref{eqn:ISTA-update} as a layer and allow
+the associated dictionary, now denoted as $\vA_t^\ell$, to update in time, this
+leads to a  ``layerwise-learnable'' sparse coding scheme:
 \begin{align}
-    & \vZ^{\ell + 1} = S_{\eta\lambda}\rp{\vZ^{\ell} - 2\eta\vA_{t}^{\ell\top}(\vA_{t}^\ell\vZ^{\ell} - \vX)}, \quad \forall \ell \in [L] \\ 
-    & \vA_{t + 1}^\ell = \vA_{t}^\ell - 2\nu (\vA_{t}^\ell\vZ^{\ell + 1} - \vX)\vZ^{\ell + 1}, \qquad \forall t \in [T].
+    & \vZ^{\ell + 1} = S_{\eta\lambda}\rp{\vZ^{\ell}
+    - 2\eta(\vA_{t}^{\ell})^\top(\vA_{t}^\ell\vZ^{\ell} - \vX)}, \quad \forall \ell \in [L] \\ 
+    & \vA_{t + 1}^\ell = \vA_{t}^\ell - 2\nu (\vA_{t}^\ell\vZ^{\ell + 1}
+    - \vX)(\vZ^{\ell + 1})^\top, \qquad \forall t \in [T],
 \end{align}
-Each of the \(L\) inner steps can be considered as a one-layer  forward pass, while each of  the \(T\) outer steps can be considered as a one-layer  backward pass, of a primitive deep neural network. In particular, this algorithm is the simplest case in which a clear divide between forward optimization and backward learning manifests. This divide is still observed in current neural networks.
+\sdb{This iteration is not well defined. I'm going to infer meaning and fix
+below. Can update later after confirmed.}
+\begin{align}
+    & \vZ^{1}_1
+     = \Zero, \quad (\vA_{1}^1)_j
+     \simiid \dNorm(\vzero, \tfrac{1}{D}\vI), \enspace \forall j \in [m], \\ 
+    & \vZ^{\ell + 1}_t = S_{\eta\lambda}\rp{\vZ^{\ell}_t
+    - 2\eta(\vA_{t}^{\ell})^\top(\vA_{t}^\ell\vZ^{\ell}_t
+    - \vX)},\label{eq:ISTA-update-layerwise}\\ 
+    & \vA_{t + 1}^{\ell+1} = \vA_{t}^\ell - 2\nu (\vA_{t}^\ell\vZ^{\ell + 1}_t
+    - \vX)(\vZ^{\ell + 1}_t)^\top.
+\end{align}
+Note that this iteration only defines $\vZ_t^\ell$ for $t = \ell$ and $t=\ell+1$, and
+$\vA_t^\ell$ for $t=\ell$: it corresponds to a relabeling of
+\eqref{eqn:ISTA-update} and \eqref{eqn:DL-update} for $T = L = 1$, over infinitely many
+blocks.
+Each of the `inner' steps updating $\vZ$ can be considered as a one-layer
+forward pass, while each of the `outer' steps updating $\vA$ can be considered
+as a one-layer  backward pass, of a primitive deep neural network. In
+particular, this algorithm is the simplest case in which a clear divide between
+forward optimization and backward learning manifests. This divide is still
+observed in current neural networks.
 
-\paragraph{Learned ISTA.} The above deep-network  interpretation of the alternating minimization is more conceptual than practical, as the process could be rather inefficient and take many layers or iterations to converge. But this is mainly because we try to infer both \(\vZ\) and \(\vA\) from \(\vX\). The problem can be significantly simplified and the above iterations can be made much more efficient if we only use them to learn \(\vA^\ell\) from a given set of samples of input and output  \((\vX, \vZ)\) for the iterative sparse encoding:
+\paragraph{Learned ISTA.} The above deep-network  interpretation of the
+alternating minimization is more conceptual than practical, as the process could
+be rather inefficient and take many layers or iterations to converge. 
+But this
+is mainly because we try to infer both \(\vZ\) and \(\vA\) from \(\vX\). 
+The problem can be significantly simplified and the above iterations can be made
+much more efficient in the supervised setting, where we have a dataset of input
+and output pairs \((\vX, \vZ)\) distributed according to
+\eqref{eq:overcomplete-dl-section-data-model} and we only seek to learn
+\(\vA^\ell\) for the layerwise learnable sparse coding iterations
+\eqref{eq:ISTA-update-layerwise}:
 \begin{align}
     & \vZ^{\ell + 1} = S_{\eta\lambda}\rp{\vZ^{\ell} - 2\eta(\vA^{\ell})^{\top}(\vA^\ell\vZ^{\ell} - \vX)}, \quad \forall \ell \in [L].
 \end{align}
@@ -1498,18 +1628,121 @@ If we denote the operator for each iteration as $\vZ^{\ell + 1} = f(\vA^\ell, \v
 \vX, \vZ^1 \xrightarrow{\hspace{1mm} f(\vA^1,\,\cdot\,) \hspace{1mm}}  \vZ^2 \xrightarrow{\hspace{1mm} f(\vA^2,\,\cdot\,) \hspace{1mm}}  \vZ^3  \xrightarrow{\hspace{1mm} f(\vA^3,\,\cdot\,) \hspace{1mm}} \cdots \vZ^{L}  \xrightarrow{\hspace{1mm} f(\vA^{L},\,\cdot\,) \hspace{1mm}} \vZ^{L + 1} \approx \vZ.  
 \label{eqn:deep-sparse-encoding}
 \end{equation*}
-
-Thus, given the sequential architecture, to learn the operator \(\vA^\ell\) at each layer, it is completely natural to learn it, say via back propagation (BP),\footnote{See Appendix \ref{app:optimization} for a brief description of BP.} by minimizing the error between the final code $\vZ^L$ and the ground truth $\vZ$:
-\begin{equation}
+Thus, given the sequential architecture, to learn the operator \(\vA^\ell\) at
+each layer, it is completely natural to learn it, say via back propagation
+(BP),\footnote{See Appendix \ref{sec:autodiff} for a brief description of BP.} by minimizing the error between the final code $\vZ^L$ and the ground truth $\vZ$:
+\begin{equation}\label{eq:lista-training}
     \min_{\{\vA^\ell\}} \big\|\vZ^L(\vA^1, \ldots, \vA^{L}) - \vZ\big\|_2^2.
 \end{equation}
 This is the basis of the Learned ISTA (LISTA) algorithm \cite{gregor2010learning}, which can be viewed as the learning algorithm for a deep  neural network, which tries to emulate the sparse encoding process from $\vX$ to $\vZ$. In particular, it can be viewed as a \textit{simple representation learning algorithm}. 
 %\yima{probably spell out LISTA as an algorithm in pseudo code form.}
 
 
-The empirical success of LISTA begs the question: what if we use layer-wise different  dictionaries \(\vA^\ell\) to encode even more complicated data, and learn the weights via backpropagation? This is \textit{exactly} the idea behind deep (linear) neural networks. We will discuss this more in subsequent Chapters.
+% The empirical success of LISTA begs the question: what if we use layer-wise different  dictionaries \(\vA^\ell\) to encode even more complicated data, and learn the weights via backpropagation? This is \textit{exactly} the idea behind deep (linear) neural networks. We will discuss this more in subsequent Chapters.
 
 % Mixture of low-dim linear independent structures without knowing the encoding,... L4 maximization. Our work on the complete case: \href{https://arxiv.org/abs/1906.02435}{L4-based dictionary learning} 
+
+
+\paragraph{Sparse Autoencoders.}
+The original motivation for overcomplete dictionary learning was to provide
+a simple generative model for high-dimensional data. We have seen above that, in
+addition, iterative algorithms for learning sparsely-used overcomplete
+dictionaries provide an interpretation for ReLU-like deep networks, which we
+will generalize in later chapters to more complex data distributions than
+\eqref{eq:overcomplete-dl-section-data-model}.
+It is also worth noting that even in the modern era of large models, the data
+generating model \eqref{eq:overcomplete-dl-section-data-model} provides a useful
+practical basis for
+\textit{interpreting features in pretrained large-scale deep networks}, such as
+transformers, following the hypothesis that the (non-interpretable, \textit{a
+priori}) features in these networks consist of sparse ``superpositions'' of
+underlying features, which are themselves interpretable
+\cite{elhage2022superposition}.
+
+We can use our development of the LISTA algorithm above to understand common
+practices in this field of research.
+In the most straightforward instantiation (see \citep{huben2024sparse,
+gao2025scaling}), a large number of features from a pretrained deep network $h$
+are collected from different inputs $\vx_i$, which themselves are chosen based
+on a desired interpretation task.\footnote{For example, the inputs $\vx_i$ could
+correspond to texts containing samples of computer code in different programming
+languages, with our task being to try to identify interpretable features in
+a transformer feature map $h$ corresponding to different salient aspects of the
+input, such as the specific programming language (distinct across input
+``classes'') or the need to insert a matching parenthesis at the current
+position (common across input ``classes''). We discuss the use of deep networks,
+and in particular transformers, for text representation
+learning in greater detail in \Cref{ch:applications}.} For
+simplicity, we will use $h$ to denote the pre-selected feature map in question,
+with $D$-dimensional features; given $N$ sample inputs, let $\vH \in \bR^{D
+\times N}$ denote the full matrix of features of $h$.
+Then a so-called sparse autoencoder $f : \bR^D \to \bR^d$, with decoder $g : \bR^d \to
+\bR^D$, is trained via the LASSO loss \eqref{eq:sparse_dl_lasso}:
+\begin{equation}\label{eq:sae-loss}
+  \min_{f, g} \| \vH - g(f(\vH))) \|_F^2 + \lambda \|f(\vH)\|_1 ,
+\end{equation}
+where the sparse autoencoder $f$ takes the form of a one-layer neural
+network, i.e.\ $f(\vh_i) = \sigma(\vW_{\mathrm{enc}}(\vh_i - \vb)
++ \vb_{\mathrm{enc}})$, where $\sigma(x) = \max \{x, 0\}$ is the ReLU activation
+function, and the decoder $g$ is linear, so that $g(\vz_i)
+= \vW_{\mathrm{dec}}\vz + \vb$.
+
+The parameterization and training procedure \eqref{eq:sae-loss} may initially
+seem to be an arbitrary application of deep learning to the sparse coding
+problem, but it is actually highly aligned with the algorithms we have studied
+above for layerwise sparse coding with a learned dictionary.
+In particular, recall the LISTA %
+% LISTA training objective \eqref{eq:lista-training}, and the 
+architecture $\vZ^{L} = f(\vA^L, f(\vA^{L-1}, \cdots, f(\vA^1, \vX) \cdots ))$.
+In the special case $L=2$, we have
+\begin{equation}
+    \vZ^2 = f(\vA^1, \vX) 
+    =S_{\eta\lambda}\rp{\vZ^{1} - 2\eta(\vA^{1})^{\top}(\vA^1\vZ^{1} - \vX)}.
+\end{equation}
+Let us assume that the sparse codes $\vZ$ in question are nonnegative, i.e.,
+that $\vZ \geq \Zero$.\footnote{In the data generating model
+\eqref{eq:overcomplete-dl-section-data-model}, an arbitrary
+dictionary-and-sparse-code pair $(\vA, \vZ)$ can be replaced by one in which
+$\vZ \geq \Zero$ simply by doubling the number of columns in $\vA$, so from
+a modeling perspective, this is a very mild assumption.}
+Then (see \Cref{example:prox-of-nonnegative-l1}), we can consider an equivalent
+LISTA architecture obtained from the sparse coding objective with an additional
+nonnegativity constraint on $\vZ$ as
+\begin{equation}
+    \vZ^2 = f(\vA^1, \vX) 
+    =\max \set*{\vZ^{1} - 2\eta(\vA^{1})^{\top}(\vA^1\vZ^{1} - \vX)
+    - \lambda\eta \mathbf{1}, 0},
+\end{equation}
+and after some algebra, express this as
+\begin{equation}
+    \vZ^2 = f(\vA^1, \vX) 
+    =\max \set*{
+        2\eta(\vA^{1})^{\top}
+        +
+        \left(
+        \vZ^{1} - 2\eta(\vA^{1})^{\top}\vA^1\vZ^{1} - \lambda\eta \mathbf{1}
+        \right), 0
+    }.
+\end{equation}
+Given the ability to change the sparse code initialization $\vZ^1$ as
+a learnable parameter (which, in the current framework, must have all columns
+equal to the same learnable vector), this has the form of a ReLU neural network
+with learnable bias---identical to the sparse autoencoder $f$!
+Moreover, to \textit{decode} the learned sparse codes $\vZ^2$, it is natural to
+apply the learned dictionary $\vZ^2 \mapsto \vA^1 \vZ^2$. Then the only
+difference between this and the SAE decoder $g$ is the additional bias $\vb$,
+which can technically be absorbed into $\vH$ and $f$ in the training objective
+\eqref{eq:sae-loss}.
+
+Thus, the SAE parameterization and training procedure coincides with
+LISTA training with $L=1$, and a modified training objective---using the
+LASSO objective \eqref{eq:sparse_dl_lasso}, which remains unsupervised, instead
+of the supervised reconstruction loss \eqref{eq:lista-training} used in vanilla
+LISTA. In particular, we can understand the SAE architecture in terms of our
+interpretation of the LISTA architecture in terms of layerwise sparse coding in
+\eqref{eq:ISTA-update-layerwise}. This connection is suggestive of a host of new
+design strategies for improving practical interpretability methodology, many of
+which remain tantalizingly unexplored.
 
 
 
