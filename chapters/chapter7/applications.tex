@@ -68,7 +68,8 @@ Let us define the set of possible data as \(\cD\) (eventually this will be the s
 
 We will repeatedly use this notation many times in this chapter, so please feel free to refer back to it if something doesn't make sense. This decomposition of our networks also closely mirrors most code implementations, and you can start your coding projects by defining these networks.
 
-In this chapter, we will discuss applications of the book's principles to contrastive learning in \Cref{sec:contrastive_learning}. This will serve as both an introduction to imagery data, data augmentation techniques, and the common architecture known as the transformer, \textit{as well as} a first demonstration of the drastic kinds of simplifications we can make using the demonstrated principles. We will continue with modifications to the \textit{network architecture} in \Cref{sec:image_classification,sec:clm_text}, which demonstrate the capabilities of simplified architectures for \textit{encoding} within the image and text domains. We then demonstrate simplified architectures for \textit{autoencoding} in \Cref{sec:image_completion,sec:text_completion}. We will end our discussion of principled improvements by discussing a practical implementation of the \textit{closed-loop transcription} framework in \Cref{sec:ctrl}, as well as a myriad of empirically challenging tasks which the framework drastically simplifies. For the sake of completeness, we finish the chapter in \Cref{sec:training_tips} by discussing some principled tips and tricks for training models on real data.
+In this chapter, we will discuss applications of the book's principles to contrastive learning in \Cref{sec:contrastive_learning}. This will serve as both an introduction to imagery data, data augmentation techniques, and the common architecture known as the transformer, \textit{as well as} a first demonstration of the drastic kinds of simplifications we can make using the demonstrated principles. We will continue with modifications to the \textit{network architecture} in \Cref{sec:image_classification,sec:clm_text}, which demonstrate the capabilities of simplified architectures for \textit{encoding} within the image and text domains. We then demonstrate simplified architectures for \textit{autoencoding} in \Cref{sec:image_completion}. % We will end our discussion of principled improvements by discussing a practical implementation of the \textit{closed-loop transcription} framework in \Cref{sec:ctrl}, as well as a myriad of empirically challenging tasks which the framework drastically simplifies. 
+% For the sake of completeness, we finish the chapter in \Cref{sec:training_tips} by discussing some principled tips and tricks for training models on real data.
 
 
 \section{Simplified Contrastive Learning}\label{sec:contrastive_learning}
@@ -106,9 +107,9 @@ On a slightly more formal level, our data \(\vX\) will be images; we let \(\cI\)
 
 \subsection{Task and Objective Function} \label{sub:contrastive_learning_objective}
 
-Our task is to learn a good representation of the data. Contrastive learning, by and large, does this by defining what properties of the input image we wish the features to reflect, construct images which share these properties but vary others, and set up a loss which promotes that the features of images with shared properties are close and images with different properties are different. The naturally optimal solution to this learning problem is that the learned features preserve the desired properties of the input. However, there are many practical and empirical complications which arise in the course of training contrastive models.
+Our task is to learn a good representation of the data. Contrastive learning, by and large, does this by defining what properties of the input image we wish the features to reflect, construct images which share these properties but vary others, and set up a loss which promotes that the features of images with shared properties are close and images with different properties are different. The naturally optimal solution to this learning problem is that the learned features preserve the desired properties of the input. However, there are many practical and empirical complications that arise in the course of training contrastive models.
 
-In the case of DINO, the authors propose to use a methodology which produces a single feature vector for the whole image, and desires the feature vector to contain ``global'' (i.e., image-level) information. Accordingly the loss will promote that images with similar global information have similar features and images with different global information have different features.
+In the case of DINO, the authors propose to use a methodology which produces a single feature vector for the whole image and desires the feature vector to contain ``global'' (i.e., image-level) information. Accordingly, the loss will promote that images with similar global information have similar features and images with different global information have different features.
 
 This seems intuitive, but as previously mentioned, there are several empirical considerations, even while setting up the loss. First and foremost, how should we promote similarities and differences? The answer of DINO \citep{caron2021emerging} is\footnote{In the author's view, inexplicably...} to convert the output features into ``logits'' corresponding to some probability distribution and take their cross-entropy. More specifically, let \(\Delta_{m} := \{\vx \in \R^{m} \colon x_{i} \geq 0\ \forall i \in [m], \sum_{i = 1}^{m}x_{i} = 1\}\) be the space of probability vectors in \(\R^{m}\) and define the function \(d_{\CE} \colon \R^{m} \times \R^{m} \to \R\) by
  \begin{equation}\label{eq:cross_entropy_difference}
@@ -586,7 +587,7 @@ For linear probing, we use several evaluation datasets such as CIFAR10, Oxford-F
     \label{tab:crate_classification_linear_probing}
 \end{table}
 
-\begin{figure}
+\begin{figure}[t]
     \centering
     \includegraphics[width=0.8\textwidth]{\toplevelprefix/chapters/chapter7/figs/crate_semantic_heads.pdf}
     \caption{\small\textbf{Interpretable saliency maps in CRATE} with patch size \(8\). When given images with similar properties (perhaps but not necessarily from the same class), the saliency maps corresponding to different attention heads in the last layer each highlight a specific property. One can observe that the average saliency map (not included) then highlights all relevant objects in the image, showing that it uses all fine-grained details of the input image for classification. This is the \textit{first} machine learning system to do this, to the authors' knowledge, much less automatically without training on any segmentation data.}
@@ -902,6 +903,14 @@ In this section, we will discuss three ways in which various parts of CRATE-type
 
 \subsection{Increasing Network Width: CRATE-\texorpdfstring{\(\alpha\)}{alpha}}\label{sub:crate_alpha_experiments}
 
+\begin{figure}[t]
+    \centering 
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter7/figs/crate_alpha_backbone.pdf}
+    \caption{\small\textbf{One layer of the CRATE-\(\alpha\) backbone.} The difference from CRATE is that the \(\ISTA_{\theta}^{\ell}\) block is replaced by the \(\operatorname{ODL}_{\theta}^{\ell}\) block, which performs several \(\ISTA\) steps with an overcomplete dictionary.}
+    \label{fig:crate_alpha_backbone}
+\end{figure}
+
+
 One design decision enforced by the CRATE framework is that the \textit{width} of the nonlinearity in the network. In a regular transformer, the width is usually set to \(4\), \(8\), or \(\frac{11}{3}\) times the feature dimension. However, CRATE enforces that the width is exactly equal to the feature dimension, i.e., the dictionaries \(\vD^{\ell}\) are square, which could lead to reduced performance. The fundamental reason that the CRATE framework constrains us to this choice is as follows:
 \begin{itemize}
     \item The ISTA block takes a \textit{single} step of optimization for dictionary learning.
@@ -923,36 +932,7 @@ but rather the following iteration:
 \end{equation}
 i.e., running proximal gradient on the LASSO objective for \(T \geq 1\) steps in the forward pass at each layer, initialized at \(\vzero_{s \times n}\). In this circumstance, the dictionary can be as wide as needed, i.e., \(\vD^{\ell} \in \R^{s \times d}\) where \(s \geq d\) (usually one takes \(s = 4d\) in practice). 
 
-However, this presents an empirical problem. Using the above configuration, if \(\vZ^{\ell + 1/2} \in \R^{d \times n}\) then \(\vZ^{\ell + 1} \in \R^{s \times n}\), which can have arbitrarily large feature dimension. In practice, we want the feature dimension at each layer to be the same. So this sets up a practical trichotomy for designing the network, namely, we \textit{cannot} have \textit{all} of the following desiderata:
-\begin{enumerate}
-    \item The feature dimension at each layer is the same.
-    \item The dictionary is wide, i.e., overcomplete.
-    \item The output of the nonlinearity is the sparse codes of the input w.r.t.~the dictionary.
-\end{enumerate}
-In practice, giving (1) is less tractable for efficiency reasons. Giving up (2) leads to the usual CRATE framework. Giving up (3) leads to a wide version of CRATE, i.e., CRATE-\(\alpha\), which has the following nonlinearity to get from \(\vZ^{\ell + 1/2}\) to \(\vZ^{\ell + 1}\):
-\begin{equation}
-    \vZ_{\theta}^{\ell + 1} = \vD^{\ell}\vA_{\theta}^{\ell, T}; \qquad \vA_{\theta}^{\ell, t + 1} = \ISTA_{\theta}^{\ell}(\vA_{\theta}^{\ell, t} \mid \vZ_{\theta}^{\ell + 1/2}); \qquad \vA_{\theta}^{\ell, 0} = \vzero,
-\end{equation}
-i.e., takes the sparse codes obtained via proximal gradient descent and multiplies by the dictionary, to get the denoised version of the input. Thus CRATE-\(\alpha\)'s nonlinearity computes a denoised version of the input which is amenable to sparse coding, not the actual sparse codes themselves. The map from \(\vZ_{\theta}^{\ell + 1/2}\) to \(\vZ_{\theta}^{\ell + 1}\) here is called the Overcomplete Dictionary Learning (ODL) block and denoted \(\operatorname{ODL}_{\theta}^{\ell}\), i.e.,
-\begin{equation}
-    \vZ_{\theta}^{\ell + 1}(\vX) := \operatorname{ODL}_{\theta}^{\ell}(\vZ_{\theta}^{\ell + 1/2}(\vX)).
-\end{equation}
-
-\begin{figure}
-    \centering 
-    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter7/figs/crate_alpha_backbone.pdf}
-    \caption{\small\textbf{One layer of the CRATE-\(\alpha\) backbone.} The difference from CRATE is that the \(\ISTA_{\theta}^{\ell}\) block is replaced by the \(\operatorname{ODL}_{\theta}^{\ell}\) block, which performs several \(\ISTA\) steps with an overcomplete dictionary.}
-    \label{fig:crate_alpha_backbone}
-\end{figure}
-
-\begin{figure}
-    \centering 
-    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter7/figs/crate_alpha_semantic_heads.pdf}
-    \caption{\small\textbf{Saliency maps from CRATE-\(\alpha\) with patch size \(8\).} Each row is a different image and each column corresponds to a different attention head in the last layer. We observe that the saliency maps strongly correspond to the objects in the input image.}
-    \label{fig:crate_alpha_saliency_maps}
-\end{figure}
-
-\begin{table}
+\begin{table}[b]
     \centering
     \begin{tabular}{@{}lcccccccc@{}}
     \toprule
@@ -970,6 +950,32 @@ i.e., takes the sparse codes obtained via proximal gradient descent and multipli
     \caption{\small \textbf{Object detection and fine-grained segmentation via MaskCut on COCO val2017~\citep{lin2014microsoft}}. Here all models are trained with patch size \(8\) instead of \(16\). Compared with existing models such as CRATE and ViT, the CRATE-\(\alpha\) model family noticeably has improved performance as well as scalability.}
     \label{tab:crate_alpha_detection_segmentation}
 \end{table}
+
+However, this presents an empirical problem. Using the above configuration, if \(\vZ^{\ell + 1/2} \in \R^{d \times n}\) then \(\vZ^{\ell + 1} \in \R^{s \times n}\), which can have arbitrarily large feature dimension. In practice, we want the feature dimension at each layer to be the same. So this sets up a practical trichotomy for designing the network, namely, we \textit{cannot} have \textit{all} of the following desiderata:
+\begin{enumerate}
+    \item The feature dimension at each layer is the same.
+    \item The dictionary is wide, i.e., overcomplete.
+    \item The output of the nonlinearity is the sparse codes of the input w.r.t.~the dictionary.
+\end{enumerate}
+In practice, giving (1) is less tractable for efficiency reasons. Giving up (2) leads to the usual CRATE framework. Giving up (3) leads to a wide version of CRATE, i.e., CRATE-\(\alpha\), which has the following nonlinearity to get from \(\vZ^{\ell + 1/2}\) to \(\vZ^{\ell + 1}\):
+\begin{equation}
+    \vZ_{\theta}^{\ell + 1} = \vD^{\ell}\vA_{\theta}^{\ell, T}; \qquad \vA_{\theta}^{\ell, t + 1} = \ISTA_{\theta}^{\ell}(\vA_{\theta}^{\ell, t} \mid \vZ_{\theta}^{\ell + 1/2}); \qquad \vA_{\theta}^{\ell, 0} = \vzero,
+\end{equation}
+i.e., takes the sparse codes obtained via proximal gradient descent and multiplies by the dictionary, to get the denoised version of the input. Thus CRATE-\(\alpha\)'s nonlinearity computes a denoised version of the input which is amenable to sparse coding, not the actual sparse codes themselves. The map from \(\vZ_{\theta}^{\ell + 1/2}\) to \(\vZ_{\theta}^{\ell + 1}\) here is called the Overcomplete Dictionary Learning (ODL) block and denoted \(\operatorname{ODL}_{\theta}^{\ell}\), i.e.,
+\begin{equation}
+    \vZ_{\theta}^{\ell + 1}(\vX) := \operatorname{ODL}_{\theta}^{\ell}(\vZ_{\theta}^{\ell + 1/2}(\vX)).
+\end{equation}
+
+
+
+\begin{figure}[t]
+    \centering 
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter7/figs/crate_alpha_semantic_heads.pdf}
+    \caption{\small\textbf{Saliency maps from CRATE-\(\alpha\) with patch size \(8\).} Each row is a different image and each column corresponds to a different attention head in the last layer. We observe that the saliency maps strongly correspond to the objects in the input image.}
+    \label{fig:crate_alpha_saliency_maps}
+\end{figure}
+
+
 
 \begin{table}
     \centering 
@@ -1001,14 +1007,14 @@ In practice, deep learning models suffer bottlenecks to space and time complexit
 \end{align}
 where the \(\TSSA\) block is defined as in \Cref{sub:tost}. Notice that this is exactly the same as a vision transformer architecture as discussed in \Cref{sub:contrastive_learning_architecture}, except that \(\TSSA\) replaces the conventional multi-head self-attention block \(\MHSA\). Regardless, the computational complexity of the forward pass of this layer is linear in all problem variables --- sequence length, feature dimension, number of heads, and head dimension.
 
-\begin{figure}
+\begin{figure}[!htbp]
     \centering 
     \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter7/figs/tost_backbone.pdf}
     \caption{\small\textbf{One layer of the ToST backbone}. Token representations go through layer-norms, the token statistics self-attention (TSSA) operator, and an MLP, in order to form the layer's output.}
     \label{fig:tost_backbone}
 \end{figure}
 
-\begin{table}
+\begin{table}[t]
     \centering 
     \resizebox{\textwidth}{!}{
     \begin{tabular}{@{}lccc|cc|cc@{}}
@@ -1031,7 +1037,7 @@ where the \(\TSSA\) block is defined as in \Cref{sub:tost}. Notice that this is 
     \label{tab:tost_linear_probing}
 \end{table}
 
-\begin{table}
+\begin{table}[!htbp]
     \centering 
     \begin{tabular}{@{}lcccccc@{}}
         \toprule
@@ -1068,22 +1074,63 @@ where the \(\TSSA\) block is defined as in \Cref{sub:tost}. Notice that this is 
 
 Moreover, the proposed architecture, named ToST (for ``Token Statistics Transformer'') performs well at vision tasks (i.e., \Cref{tab:tost_linear_probing}) and language tasks (i.e., \Cref{tab:tost_lm}). This is especially true for long-sequence-length tasks (cf \Cref{tab:tost_lra_results}), where it is both more performant and much more efficient than conventional transformers and all other transformer-like architectures.
 
-\subsection{Attention Only Transformers} \label{sub:aot_experiments}
+\subsection{Attention-Only Transformers} \label{sub:aot_experiments}
 
 Another bottleneck to remove from deep learning models, specifically transformer-like architectures, is the memory bottleneck which comes from massive matrix multiplications in MLPs, where the internal dimension is far greater than the feature dimension \(d\). It thus is an interesting and important question to ask: do we \textit{really} need the MLP inside a transformer, and how good can the performance get without it? To explore this question, we use the attention-only-transformer (AoT) architecture (see \Cref{sub:aot}), depicted in \Cref{fig:aot_backbone}. Namely, each layer is simply of the form 
 \begin{equation}
     \vZ_{\theta}^{\ell + 1}(\vX) = \vZ_{\theta}^{\ell}(\vX) + \MSSA_{\theta}^{\ell}(\LN_{\theta}^{\ell}(\vZ_{\theta}^{\ell}(\vX))).
 \end{equation}
-It turns out that this architecture is \textit{also} viable, though the depth of the network needs to be much deeper in order to achieve equivalent performance as the usual CRATE or transformer architecture. % (i.e., \Cref{tab:aot_lm}).
+In our implementation, we also experimented with using multi-head self-attention (MHSA) in place of MSSA. It turns out that this architecture is \textit{also} viable, though the depth of the network needs to be much deeper in order to achieve equivalent performance as the usual CRATE or transformer architecture. % (i.e., \Cref{tab:aot_lm}).
 
-% \DP{Frankly, the vision benchmark results here are very poor, and I cannot advertise them. I will just put the language benchmark.}
-
-\begin{figure}
+\begin{figure}[!htbp]
     \centering 
     \includegraphics[width=0.7\textwidth]{\toplevelprefix/chapters/chapter7/figs/aot_backbone.pdf}
     \caption{\small\textbf{One layer of the AoT backbone.} Token representations merely go through a layer-norm and the multi-head (subspace) self-attention operator to form the layer's output. Notice that there is no token-wise nonlinearity such as MLP or ISTA or ODL.}
     \label{fig:aot_backbone}
 \end{figure}
+
+
+Now, we conduct the experiments using the proposed AoT architecture and demonstrate its potential. We pre-train the AoT-MSSA and AoT-MHSA models of different sizes, along with GPT-2, on OpenWebText~\citep{Gokaslan2019OpenWeb}. We plot the training loss and validation loss against the number of training iterations in \Cref{fig:loss}(a) and (b), respectively. It is observed that medium- and large-sized AoT-based models achieve training and validation losses comparable to those of the GPT-2 base model. In addition, compared to the GPT-2 base model, the AoT-MHSA model is identical to the GPT-2 base model, except for the absence of MLP layers in the architecture. As shown in \Cref{fig:loss}, incorporating MLP layers can accelerate the training process. Using the above pre-trained models, we compute the cross-entropy validation loss without training on different datasets in \Cref{tab:zeroshot}. It is observed that the AoT models with medium and large parameter sizes can achieve comparable performance to the GPT-2 base model. Moreover, we found that adding MLP layers to AoT does not improve the zero-shot performance. These results highlight the potential of attention-only models to achieve competitive results while maintaining interpretability.  
+
+\begin{table*}[!htbp]
+\caption{Zero-shot results on several language benchmark datasets and tasks: Evaluation of different sizes of AoT with the MSSA and MHSA operators and comparison to the GPT2 model.}\vskip 0.1in
+\centering
+\begin{small}
+\begin{tabular}{l|cccccc}
+% \hline
+\toprule
+ Models  & {\bf LAMBADA} & {\bf PTB} & {\bf WikiText} & {\bf LAMBADA} & {\bf CBT CN} & {\bf CBT NE} \\
+ \# of parameters  & (val loss) $\downarrow$ &  (val loss) $\downarrow$ &(val loss) $\downarrow$ & (acc) $\uparrow$ &(acc) $\uparrow$ &(acc) $\uparrow$ \\
+ % \hline
+ \midrule
+ AoT-MSSA Base (102M) & 4.70 & 6.03 & 4.65 & 0.25 & 0.80 & 0.74\\
+ AoT-MSSA Medium (182M) & 4.47 & 5.08 & 4.22 & 0.29 & 0.84 & 0.77 \\
+ AoT-MHSA Base (122M) & 4.42 & 5.52 & 4.19 & 0.38 & 0.86 & 0.82\\
+ % Large 326M & {\bf 4.26} & {\bf 4.77} & {\bf 3.99} & {\bf 0.34} & {\bf 0.86} & {\bf 0.81}\\
+ % Hybrid 81M & 4.84 & 5.83 & 4.56 & 0.25 & 0.79 & 0.73\\
+ % Full MLP 109M & 4.73 & 6.95 & 4.70 & 0.30 & 0.83 & 0.77\\
+ GPT-2 Base (124M) & 4.32 & 5.75 & 4.13 &  0.40 &  0.87 &  0.84 \\
+\bottomrule
+\end{tabular}
+\label{tab:zeroshot}
+\end{small}
+\end{table*} 
+\vspace{-0.05in} 
+
+
+\begin{figure*}[t]
+\begin{center}
+\includegraphics[width=0.4\linewidth]{figs/training_loss.png} \hspace{0.4in}
+\includegraphics[width = 0.4\linewidth]{figs/val_loss.png}
+    \vspace{-0.15in}
+\caption{\centering \textbf{Evaluating models on language tasks.} We plot the training loss (left) and validation loss (right) of the AoT and GPT-2 models pretrained on OpenWebText.}  \label{fig:loss} 
+\end{center}
+\vspace{-0.15in}
+\end{figure*} 
+
+% Moreover, the proposed architecture  performs well on language tasks (i.e., \Cref{tab:tost_lm}). This is especially true for long-sequence-length tasks (cf \Cref{tab:tost_lra_results}), where it is both more performant and much more efficient than conventional transformers and all other transformer-like architectures. 
+% \DP{Frankly, the vision benchmark results here are very poor, and I cannot advertise them. I will just put the language benchmark.}
+
 
 % \begin{table}
 %     \centering 
@@ -1092,6 +1139,7 @@ It turns out that this architecture is \textit{also} viable, though the depth of
 %     \label{tab:aot_lm}
 % \end{table}
 
+ 
 
 \section{Masked Autoencoding for Imagery Data}\label{sec:image_completion}
 
@@ -1115,7 +1163,7 @@ Essentially this means that the features \(\vZ_{\theta}(\vX_{m})\) of the view \
     \caption{\small\textbf{One layer of the encoder and decoder in a CRATE autoencoder backbone.} The encoder and decoder layers both feed their inputs through multi-head subspace self-attention and a dictionary learning or dictionary encoding step. Note that the encoder and decoder layers are symmetrically designed; the conceptual goal of each decoder layer is to invert an encoder layer, so this symmetry is very much by design (see e.g., \Cref{ch:autoencoding}).}
 \end{figure}
 
-We use a CRATE encoder and decoder, depicted in \Cref{fig:transformer_backbone}\pw{Is this reference correct?}, though of course it is possible to use a regular transformer encoder and decoder. Details follow now.
+We use a CRATE encoder and decoder, depicted in \Cref{fig:transformer_backbone}, though of course it is possible to use a regular transformer encoder and decoder. Details follow now.
 
 \paragraph{The encoder.} The encoder is the same as the CRATE encoder in \Cref{sub:image_classification_architecture}, with the caveat that there is no feature extractor \(f_{\theta}^{\ext}\). However, both the embedding \(f_{\theta}^{\emb}\) and the backbone \(f_{\theta}^{\backbone}\) are the same.
 
