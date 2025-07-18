@@ -1562,7 +1562,7 @@ generate the results for overcomplete dictionary learning in
 
 \subsection{Learned Deep Sparse Coding}
 \label{sec:LISTA}
-The main observation from the alternating minimization algorithm for
+The main insight from the alternating minimization algorithm for
 overcomplete dictionary learning in the previous section
 (\Cref{eqn:ISTA-update,eqn:DL-update}) is to notice that \textit{when we
 fix \(\vA\), the ISTA update for $\vZ^\ell$ \eqref{eqn:ISTA-update} looks like
@@ -1570,48 +1570,11 @@ the forward pass of a deep neural network with weights given by \(\vA\) (and
 \(\vA^{\top}\))}. But in general, we do not know the true $\vA$, and the current
 estimate $\vA_+$ could be erroneous. Hence it needs to be further updated using
 \eqref{eqn:DL-update} based on the residual of using the current estimate of the
-sparse codes $\vZ^+$ to reconstruct $\vX$. 
-
-The alternating minimization scheme
-above randomly re-initializes the dictionary $\vA_1$ on every such update.
-A possible improvement, which brings us closer in spirit to the construction of
-deep neural networks, uses instead \textit{warm starting}, where the residual is
-generated using the previous estimate $\vA_+$ for the dictionary.
-
-
-\paragraph{Layerwise learned sparse coding.}
-\sdb{Move this to the last. This is like a forward thinking or future approach---localized updates to $\vA$, beyond backprop learning (forward and backward). Add some reference to Ch4 with LISTA. Transition from LISTA to SAE can be about efficiency, have a lot of data... SAE can point that we'll talk more in Ch5. (We need to edit both forward chapters to refer back.) Then the layerwise is last---localized update rules...}
-Hence, if we view each ISTA update \eqref{eqn:ISTA-update} as a layer and allow
-the associated dictionary, now denoted as $\vA_t^\ell$, to update in time, this
-leads to a  ``layerwise-learnable'' sparse coding scheme:
-\begin{align}
-    & \vZ^{\ell + 1} = S_{\eta\lambda}\rp{\vZ^{\ell}
-    - 2\eta(\vA_{t}^{\ell})^\top(\vA_{t}^\ell\vZ^{\ell} - \vX)}, \quad \forall \ell \in [L] \\ 
-    & \vA_{t + 1}^\ell = \vA_{t}^\ell - 2\nu (\vA_{t}^\ell\vZ^{\ell + 1}
-    - \vX)(\vZ^{\ell + 1})^\top, \qquad \forall t \in [T],
-\end{align}
-\sdb{This iteration is not well defined. I'm going to infer meaning and fix
-below. Can update later after confirmed.}
-\begin{align}
-    & \vZ^{1}_1
-     = \Zero, \quad (\vA_{1}^1)_j
-     \simiid \dNorm(\vzero, \tfrac{1}{D}\vI), \enspace \forall j \in [m], \\ 
-    & \vZ^{\ell + 1}_t = S_{\eta\lambda}\rp{\vZ^{\ell}_t
-    - 2\eta(\vA_{t}^{\ell})^\top(\vA_{t}^\ell\vZ^{\ell}_t
-    - \vX)},\label{eq:ISTA-update-layerwise}\\ 
-    & \vA_{t + 1}^{\ell+1} = \vA_{t}^\ell - 2\nu (\vA_{t}^\ell\vZ^{\ell + 1}_t
-    - \vX)(\vZ^{\ell + 1}_t)^\top.
-\end{align}
-Note that this iteration only defines $\vZ_t^\ell$ for $t = \ell$ and $t=\ell+1$, and
-$\vA_t^\ell$ for $t=\ell$: it corresponds to a relabeling of
-\eqref{eqn:ISTA-update} and \eqref{eqn:DL-update} for $T = L = 1$, over infinitely many
-blocks.
-Each of the `inner' steps updating $\vZ$ can be considered as a one-layer
-forward pass, while each of the `outer' steps updating $\vA$ can be considered
-as a one-layer  backward pass, of a primitive deep neural network. In
-particular, this algorithm is the simplest case in which a clear divide between
-forward optimization and backward learning manifests. This divide is still
-observed in current neural networks.
+sparse codes $\vZ^+$ to reconstruct $\vX$. The alternating minimization
+algorithm iterates these two procedures until convergence. But we can instead
+extrapolate, and design other learning procedures by combining these insights
+with techniques from deep learning. This leads to more interpretable network
+architectures, which will be a recurring theme throughout this manuscript.
 
 \paragraph{Learned ISTA.} The above deep-network  interpretation of the
 alternating minimization is more conceptual than practical, as the process could
@@ -1619,7 +1582,7 @@ be rather inefficient and take many layers or iterations to converge.
 But this
 is mainly because we try to infer both \(\vZ\) and \(\vA\) from \(\vX\). 
 The problem can be significantly simplified and the above iterations can be made
-much more efficient in the supervised setting, where we have a dataset of input
+much more efficient in the \textit{supervised} setting, where we have a dataset of input
 and output pairs \((\vX, \vZ)\) distributed according to
 \eqref{eq:overcomplete-dl-section-data-model} and we only seek to learn
 \(\vA^\ell\) for the layerwise learnable sparse coding iterations
@@ -1639,6 +1602,9 @@ each layer, it is completely natural to learn it, say via back propagation
     \min_{\{\vA^\ell\}} \big\|\vZ^L(\vA^1, \ldots, \vA^{L}) - \vZ\big\|_2^2.
 \end{equation}
 This is the basis of the Learned ISTA (LISTA) algorithm \cite{gregor2010learning}, which can be viewed as the learning algorithm for a deep  neural network, which tries to emulate the sparse encoding process from $\vX$ to $\vZ$. In particular, it can be viewed as a \textit{simple representation learning algorithm}. 
+In fact, this same methodology can be used as a basis to understand the
+representations computed in more powerful network architectures, such as
+transformers. We develop these implications in detail in \Cref{ch:unrolling}.
 %\yima{probably spell out LISTA as an algorithm in pseudo code form.}
 
 
@@ -1649,19 +1615,21 @@ This is the basis of the Learned ISTA (LISTA) algorithm \cite{gregor2010learning
 
 \paragraph{Sparse Autoencoders.}
 The original motivation for overcomplete dictionary learning was to provide
-a simple generative model for high-dimensional data. We have seen above that, in
+a simple generative model for high-dimensional data. We have seen with LISTA that, in
 addition, iterative algorithms for learning sparsely-used overcomplete
 dictionaries provide an interpretation for ReLU-like deep networks, which we
 will generalize in later chapters to more complex data distributions than
 \eqref{eq:overcomplete-dl-section-data-model}.
-It is also worth noting that even in the modern era of large models, the data
+But it is also worth noting that even in the modern era of large models, the data
 generating model \eqref{eq:overcomplete-dl-section-data-model} provides a useful
 practical basis for
 \textit{interpreting features in pretrained large-scale deep networks}, such as
 transformers, following the hypothesis that the (non-interpretable, \textit{a
 priori}) features in these networks consist of sparse ``superpositions'' of
 underlying features, which are themselves interpretable
-\cite{elhage2022superposition}.
+\cite{elhage2022superposition}. These \textit{unsupervised} learning paradigms
+are generally more efficient than LISTA, as well, which requires large amounts
+of labeled $(\vX, \vZ)$ pairs for training.
 
 We can use our development of the LISTA algorithm above to understand common
 practices in this field of research.
@@ -1746,8 +1714,64 @@ LISTA. In particular, we can understand the SAE architecture in terms of our
 interpretation of the LISTA architecture in terms of layerwise sparse coding in
 \eqref{eq:ISTA-update-layerwise}. This connection is suggestive of a host of new
 design strategies for improving practical interpretability methodology, many of
-which remain tantalizingly unexplored.
+which remain tantalizingly unexplored. We begin to lay out some connections to
+broader autoencoding methodology in \Cref{ch:autoencoding}.
 
+
+
+\paragraph{Layerwise learned sparse coding?}
+
+
+% \sdb{Move this to the last. This is like a forward thinking or future approach---localized updates to $\vA$, beyond backprop learning (forward and backward). Add some reference to Ch4 with LISTA. Transition from LISTA to SAE can be about efficiency, have a lot of data... SAE can point that we'll talk more in Ch5. (We need to edit both forward chapters to refer back.) Then the layerwise is last---localized update rules...}
+
+In the supervised setting, LISTA provides a deep neural network analogue of
+the sparse coding iteration, with layerwise-learned dictionaries, inspired by
+alternating minimization; even in the unsupervised setting, the same methodology
+can be applied to learning, as with sparse autoencoders.
+But the connection between low-dimensional-structure-seeking optimization algorithms 
+and deep network architectures goes much deeper than this, and suggests an array
+of scalable and natural neural learning architectures which may even be usable
+without backpropagation.
+
+As a simple illustration, we return the alternating minimization iterations
+\eqref{eqn:ISTA-update} and \eqref{eqn:DL-update}.
+This scheme randomly re-initializes the dictionary $\vA_1$ on every such update.
+An improvement uses instead \textit{warm starting}, where the residual is
+generated using the previous estimate $\vA_+$ for the dictionary.
+If we then view each ISTA update \eqref{eqn:ISTA-update} as a layer and allow
+the associated dictionary, now coupled with the sparse code updates as
+$\vA_\ell$, to update in time, this leads to a  ``layerwise-learnable'' sparse
+coding scheme:
+% \begin{align}
+%     & \vZ^{\ell + 1} = S_{\eta\lambda}\rp{\vZ^{\ell}
+%     - 2\eta(\vA_{t}^{\ell})^\top(\vA_{t}^\ell\vZ^{\ell} - \vX)}, \quad \forall \ell \in [L] \\ 
+%     & \vA_{t + 1}^\ell = \vA_{t}^\ell - 2\nu (\vA_{t}^\ell\vZ^{\ell + 1}
+%     - \vX)(\vZ^{\ell + 1})^\top, \qquad \forall t \in [T],
+% \end{align}
+% \sdb{This iteration is not well defined. I'm going to infer meaning and fix
+% below. Can update later after confirmed.}
+\begin{align}
+    & \vZ^{1}
+     = \Zero, \quad (\vA_{1})_j
+     \simiid \dNorm(\vzero, \tfrac{1}{D}\vI), \enspace \forall j \in [m], \\ 
+    & \vZ^{\ell + 1} = S_{\eta\lambda}\rp{\vZ^{\ell}
+    - 2\eta(\vA_{\ell})^\top(\vA_{\ell}\vZ^{\ell}
+    - \vX)},\label{eq:ISTA-update-layerwise}\\ 
+    & \vA_{\ell + 1} = \vA_{\ell}- 2\nu (\vA_{\ell}\vZ^{\ell + 1}
+    - \vX)(\vZ^{\ell + 1})^\top.
+\end{align}
+Note that this iteration %
+% only defines $\vZ_t^\ell$ for $t = \ell$ and $t=\ell+1$, and
+% $\vA_t^\ell$ for $t=\ell$: it 
+corresponds to a relabeling of \eqref{eqn:ISTA-update} and \eqref{eqn:DL-update}
+for $T = L = 1$, over infinitely many blocks.
+Each of the `inner' steps updating $\vZ$ can be considered as a one-layer
+forward pass, while each of the `outer' steps updating $\vA$ can be considered
+as a one-layer  backward pass, of a primitive deep neural network. In
+particular, this algorithm is the simplest case in which a clear divide between
+forward optimization and backward learning manifests. This divide is still
+observed in current neural networks---we will have much more to say about it in
+\Cref{ch:unrolling}.
 
 
 
