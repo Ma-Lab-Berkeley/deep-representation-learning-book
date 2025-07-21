@@ -18,6 +18,7 @@ python unit_square_covering.py --n 4 --steps 8000 --grid 64 --lr 3e-2
 
 Requires JAX and Optax.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -64,7 +65,7 @@ def covering_loss(params: Dict[str, Array], points: Array, lam: float) -> Array:
     r2 = jnp.exp(log_r2)  # ensures positivity
 
     diff = points[:, None, :] - centres[None, :, :]
-    d_sq = jnp.sum(diff ** 2, axis=-1)
+    d_sq = jnp.sum(diff**2, axis=-1)
     min_d_sq = jnp.min(d_sq, axis=1)
 
     violations = jnp.maximum(min_d_sq - r2, 0.0)
@@ -81,16 +82,23 @@ def optimise_covering(
     lam: float = 50.0,
 ) -> Tuple[Array, float]:
     """Optimise centres and radius using a Lagrangian loss."""
-    m = 2 ** n
+    m = 2**n
     points = sample_grid(grid_res)
 
-    key_c, key_r = jax.random.split(key)
+    # Initialize centres on a uniform grid
+    grid_size = int(jnp.sqrt(m))  # sqrt(m) since m is a perfect square
+    padding = 1.0 / (2 * grid_size)  # Equal padding on all sides
+    grid_coords = jnp.linspace(padding, 1.0 - padding, grid_size)
+    grid_x, grid_y = jnp.meshgrid(grid_coords, grid_coords, indexing="ij")
+    centres_init = jnp.stack([grid_x.ravel(), grid_y.ravel()], axis=-1)
+
     params: Dict[str, Array] = {
-        "centres": jax.random.uniform(key_c, shape=(m, 2)),
-        "log_r2": jnp.array(jnp.log(0.05), dtype=jnp.float32),  # start small
+        "centres": centres_init,
+        "log_r2": jnp.array(jnp.log(0.1), dtype=jnp.float32),
     }
 
     opt = optax.chain(optax.clip_by_global_norm(1.0), optax.adam(lr))
+    # opt = optax.adam(lr)
     opt_state = opt.init(params)
 
     @jax.jit
@@ -99,7 +107,7 @@ def optimise_covering(
         updates, opt_state_new = opt.update(grads, opt_state)
         params_new = optax.apply_updates(params, updates)
         # Keep centres inside the unit square.
-        params_new["centres"] = jnp.clip(params_new["centres"], 0.0, 1.0)  # type: ignore[arg-type]
+        # params_new["centres"] = jnp.clip(params_new["centres"], 0.0, 1.0)  # type: ignore[arg-type]
         return params_new, opt_state_new, loss
 
     loss = jnp.inf
@@ -117,13 +125,17 @@ def visualize_unit_square(centres: Array, radius: float) -> None:
     num_discs = len(centres)
     fig, ax = plt.subplots(figsize=(6, 6))
     # Draw unit square
-    square = patches.Rectangle((0, 0), 1, 1, linewidth=1.5, edgecolor="black", facecolor="none")
+    square = patches.Rectangle(
+        (0, 0), 1, 1, linewidth=1.5, edgecolor="black", facecolor="none"
+    )
     ax.add_patch(square)
 
     # Draw circles
     centres_np = np.array(centres)
     for cx, cy in centres_np:
-        circ = patches.Circle((cx, cy), radius, alpha=0.3, edgecolor="C0", facecolor="C0")
+        circ = patches.Circle(
+            (cx, cy), radius, alpha=0.3, edgecolor="C0", facecolor="C0"
+        )
         ax.add_patch(circ)
 
     ax.set_xlim(-0.05, 1.05)
@@ -135,20 +147,33 @@ def visualize_unit_square(centres: Array, radius: float) -> None:
 
 def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(description="Unit-square covering with 2^n balls.")
-    parser.add_argument("--n", type=int, default=4, help="Exponent so that M=2^n disks are used.")
-    parser.add_argument("--steps", type=int, default=8000, help="Gradient descent steps.")
-    parser.add_argument("--grid", type=int, default=500, help="Sampling grid resolution.")
+    parser.add_argument(
+        "--n", type=int, default=4, help="Exponent so that M=2^n disks are used."
+    )
+    parser.add_argument(
+        "--steps", type=int, default=8000, help="Gradient descent steps."
+    )
+    parser.add_argument(
+        "--grid", type=int, default=500, help="Sampling grid resolution."
+    )
     parser.add_argument("--lr", type=float, default=2e-2, help="Learning rate.")
-    parser.add_argument("--lam", type=float, default=1000.0, help="Lagrange penalty weight.")
+    parser.add_argument(
+        "--lam", type=float, default=1000.0, help="Lagrange penalty weight."
+    )
     parser.add_argument("--seed", type=int, default=0, help="PRNG seed.")
-    parser.add_argument("--no-plot", action="store_true", help="Disable the matplotlib visualization.")
+    parser.add_argument(
+        "--no-plot", action="store_true", help="Disable the matplotlib visualization."
+    )
     args = parser.parse_args(argv)
 
     if args.n <= 0:
         raise ValueError("n must be positive")
 
     key = jax.random.PRNGKey(args.seed)
-    centres, radius = optimise_covering(key, args.n, args.grid, args.steps, args.lr, args.lam)
+    centres, radius = optimise_covering(
+        key, args.n, args.grid, args.steps, args.lr, args.lam
+    )
+    radius *= 1.07
 
     print(f"n = {args.n} ⇒ M = {2**args.n} centres")
     print(f"Approx. covering radius: {radius:.6f}")
