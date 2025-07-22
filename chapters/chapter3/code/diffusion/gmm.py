@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, cast
 import jax
 import jax.numpy as jnp
 from jax import Array, vmap
@@ -57,13 +57,13 @@ def sqrtm(M: Array) -> Array:
     return jnp.einsum(
         "...ij, ...j, ...kj -> ...ik",
         U,
-        jnp.sqrt(jnp.where(Lmbda >= 0, Lmbda, jnp.zeros_like(Lmbda))),
+        jnp.sqrt(cast(Array, jnp.where(Lmbda >= 0, Lmbda, jnp.zeros_like(Lmbda)))),
         U,
     )
 
 
 def gmm_sample(
-    key: jax.random.PRNGKey,
+    key: Array,
     N: int,
     D: int,
     K: int,
@@ -78,7 +78,7 @@ def gmm_sample(
     parameters. It returns both the generated samples and their corresponding labels.
 
     Args:
-            key (jax.random.PRNGKey): Random key for JAX's PRNG.
+            key (Array): Random key for JAX's PRNG.
             N (int): Number of samples to generate.
             D (int): Dimensionality of the data.
             K (int): Number of mixture components in the GMM.

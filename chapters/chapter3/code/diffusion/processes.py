@@ -10,7 +10,7 @@ class DenoisingProcess:
         self.alpha: Callable[[Array], Array] = alpha
         self.sigma: Callable[[Array], Array] = sigma
 
-    def add_noise(self, key: jax.random.PRNGKey, x: Array, t: Array) -> Array:
+    def add_noise(self, key: Array, x: Array, t: Array) -> Array:
         """
         Add noise to the input tensor x using the process:
         x_sigma = alpha(sigma) * x + sigma * N(0, I)
