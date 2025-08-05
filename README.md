@@ -7,7 +7,8 @@ If you just want to read the book, _you should not need this repository_. We hav
 Generally, you should be accessing the source code for one of the following purposes:
 - You want to build the book, or one of its chapters, from scratch. See [this section](#building-the-book-or-chapter).
 - You want to use the source code that generated a figure in the book. See [this section](#using-the-code).
-- You want to ask a question, or tell us that something in the repository doesn't work quite right. See [this section]().
+- (TEMP) You want to edit the website. See [this section](#building-the-website).
+- You want to ask a question, or tell us that something in the repository doesn't work quite right. See [this section](#raising-an-issue).
 - You want to contribute some content, for example a translation, or some technical content within one or more chapters. See [this section](#making-a-contribution).
 
 ## Building the Book or a Chapter
@@ -42,6 +43,18 @@ and read `classic-models.pdf`. (`classic-models.tex` is the chapter file for Cha
 - Navigate to the repository and run `uv sync`, which creates a Python virtual environment restricted to the repository.
 - Go to the chapter folder that you are interested in and navigate to the code directory, i.e., `chapter3/code`.
 - Run the desired file with `uv run <filename>` and observe the outputs.
+
+## Building the Website
+
+- A local `pdflatex` distribution ([TexLive](https://www.tug.org/texlive/) is a recommended choice)
+- The Python package manager [`uv`](https://docs.astral.sh/uv/)
+- A `latexml` installation which can be obtained in [several ways](https://math.nist.gov/~BMiller/LaTeXML/get.html)
+
+### How to Build the Website
+
+- Navigate to the repository and run `uv sync`, which creates a Python virtual environment restricted to the repository.
+- Go to the `latex_to_html` directory and run `uv run latex_to_html_converter.py ../book-main.tex`. This should take a long time (around 10-30 minutes).
+- Navigate back to the base repository directory and move to the newly created `html` directory. Load the website from here.
 
 ## Raising an Issue
 
