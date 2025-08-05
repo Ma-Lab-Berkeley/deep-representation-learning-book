@@ -101,37 +101,8 @@ def list_missing_packages(log_path: Path) -> List[str]:
     return list(filter(None, map(lambda match: format_missing_dependency(match[1], match[2]), matches)))
 
 
-def find_main_tex_file(source_dir: Path) -> Optional[Path]:
-    """Find the main LaTeX file to convert."""
-    # Look for common main file names
-    main_candidates = ["book-main.tex", "main.tex", "paper.tex", "article.tex", "document.tex"]
-    
-    for candidate in main_candidates:
-        main_file = source_dir / candidate
-        if main_file.exists():
-            return main_file
-    
-    # If no common names found, look for any .tex file
-    tex_files = list(source_dir.glob("*.tex"))
-    if len(tex_files) == 1:
-        return tex_files[0]
-    elif len(tex_files) > 1:
-        # If multiple .tex files, try to find one with \documentclass
-        for tex_file in tex_files:
-            try:
-                with open(tex_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
-                    if r'\documentclass' in content:
-                        return tex_file
-            except Exception:
-                continue
-        # If no \documentclass found, return the first one
-        return tex_files[0]
-    
-    return None
 
-
-def convert_latex_to_html(source_filepath: Path, bib_filepath: Optional[Path] = None, output_dir: Path = Path("html"), verbose: bool = False) -> bool:
+def convert_latex_to_html(source_filepath: Path, output_dir: Path = Path("html"), verbose: bool = False) -> bool:
     """Convert LaTeX files in source_dir to HTML in output_dir."""
     if not source_filepath.parent.exists():
         logging.error(f"Source directory does not exist: {source_filepath.parent}")
@@ -169,12 +140,8 @@ def convert_latex_to_html(source_filepath: Path, bib_filepath: Optional[Path] = 
         f"--log={log_file}",
         f"--dest={output_html}",
     ]
-    cur_path = Path(__file__).parent
-    latexml_config.append(f"--path={str(cur_path / 'ar5iv-bindings' / 'bindings')}")
-    # for stub in ["bindings"]:#, "supported_originals"]:
-    #     latexml_config.append(f"--path={str(cur_path / 'ar5iv-bindings' / stub)}")
-    # latexml_config.append(f"--preload={str(cur_path / 'ar5iv-bindings' / 'bindings' / 'ar5iv.sty')}")
-    # latexml_config.append(f"--preload={str(cur_path / 'ar5iv-bindings' / 'bindings' / 'biblatex.sty.ltxml')}")
+    # Add any LatexML files in this directory or a child.
+    latexml_config.append(f"--path={str(Path(__file__).parent)}")
     
     # Add CSS resources
     for css in CSS_RESOURCES:
@@ -296,7 +263,7 @@ Examples:
     logging.info(f"Output directory: {output_dir}")
     
     # Perform conversion
-    success = convert_latex_to_html(source_filepath, None, output_dir, args.verbose)
+    success = convert_latex_to_html(source_filepath, output_dir, args.verbose)
     
     if success:
         logging.info("Conversion completed successfully!")
