@@ -10,6 +10,11 @@ Generally, you should be accessing the source code for one of the following purp
 - You want to ask a question, or tell us that something in the repository doesn't work quite right. See [this section]().
 - You want to contribute some content, for example a translation, or some technical content within one or more chapters. See [this section](#making-a-contribution).
 
+We depend on a submodule for building the website, so at this point you want to clone using 
+```
+git clone --recursive https://github.com/Ma-Lab-Berkeley/ldrdd-book.git
+```
+
 ## Building the Book or a Chapter
 
 ### Prerequisites for Building the Book or a Chapter
