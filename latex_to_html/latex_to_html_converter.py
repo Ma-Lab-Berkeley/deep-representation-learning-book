@@ -173,6 +173,7 @@ class AssetManager:
         self.repo_root = repo_root
         self.src_css = repo_root / "html" / "chapter.css"
         self.src_js = repo_root / "html" / "chapter.js"
+        self.src_shared_ui = repo_root / "html" / "shared-ui.js"
 
     def ensure_shared_assets(self, output_dir: Path) -> None:
         try:
@@ -185,7 +186,10 @@ class AssetManager:
             # Always copy; files are small and this avoids stale assets
             shutil.copy2(self.src_css, out_css)
             shutil.copy2(self.src_js, out_js)
-            logging.info("Shared assets ensured (chapter.css, chapter.js)")
+            # Copy shared UI helpers if present (search, topbar wiring)
+            if self.src_shared_ui.exists():
+                shutil.copy2(self.src_shared_ui, output_dir / "shared-ui.js")
+            logging.info("Shared assets ensured (chapter.css, chapter.js, shared-ui.js if present)")
         except Exception as exc:  # pragma: no cover - defensive
             logging.warning(f"Failed to ensure shared assets: {exc}")
 
@@ -302,14 +306,18 @@ class HTMLPostProcessor:
                 self._ensure_document_skeleton(soup)
                 self._inject_head_basics(soup)
                 self._inject_stacked_header_css(soup)
+                # Remove LaTeXML-emitted document relation links that we don't use
+                # (e.g., rel="up", rel="start", rel="chapter", rel="part", rel="appendix", "prev", "next").
+                self._remove_legacy_head_relations(soup)
                 self._ensure_body_top_anchor(soup)
                 self._rebuild_header_navigation(soup, html_file.name, file_by_name, preface_file, chapter_files, appendix_files)
-                if html_file.name.lower() != "index.html":
-                    self._inject_book_top_bar(soup)
+                self._remove_hardcoded_top_bar(soup)
                 self._remove_preface_toc_if_needed(soup, html_file.name)
                 self._clean_footer_prev_next(soup)
                 self._build_static_mini_toc(soup, html_file.name)
-                html_file.write_text(str(soup), encoding="utf-8")
+                html_serialized = str(soup)
+                html_serialized = self._collapse_excess_blank_lines(html_serialized)
+                html_file.write_text(html_serialized, encoding="utf-8")
             except Exception as exc:  # pragma: no cover - defensive
                 logging.warning("Post-processing failed for %s: %s", html_file, exc)
 
@@ -343,39 +351,62 @@ class HTMLPostProcessor:
             head_tag.insert(0, soup.new_tag("meta", attrs={"name": "viewport", "content": "width=device-width, initial-scale=1"}))
         if head_tag.find("link", {"href": "chapter.css"}) is None:
             head_tag.append(soup.new_tag("link", rel="stylesheet", href="chapter.css", type="text/css"))
+        # Ensure external JS in preferred order: shared-ui.js, then chapter.js
+        if soup.find("script", {"src": "shared-ui.js"}) is None:
+            sui = soup.new_tag("script", src="shared-ui.js")
+            sui.attrs["defer"] = "defer"
+            head_tag.append(sui)
         if soup.find("script", {"src": "chapter.js"}) is None:
-            script_tag = soup.new_tag("script", src="chapter.js")
-            script_tag.attrs["defer"] = "defer"
-            head_tag.append(script_tag)
+            cjs = soup.new_tag("script", src="chapter.js")
+            cjs.attrs["defer"] = "defer"
+            head_tag.append(cjs)
 
-    def _inject_stacked_header_css(self, soup: BeautifulSoup) -> None:
+    def _inject_stacked_header_css(self, soup: BeautifulSoup) -> None:  # pragma: no cover - inline CSS moved to chapter.css
         head_tag = ensure_tag(soup.find("head"), "head")
         if not head_tag:
             return
-        legacy_fix = head_tag.find(id="navbar-removed-fix")
-        legacy_tag = ensure_tag(legacy_fix)
-        if legacy_tag:
-            legacy_tag.decompose()
+        # Remove legacy inline style blocks we previously injected
+        for legacy_id in ["stacked-topbars", "navbar-removed-fix"]:
+            legacy = ensure_tag(head_tag.find(id=legacy_id))
+            if legacy:
+                legacy.decompose()
 
-        css_value = (
-            ":root{--navbar-h:0px;--book-topbar-h:64px;}\n"
-            "html, body{margin:0!important;padding:0!important;}\n"
-            "body>*:first-child{margin-top:0!important;}\n"
-            ".ltx_page_main{padding-top:calc(var(--book-topbar-h) + var(--navbar-h) + var(--header-h, 56px))!important;}\n"
-            ".ltx_page_navbar{display:none!important;}\n"
-            ".ltx_page_header{position:fixed!important;top:var(--book-topbar-h)!important;left:0;right:0;z-index:30;background:#fff;margin:0!important;border-top:none!important;}\n"
-            ".ltx_page_navbar, .ltx_page_header{margin-top:0!important;}\n"
-            "h1[id], h2[id], h3[id], h4[id], section[id], .ltx_theorem[id], .ltx_equation[id], .ltx_equationgroup[id], .ltx_figure[id], .ltx_table[id], .ltx_tabular[id], .ltx_float[id]{scroll-margin-top:calc(var(--book-topbar-h) + var(--navbar-h) + 20px);}"  # noqa: E501
-        )
-        style_tag = head_tag.find(id="stacked-topbars")
-        style_tag_t = ensure_tag(style_tag)
-        if style_tag_t:
-            style_tag_t.clear()
-            style_tag_t.append(css_value)
-        else:
-            style_tag_t = soup.new_tag("style", id="stacked-topbars")
-            style_tag_t.append(css_value)
-            head_tag.append(style_tag_t)
+    def _remove_legacy_head_relations(self, soup: BeautifulSoup) -> None:
+        """Remove LaTeXML relational <link> elements we do not use.
+
+        Also removes rel="prev"/"next"; we no longer emit these in <head>.
+        """
+        head_tag = ensure_tag(soup.find("head"), "head")
+        if not head_tag:
+            return
+        try:
+            removal_rels = {"up", "start", "chapter", "part", "appendix", "prev", "next"}
+            for link_any in list(head_tag.find_all("link")):
+                link_tag = ensure_tag(link_any)
+                if not link_tag:
+                    continue
+                rel_attr = cast(Any, link_tag.get("rel"))
+                if not rel_attr:
+                    continue
+                # BeautifulSoup typically parses rel into a list; be robust to string
+                if isinstance(rel_attr, list):
+                    rels = [str(r).lower() for r in rel_attr]
+                else:
+                    rels = [s.lower() for s in str(rel_attr).split()]  # handles "up up" cases
+                if any(r in removal_rels for r in rels):
+                    link_tag.decompose()
+        except Exception:
+            # Defensive: never let cleanup break the build
+            pass
+
+    def _collapse_excess_blank_lines(self, html: str) -> str:
+        """Collapse runs of blank lines to a single blank line."""
+        try:
+            # Replace 2+ consecutive blank lines (optionally with spaces) with a single \n
+            html = re.sub(r"\n[\t \r\f\v]*\n+", "\n", html)
+            return html
+        except Exception:
+            return html
 
     def _ensure_body_top_anchor(self, soup: BeautifulSoup) -> None:
         body_tag = ensure_tag(soup.find("body"), "body")
@@ -490,117 +521,28 @@ class HTMLPostProcessor:
         add_link("#top", "Top of Page")
         desired_prev, desired_next = self._compute_prev_next_for(this_name, file_by_name, preface_file, chapter_files, appendix_files)
 
-        # Sync <head> rel prev/next
+        # Ensure any legacy <head> rel prev/next are removed; we no longer emit these in <head>
         head_tag = ensure_tag(soup.find("head"), "head")
         if head_tag:
             for rel_name in ["prev", "next"]:
                 for el in list(head_tag.find_all("link", rel=rel_name)):
                     cast(Tag, el).decompose()
-            if desired_prev:
-                head_tag.append(soup.new_tag("link", rel="prev", href=desired_prev))
-            if desired_next:
-                head_tag.append(soup.new_tag("link", rel="next", href=desired_next))
 
         add_link(desired_prev, "Previous Chapter")
         add_link(desired_next, "Next Chapter")
 
     # ---------- topbar ----------
-    def _inject_book_top_bar(self, soup: BeautifulSoup) -> None:
-        body_tag = ensure_tag(soup.find("body"), "body")
-        if not body_tag or ensure_tag(soup.find(id="book-topbar")):
-            return
-        # Head lookup retained for future use
-        _head_for_future = ensure_tag(soup.find("head"), "head")
+    def _remove_hardcoded_top_bar(self, soup: BeautifulSoup) -> None:
+        """Remove any previously injected hard-coded topbar.
 
-        topbar = soup.new_tag("div")
-        topbar["class"] = "book-topbar"
-        topbar["id"] = "book-topbar"
-
-        brand_link = soup.new_tag("a", href="index.html")
-        brand_link["class"] = "brand brand-link"
-        logo_span = soup.new_tag("span")
-        logo_span["class"] = "logo"
-        svg = soup.new_tag("svg", attrs={"width": "18", "height": "18", "viewBox": "0 0 24 24", "fill": "none"})
-        path = soup.new_tag(
-            "path",
-            d=(
-                "M3 12c0-1.1.9-2 2-2h6V4c0-1.1.9-2 2-2h0c1.1 0 2 .9 2 2v6h6c1.1 0 2 .9 2 2h0c0 1.1-.9 2-2 2h-6v6c0 1.1-.9 2-2 2h0c-1.1 0-2-.9-2-2v-6H5c-1.1 0-2-.9-2-2Z"
-            ),
-            fill="url(#g1)",
-        )
-        defs = soup.new_tag("defs")
-        lg = soup.new_tag("linearGradient", id="g1", x1="0", y1="0", x2="24", y2="24")
-        stop1 = soup.new_tag("stop", offset="0%", stopColor="#7aa2ff")
-        stop2 = soup.new_tag("stop", offset="100%", stopColor="#8b78ff")
-        lg.append(stop1)
-        lg.append(stop2)
-        defs.append(lg)
-        svg.append(path)
-        svg.append(defs)
-        logo_span.append(svg)
-        title_div = soup.new_tag("div")
-        title_div["class"] = "title"
-        title_div.string = "Learning Deep Representations of Data Distributions"
-        brand_link.append(logo_span)
-        brand_link.append(title_div)
-
-        right = soup.new_tag("div")
-        right["class"] = "topbar-right"
-        search = soup.new_tag("div")
-        search["class"] = "search"
-        inp = soup.new_tag("input")
-        inp["class"] = "search-input"
-        inp["type"] = "search"
-        inp["placeholder"] = "Search pages…"
-        inp["aria-label"] = "Search"
-        results = soup.new_tag("div")
-        results["class"] = "search-results"
-        search.append(inp)
-        search.append(results)
-        btn = soup.new_tag("button")
-        btn["class"] = "btn-cn"
-        btn["title"] = "Chinese version (coming soon)"
-        btn.string = "CN"
-        gh = soup.new_tag(
-            "a",
-            href="https://github.com/Ma-Lab-Berkeley/ldrdd-book",
-            target="_blank",
-            rel="noopener noreferrer",
-        )
-        gh["class"] = "gh-link"
-        gh_svg = soup.new_tag(
-            "svg",
-            attrs={
-                "xmlns": "http://www.w3.org/2000/svg",
-                "width": "16",
-                "height": "16",
-                "viewBox": "0 0 16 16",
-                "fill": "currentColor",
-                "role": "img",
-                "aria-label": "GitHub",
-            },
-        )
-        gh_path = soup.new_tag(
-            "path",
-            d=(
-                "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.2 1.87.86 2.33.66.07-.52.28-.86.51-1.06-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
-            ),
-        )
-        gh_svg.append(gh_path)
-        gh.append(gh_svg)
-        gh_span = soup.new_tag("span")
-        gh_span.string = "GitHub"
-        gh.append(gh_span)
-
-        right.append(search)
-        right.append(btn)
-        right.append(gh)
-
-        topbar.append(brand_link)
-        topbar.append(right)
-        body_tag.insert(0, topbar)
-
-        # All dynamic behavior has moved to chapter.js; avoid inlining duplicate scripts here.
+        The runtime navbar from html/shared-ui.js will render on page load.
+        """
+        try:
+            existing = ensure_tag(soup.find(id="book-topbar"))
+            if existing:
+                existing.decompose()
+        except Exception:
+            pass
 
     # ---------- cleanups ----------
     def _remove_preface_toc_if_needed(self, soup: BeautifulSoup, name: str) -> None:
@@ -745,11 +687,19 @@ class SearchIndexBuilder:
                     page_label = page_label.split("‣", 1)[0].strip()
 
                 h1_chapter = ensure_tag(soup.select_one("h1.ltx_title_chapter"))
+                h1_appendix = ensure_tag(soup.select_one("h1.ltx_title_appendix"))
                 if h1_chapter:
                     entries.append({
                         "page": page_label,
                         "href": f"{html_path.name}#top",
                         "title": strip_whitespace(h1_chapter.get_text(" ", strip=True)),
+                        "snippet": "",
+                        })
+                elif h1_appendix:
+                    entries.append({
+                        "page": page_label,
+                        "href": f"{html_path.name}#top",
+                        "title": strip_whitespace(h1_appendix.get_text(" ", strip=True)),
                         "snippet": "",
                         })
 

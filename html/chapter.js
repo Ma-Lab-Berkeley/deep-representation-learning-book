@@ -26,45 +26,7 @@
       }, {passive:true});
     } catch (e) {}
 
-    // Topbar search hookup (works for both chapter pages and simple pages like contributors)
-    try {
-      var input = document.querySelector('#book-topbar .search-input');
-      var box = document.querySelector('#book-topbar .search-results');
-      if (input && box) {
-        var index = null; var items = []; var active = -1; var open = false;
-        fetch('search-index.json').then(function(r){return r.ok?r.json():null}).then(function(j){index=j}).catch(function(){});
-        function render(){
-          box.innerHTML='';
-          if(!open || !items.length){ box.style.display='none'; return; }
-          items.forEach(function(it, i){
-            var div = document.createElement('div'); div.className='search-item'+(i===active?' active':'');
-            if(it.kind==='content'){
-              var t=document.createElement('span'); t.className='search-item-title'; t.textContent=it.title;
-              var s=document.createElement('span'); s.className='search-secondary'; s.textContent=(it.page||'')+' — '+(it.snippet||'');
-              div.appendChild(t); div.appendChild(s);
-            } else { div.textContent = it.label; }
-            div.onmousedown=function(e){e.preventDefault()};
-            div.onclick=function(){ if(it.external){ window.open(it.href,'_blank','noopener,noreferrer'); } else { window.location.href = it.href; } };
-            box.appendChild(div);
-          });
-          box.style.display='block';
-        }
-        input.addEventListener('input', function(){
-          var q=(input.value||'').trim().toLowerCase(); active=-1; open=true;
-          if(!q){ items=[]; render(); return; }
-          var content=[]; if(index&&index.entries){
-            for(var i=0;i<index.entries.length && content.length<10;i++){ var e=index.entries[i];
-              var t=(e.title||'').toLowerCase(), s=(e.snippet||'').toLowerCase(), p=(e.page||'').toLowerCase();
-              if(t.includes(q)||s.includes(q)||p.includes(q)){ content.push(Object.assign({kind:'content'}, e)); }
-            }
-          }
-          items = content; render();
-        });
-        input.addEventListener('focus', function(){ open=true; render(); });
-        input.addEventListener('blur', function(){ setTimeout(function(){ open=false; render(); }, 120); });
-        input.addEventListener('keydown', function(e){ if(!items.length) return; if(e.key==='ArrowDown'){ e.preventDefault(); active=(active+1)%items.length; render(); } else if(e.key==='ArrowUp'){ e.preventDefault(); active=(active-1+items.length)%items.length; render(); } else if(e.key==='Enter'){ var target=items[Math.max(0,active)]||items[0]; if(!target) return; if(target.external){ window.open(target.href,'_blank','noopener,noreferrer'); } else { window.location.href = target.href; } } });
-      }
-    } catch (e) {}
+    // Topbar search is wired in shared-ui.js when the bar is rendered
     // Preserve server-side header links (no JS override)
 
     // Contributor metadata badges: transform data-badges into styled pills
