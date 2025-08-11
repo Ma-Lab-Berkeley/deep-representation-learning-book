@@ -54,7 +54,9 @@ and read `classic-models.pdf`. (`classic-models.tex` is the chapter file for Cha
 
 - Navigate to the repository and run `uv sync`, which creates a Python virtual environment restricted to the repository.
 - Go to the `latex_to_html` directory and run `uv run latex_to_html_converter.py ../book-main.tex`. This should take a long time (around 10-30 minutes).
-- Navigate back to the base repository directory and move to the newly created `html` directory. Load the website from here.
+- Navigate back to the base repository directory and move to the newly created `html` directory. 
+- Start an HTTP server using `uv run python3 -m http.server <PORT>`. (The constant `<PORT>` represents a free port and is otherwise completely arbitrary; one possibility is `13579`.)
+- Navigate to `http://localhost:<PORT>/index.html`. 
 
 ## Raising an Issue
 
