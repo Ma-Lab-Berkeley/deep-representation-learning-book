@@ -66,7 +66,7 @@
       )
     );
 
-    // Search shell only; chapter.js wires events
+    // Search shell only; book.js wires events
     var search = h('div', { className:'search' }, h('input', { className:'search-input', type:'search', placeholder:'Search pages…', 'aria-label':'Search' }), h('div', { className:'search-results' }));
 
     var ghIcon = h('svg', { xmlns:'http://www.w3.org/2000/svg', width:'16', height:'16', viewBox:'0 0 16 16', fill:'currentColor', role:'img', 'aria-label':'GitHub' },
@@ -186,7 +186,7 @@
       a.textContent = l.label;
       return h('li', { className:'nav-item' }, a);
     }
-    var aside = h('aside', { className:'sidebar' },
+    var aside = h('aside', { className:'book-sidebar sidebar', 'data-shared-ui':'1' },
       h('div', { className:'side-section' }, h('div', { className:'side-h', text:'Navigation' }), h('ul', { className:'nav-list' }, (navLinks||DEFAULT_NAV_LINKS).map(linkItem))),
       h('div', { className:'side-section' }, h('div', { className:'side-h', text:'Table of Contents' }), h('ul', { className:'nav-list toc-list' }, (toc||DEFAULT_TOC).map(linkItem)))
     );
@@ -197,28 +197,31 @@
     var didInsert = false;
     // Landing layout
     var shell = document.querySelector('.app-shell');
-    if (shell && !shell.querySelector('.sidebar')) {
+    if (shell && !shell.querySelector('.book-sidebar')) {
       renderSidebarInto(shell, window.NAV_LINKS || DEFAULT_NAV_LINKS, window.TOC || DEFAULT_TOC);
       didInsert = true;
     }
     // Simple pages with layout-with-sidebar
     var lw = document.querySelector('.layout-with-sidebar');
-    if (lw && !lw.querySelector('.sidebar')) {
+    if (lw && !lw.querySelector('.book-sidebar')) {
       renderSidebarInto(lw, window.NAV_LINKS || DEFAULT_NAV_LINKS, window.TOC || DEFAULT_TOC);
       didInsert = true;
     }
     // Chapter pages: wrap main content with a sidebar layout if present
     try {
       var pageMain = document.querySelector('.ltx_page_main');
-      // Avoid if a sidebar already exists anywhere
-      if (!didInsert && pageMain && !document.querySelector('.sidebar')) {
+      // Avoid if a shared sidebar already exists or already wrapped
+      var alreadyWrapped = pageMain && pageMain.parentElement && pageMain.parentElement.classList.contains('layout-with-sidebar');
+      if (!didInsert && pageMain && !alreadyWrapped && !document.querySelector('.book-sidebar')) {
         var wrapper = document.createElement('div');
         wrapper.className = 'layout-with-sidebar';
-        // Insert wrapper before pageMain and move pageMain inside
+        wrapper.setAttribute('data-shared-ui', '1');
+        // Insert wrapper before pageMain and move pageMain inside (sidebar first so it renders in column 1)
         if (pageMain.parentNode) {
           pageMain.parentNode.insertBefore(wrapper, pageMain);
-          wrapper.appendChild(pageMain);
+          // Insert sidebar as the first child so it occupies the first grid column
           renderSidebarInto(wrapper, window.NAV_LINKS || DEFAULT_NAV_LINKS, window.TOC || DEFAULT_TOC);
+          wrapper.appendChild(pageMain);
           didInsert = true;
         }
       }

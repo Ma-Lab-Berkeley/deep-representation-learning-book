@@ -171,25 +171,25 @@ class AssetManager:
 
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root
-        self.src_css = repo_root / "html" / "chapter.css"
-        self.src_js = repo_root / "html" / "chapter.js"
+        self.src_css = repo_root / "html" / "book.css"
+        self.src_js = repo_root / "html" / "book.js"
         self.src_shared_ui = repo_root / "html" / "shared-ui.js"
 
     def ensure_shared_assets(self, output_dir: Path) -> None:
         try:
             output_dir.mkdir(parents=True, exist_ok=True)
             if not self.src_css.exists() or not self.src_js.exists():
-                raise FileNotFoundError("Shared assets 'chapter.css'/'chapter.js' not found under repo html/")
+                raise FileNotFoundError("Shared assets 'book.css'/'book.js' not found under repo html/")
 
-            out_css = output_dir / "chapter.css"
-            out_js = output_dir / "chapter.js"
+            out_css = output_dir / "book.css"
+            out_js = output_dir / "book.js"
             # Always copy; files are small and this avoids stale assets
             shutil.copy2(self.src_css, out_css)
             shutil.copy2(self.src_js, out_js)
             # Copy shared UI helpers if present (search, topbar wiring)
             if self.src_shared_ui.exists():
                 shutil.copy2(self.src_shared_ui, output_dir / "shared-ui.js")
-            logging.info("Shared assets ensured (chapter.css, chapter.js, shared-ui.js if present)")
+            logging.info("Shared assets ensured (book.css, book.js, shared-ui.js if present)")
         except Exception as exc:  # pragma: no cover - defensive
             logging.warning(f"Failed to ensure shared assets: {exc}")
 
@@ -310,6 +310,8 @@ class HTMLPostProcessor:
                 # (e.g., rel="up", rel="start", rel="chapter", rel="part", rel="appendix", "prev", "next").
                 self._remove_legacy_head_relations(soup)
                 self._ensure_body_top_anchor(soup)
+                # Attempt to resolve and fix missing images and unhelpful alt text early.
+                self._fix_images_in_document(soup, html_file.name, output_dir)
                 self._rebuild_header_navigation(soup, html_file.name, file_by_name, preface_file, chapter_files, appendix_files)
                 self._remove_hardcoded_top_bar(soup)
                 self._remove_preface_toc_if_needed(soup, html_file.name)
@@ -349,15 +351,15 @@ class HTMLPostProcessor:
             return
         if head_tag.find("meta", {"name": "viewport"}) is None:
             head_tag.insert(0, soup.new_tag("meta", attrs={"name": "viewport", "content": "width=device-width, initial-scale=1"}))
-        if head_tag.find("link", {"href": "chapter.css"}) is None:
-            head_tag.append(soup.new_tag("link", rel="stylesheet", href="chapter.css", type="text/css"))
-        # Ensure external JS in preferred order: shared-ui.js, then chapter.js
+        if head_tag.find("link", {"href": "book.css"}) is None:
+            head_tag.append(soup.new_tag("link", rel="stylesheet", href="book.css", type="text/css"))
+        # Ensure external JS in preferred order: shared-ui.js, then book.js
         if soup.find("script", {"src": "shared-ui.js"}) is None:
             sui = soup.new_tag("script", src="shared-ui.js")
             sui.attrs["defer"] = "defer"
             head_tag.append(sui)
-        if soup.find("script", {"src": "chapter.js"}) is None:
-            cjs = soup.new_tag("script", src="chapter.js")
+        if soup.find("script", {"src": "book.js"}) is None:
+            cjs = soup.new_tag("script", src="book.js")
             cjs.attrs["defer"] = "defer"
             head_tag.append(cjs)
 
@@ -412,6 +414,267 @@ class HTMLPostProcessor:
         body_tag = ensure_tag(soup.find("body"), "body")
         if body_tag and not body_tag.get("id"):
             body_tag["id"] = "top"
+
+    # ---------- figures & images ----------
+    def _strip_tex_comments(self, text: str) -> str:
+        try:
+            # Remove LaTeX comments: '%' to end-of-line (ignore escaped \%)
+            lines = []
+            for line in text.splitlines():
+                # crude but effective: split on unescaped %
+                pos = 0
+                cut = len(line)
+                while True:
+                    idx = line.find('%', pos)
+                    if idx == -1:
+                        break
+                    if idx > 0 and line[idx - 1] == '\\':
+                        pos = idx + 1
+                        continue
+                    cut = idx
+                    break
+                lines.append(line[:cut])
+            return "\n".join(lines)
+        except Exception:
+            return text
+
+    def _extract_includegraphics_paths(self, tex_path: Path) -> List[str]:
+        try:
+            raw = tex_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            return []
+        cleaned = self._strip_tex_comments(raw)
+        try:
+            pattern = re.compile(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}")
+            return [m.group(1) for m in pattern.finditer(cleaned)]
+        except Exception:
+            return []
+
+    def _extract_includegraphics_by_figure(self, tex_path: Path) -> List[List[str]]:
+        """Return a list of includegraphics path lists, grouped per LaTeX figure.
+
+        Heuristic parser: splits the .tex by \begin{figure}...\end{figure} (also figure*),
+        and collects \includegraphics within each block. If no explicit figure env is found,
+        falls back to a single block with all includegraphics in document order.
+        """
+        grouped: List[List[str]] = []
+        try:
+            raw = tex_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            return grouped
+        text = self._strip_tex_comments(raw)
+        try:
+            # Split into figure blocks (non-greedy dotall)
+            fig_re = re.compile(r"\\begin\{figure\*?\}([\s\S]*?)\\end\{figure\*?\}", re.MULTILINE)
+            inc_re = re.compile(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}")
+            blocks = list(fig_re.finditer(text))
+            if not blocks:
+                all_paths = [m.group(1) for m in inc_re.finditer(text)]
+                if all_paths:
+                    grouped.append(all_paths)
+                return grouped
+            for b in blocks:
+                span_text = b.group(1)
+                paths = [m.group(1) for m in inc_re.finditer(span_text)]
+                grouped.append(paths)
+            return grouped
+        except Exception:
+            return grouped
+
+    def _find_source_tex_for_html_name(self, name: str) -> Optional[Path]:
+        # Map ChN.html to chapters/chapterN/*.tex (english), A1/A2 to appendices, Chx1 to preface
+        m_ch = re.match(r"^Ch(\d+)\.html$", name, flags=re.IGNORECASE)
+        if m_ch:
+            num = int(m_ch.group(1))
+            chapter_dir = self.repo_root / "chapters" / f"chapter{num}"
+            if chapter_dir.is_dir():
+                tex_files = sorted([p for p in chapter_dir.glob("*.tex") if "_zh" not in p.name.lower()])
+                if tex_files:
+                    return tex_files[0]
+        m_pref = re.match(r"^Chx\d+\.html$", name, flags=re.IGNORECASE)
+        if m_pref:
+            cand = self.repo_root / "chapters" / "preface" / "preface.tex"
+            return cand if cand.exists() else None
+        m_app = re.match(r"^A(\d+)\.html$", name, flags=re.IGNORECASE)
+        if m_app:
+            app_map = {1: "appendixA", 2: "appendixB"}
+            num = int(m_app.group(1))
+            app_dir_name = app_map.get(num)
+            if app_dir_name:
+                app_dir = self.repo_root / "chapters" / app_dir_name
+                tex_files = sorted([p for p in app_dir.glob("*.tex") if "_zh" not in p.name.lower()])
+                if tex_files:
+                    return tex_files[0]
+        return None
+
+    def _sanitize_filename(self, stem: str) -> str:
+        # Replace spaces and unsafe chars with '-'
+        safe = re.sub(r"[^A-Za-z0-9._-]+", "-", stem.strip())
+        safe = re.sub(r"-+", "-", safe).strip("-._")
+        return safe or "image"
+
+    def _convert_pdf_to_png(self, src_pdf: Path, dest_png: Path) -> bool:
+        try:
+            dest_png.parent.mkdir(parents=True, exist_ok=True)
+            # Prefer ImageMagick if available
+            try:
+                proc = subprocess.run(
+                    ["magick", "convert", "-density", "300", str(src_pdf), "-quality", "92", str(dest_png)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    check=False,
+                )
+                if proc.returncode == 0 and dest_png.exists():
+                    return True
+            except Exception:
+                pass
+            # Fallback to macOS sips
+            try:
+                proc2 = subprocess.run(
+                    ["sips", "-s", "format", "png", str(src_pdf), "--out", str(dest_png)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    check=False,
+                )
+                if proc2.returncode == 0 and dest_png.exists():
+                    return True
+            except Exception:
+                pass
+            logging.warning("Could not convert PDF to PNG: %s", src_pdf)
+            return False
+        except Exception as exc:  # pragma: no cover - defensive
+            logging.warning("PDF→PNG conversion failed for %s: %s", src_pdf, exc)
+            return False
+
+    def _figure_caption_text(self, figure_tag: Tag) -> Optional[str]:
+        try:
+            cap = ensure_tag(figure_tag.find("figcaption"))
+            return strip_whitespace(cap.get_text(" ", strip=True)) if cap else None
+        except Exception:
+            return None
+
+    def _fix_images_in_document(self, soup: BeautifulSoup, html_name: str, output_dir: Path) -> None:
+        try:
+            # Replace generic alt text with caption; resolve missing images using source .tex
+            src_tex = self._find_source_tex_for_html_name(html_name)
+            include_groups: List[List[str]] = self._extract_includegraphics_by_figure(src_tex) if src_tex else []
+            group_idx = 0
+            image_idx_in_group = 0
+
+            def get_next_include_path() -> Optional[str]:
+                nonlocal group_idx, image_idx_in_group, include_groups
+                while group_idx < len(include_groups) and image_idx_in_group >= len(include_groups[group_idx]):
+                    group_idx += 1
+                    image_idx_in_group = 0
+                if group_idx < len(include_groups) and image_idx_in_group < len(include_groups[group_idx]):
+                    path = include_groups[group_idx][image_idx_in_group]
+                    image_idx_in_group += 1
+                    return path
+                return None
+
+            # Compute base output image dir
+            rel_img_dir: Optional[Path] = None
+            m_ch = re.match(r"^Ch(\d+)\.html$", html_name, flags=re.IGNORECASE)
+            m_app = re.match(r"^A(\d+)\.html$", html_name, flags=re.IGNORECASE)
+            if m_ch:
+                rel_img_dir = Path("chapters") / f"chapter{int(m_ch.group(1))}" / "figs"
+            elif m_app:
+                app_map = {1: "appendixA", 2: "appendixB"}
+                dir_name = app_map.get(int(m_app.group(1)))
+                if dir_name:
+                    rel_img_dir = Path("chapters") / dir_name / "figs"
+
+            figures = list(soup.find_all("figure"))
+            for fig in figures:
+                fig_tag = ensure_tag(fig)
+                if not fig_tag:
+                    continue
+                caption_text = self._figure_caption_text(fig_tag)
+                for img_any in fig_tag.find_all("img"):
+                    img = ensure_tag(img_any)
+                    if not img:
+                        continue
+                    # Improve alt text where possible
+                    try:
+                        alt_val = cast(Optional[str], img.get("alt"))
+                        if alt_val and alt_val.strip().lower() == "refer to caption" and caption_text:
+                            img["alt"] = caption_text
+                    except Exception:
+                        pass
+
+                    # Attempt to resolve missing images
+                    classes = cast(List[str], img.get("class", []))
+                    src_attr = cast(Optional[str], img.get("src"))
+                    is_missing = (not src_attr) or ("ltx_missing" in classes or "ltx_missing_image" in classes)
+
+                    # Determine includegraphics path for this image using grouped mapping
+                    include_path: Optional[str] = None
+                    if is_missing:
+                        include_path = get_next_include_path()
+
+                    if not is_missing:
+                        continue
+                    if not include_path:
+                        continue
+
+                    # Normalize the includegraphics path
+                    inc = include_path.strip()
+                    # Expand LaTeX macro \toplevelprefix to repo root
+                    try:
+                        inc = inc.replace(r"\toplevelprefix", str(self.repo_root))
+                    except Exception:
+                        pass
+                    inc = inc.replace("\\", "/")  # normalize backslashes
+                    inc = inc.replace("/./", "/")
+                    inc_path = Path(inc)
+                    if not inc_path.is_absolute():
+                        base_dir = src_tex.parent if src_tex else self.repo_root
+                        inc_path = (base_dir / inc).resolve()
+
+                    if not inc_path.exists():
+                        logging.debug("Include path not found on disk: %s", inc_path)
+                        continue
+
+                    # If it's a PDF, try to convert to PNG under output_dir/rel_img_dir
+                    if inc_path.suffix.lower() == ".pdf" and rel_img_dir is not None:
+                        out_dir = (output_dir / rel_img_dir).resolve()
+                        sanitized = self._sanitize_filename(inc_path.stem) + ".png"
+                        out_png = out_dir / sanitized
+                        if not out_png.exists():
+                            ok = self._convert_pdf_to_png(inc_path, out_png)
+                            if not ok:
+                                continue
+                        # Point img src to the new PNG
+                        img["src"] = str((rel_img_dir / sanitized).as_posix())
+                        # Remove missing classes if present
+                        try:
+                            new_classes = [c for c in classes if c not in {"ltx_missing", "ltx_missing_image"}]
+                            if new_classes:
+                                img["class"] = new_classes
+                            else:
+                                del img["class"]
+                        except Exception:
+                            pass
+                    else:
+                        # For non-PDF, try to compute a relative path into output dir if not already set
+                        if rel_img_dir is not None:
+                            target = output_dir / rel_img_dir / inc_path.name
+                            try:
+                                target.parent.mkdir(parents=True, exist_ok=True)
+                                if not target.exists():
+                                    shutil.copy2(inc_path, target)
+                                img["src"] = str((rel_img_dir / inc_path.name).as_posix())
+                                new_classes = [c for c in classes if c not in {"ltx_missing", "ltx_missing_image"}]
+                                if new_classes:
+                                    img["class"] = new_classes
+                                else:
+                                    del img["class"]
+                            except Exception:
+                                pass
+        except Exception as exc:  # pragma: no cover - defensive
+            logging.warning("Failed to fix images for %s: %s", html_name, exc)
 
     # ---------- navigation ----------
     def _compute_collections(self, file_by_name: dict[str, Path]) -> Tuple[Optional[str], List[str], List[str]]:
