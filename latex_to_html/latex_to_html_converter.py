@@ -315,6 +315,7 @@ class HTMLPostProcessor:
                 self._rebuild_header_navigation(soup, html_file.name, file_by_name, preface_file, chapter_files, appendix_files)
                 self._remove_hardcoded_top_bar(soup)
                 self._remove_preface_toc_if_needed(soup, html_file.name)
+                self._remove_bibliography_backlinks(soup)
                 self._clean_footer_prev_next(soup)
                 self._build_static_mini_toc(soup, html_file.name)
                 html_serialized = str(soup)
@@ -382,7 +383,7 @@ class HTMLPostProcessor:
         if not head_tag:
             return
         try:
-            removal_rels = {"up", "start", "chapter", "part", "appendix", "prev", "next"}
+            removal_rels = {"up", "start", "chapter", "part", "appendix", "prev", "next", "bibliography"}
             for link_any in list(head_tag.find_all("link")):
                 link_tag = ensure_tag(link_any)
                 if not link_tag:
@@ -399,6 +400,29 @@ class HTMLPostProcessor:
                     link_tag.decompose()
         except Exception:
             # Defensive: never let cleanup break the build
+            pass
+
+    def _remove_bibliography_backlinks(self, soup: BeautifulSoup) -> None:
+        """Remove appendix-only backlinks to the bibliography (links to bib.html).
+
+        We strip any anchors with href exactly 'bib.html' found in ToC blocks and footer/header areas,
+        but leave in-text citation links (which point to bib.html#bibxNNN) intact.
+        """
+        try:
+            # Remove direct links whose href is exactly 'bib.html'
+            for a_any in list(soup.find_all("a", href=True)):
+                a = ensure_tag(a_any)
+                if not a:
+                    continue
+                href_val = cast(Optional[str], a.get("href"))
+                if href_val and href_val.strip().lower() == "bib.html":
+                    a.decompose()
+            # Remove any empty ToC bibliography entries
+            for li_any in list(soup.select("li.ltx_tocentry_bibliography")):
+                li = ensure_tag(li_any)
+                if li and not li.get_text(strip=True):
+                    li.decompose()
+        except Exception:
             pass
 
     def _collapse_excess_blank_lines(self, html: str) -> str:
@@ -451,7 +475,7 @@ class HTMLPostProcessor:
             return []
 
     def _extract_includegraphics_by_figure(self, tex_path: Path) -> List[List[str]]:
-        """Return a list of includegraphics path lists, grouped per LaTeX figure.
+        r"""Return a list of includegraphics path lists, grouped per LaTeX figure.
 
         Heuristic parser: splits the .tex by \begin{figure}...\end{figure} (also figure*),
         and collects \includegraphics within each block. If no explicit figure env is found,
@@ -605,7 +629,8 @@ class HTMLPostProcessor:
                         pass
 
                     # Attempt to resolve missing images
-                    classes = cast(List[str], img.get("class", []))
+                    classes_attr_any: Any = img.get("class")
+                    classes: List[str] = cast(List[str], classes_attr_any if isinstance(classes_attr_any, list) else [])
                     src_attr = cast(Optional[str], img.get("src"))
                     is_missing = (not src_attr) or ("ltx_missing" in classes or "ltx_missing_image" in classes)
 
@@ -650,11 +675,13 @@ class HTMLPostProcessor:
                         img["src"] = str((rel_img_dir / sanitized).as_posix())
                         # Remove missing classes if present
                         try:
-                            new_classes = [c for c in classes if c not in {"ltx_missing", "ltx_missing_image"}]
-                            if new_classes:
-                                img["class"] = new_classes
+                            new_classes_list = [c for c in classes if c not in {"ltx_missing", "ltx_missing_image"}]
+                            if new_classes_list:
+                                # BeautifulSoup accepts list for class; cast to list[str]
+                                img["class"] = cast(Any, new_classes_list)
                             else:
-                                del img["class"]
+                                if img.has_attr("class"):
+                                    del img["class"]
                         except Exception:
                             pass
                     else:
@@ -666,11 +693,12 @@ class HTMLPostProcessor:
                                 if not target.exists():
                                     shutil.copy2(inc_path, target)
                                 img["src"] = str((rel_img_dir / inc_path.name).as_posix())
-                                new_classes = [c for c in classes if c not in {"ltx_missing", "ltx_missing_image"}]
-                                if new_classes:
-                                    img["class"] = new_classes
+                                new_classes_list = [c for c in classes if c not in {"ltx_missing", "ltx_missing_image"}]
+                                if new_classes_list:
+                                    img["class"] = cast(Any, new_classes_list)
                                 else:
-                                    del img["class"]
+                                    if img.has_attr("class"):
+                                        del img["class"]
                             except Exception:
                                 pass
         except Exception as exc:  # pragma: no cover - defensive
@@ -759,40 +787,18 @@ class HTMLPostProcessor:
         if not header_tag:
             return
 
-        center_div_any = header_tag.find("div", class_="ltx_align_center")
-        center_div = ensure_tag(center_div_any)
-        if not center_div:
-            center_div = soup.new_tag("div")
-            center_div["class"] = "ltx_align_center"
-            header_tag.append(center_div)
-        center_div.clear()
-        assert isinstance(center_div, Tag)
-        center_div_tag: Tag = center_div
+        # Remove the secondary top bar (centered header navigation) for ALL pages.
+        # Sidebar already provides navigation; keep header minimal.
+        try:
+            center_div = ensure_tag(header_tag.find("div", class_="ltx_align_center"))
+            if center_div:
+                center_div.decompose()
+        except Exception:
+            pass
+        return
 
-        def add_link(href: Optional[str], text: str) -> None:
-            if not href:
-                return
-            a = soup.new_tag("a")
-            a["class"] = "ltx_ref"
-            a["href"] = str(href)
-            span = soup.new_tag("span")
-            span["class"] = "ltx_text ltx_ref_title"
-            span.string = text
-            a.append(span)
-            center_div_tag.append(a)
-
-        add_link("#top", "Top of Page")
-        desired_prev, desired_next = self._compute_prev_next_for(this_name, file_by_name, preface_file, chapter_files, appendix_files)
-
-        # Ensure any legacy <head> rel prev/next are removed; we no longer emit these in <head>
-        head_tag = ensure_tag(soup.find("head"), "head")
-        if head_tag:
-            for rel_name in ["prev", "next"]:
-                for el in list(head_tag.find_all("link", rel=rel_name)):
-                    cast(Tag, el).decompose()
-
-        add_link(desired_prev, "Previous Chapter")
-        add_link(desired_next, "Next Chapter")
+        # Function now intentionally no-ops beyond removing the center header content.
+        # We still keep the prev/next relations out of <head> elsewhere.
 
     # ---------- topbar ----------
     def _remove_hardcoded_top_bar(self, soup: BeautifulSoup) -> None:
