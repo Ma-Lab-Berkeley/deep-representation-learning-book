@@ -1,5 +1,19 @@
 /* Shared UI inserter: top bar and optional sidebars */
 (function(){
+  // Ensure Inter font is available on all pages (chapters don't include it by default)
+  try {
+    var hasInter = Array.prototype.some.call(document.querySelectorAll('link[rel="stylesheet"]'), function(l){
+      var href = l.getAttribute('href') || '';
+      return href.indexOf('fonts.googleapis.com') !== -1 && href.indexOf('Inter') !== -1;
+    });
+    if (!hasInter) {
+      var gf = document.createElement('link');
+      gf.rel = 'stylesheet';
+      gf.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap';
+      var head = document.head || document.getElementsByTagName('head')[0];
+      if (head) head.appendChild(gf);
+    }
+  } catch (_) {}
   var DEFAULT_NAV_LINKS = [
     { label: 'Contributors', href: 'contributors.html' },
     { label: 'How to Contribute?', href: 'https://github.com/Ma-Lab-Berkeley/ldrdd-book#making-a-contribution', external: true }
@@ -84,11 +98,17 @@
       )
     );
 
+    var chatToggle = h('button', { className: 'chat-toggle', type: 'button', title: 'Ask AI about this page' },
+      h('span', { className: 'chat-toggle-icon', html: '&#128172;' }),
+      h('span', { className: 'chat-toggle-label', text: 'Ask AI' })
+    );
+
     var bar = h('div', { className:'book-topbar', id:'book-topbar', 'data-shared-ui':'1' },
       h('a', { className:'brand brand-link', href:brandHref }, logo, h('div', { className:'title', text:title })),
       h('div', { className:'topbar-right' },
         search,
         langSelect,
+        chatToggle,
         h('a', { className:'gh-link', href:'https://github.com/Ma-Lab-Berkeley/ldrdd-book', target:'_blank', rel:'noopener noreferrer' }, ghIcon, h('span', { text:'GitHub' }))
       )
     );
@@ -132,6 +152,243 @@
         input.addEventListener('blur', function(){ setTimeout(function(){ open=false; render(); }, 120); });
         input.addEventListener('keydown', function(e){ if(!items.length) return; if(e.key==='ArrowDown'){ e.preventDefault(); active=(active+1)%items.length; render(); } else if(e.key==='ArrowUp'){ e.preventDefault(); active=(active-1+items.length)%items.length; render(); } else if(e.key==='Enter'){ var target=items[Math.max(0,active)]||items[0]; if(!target) return; if(target.external){ window.open(target.href,'_blank','noopener,noreferrer'); } else { window.location.href = target.href; } } });
       }
+    } catch (e) {}
+
+    // Wire chat toggle and ensure chat panel exists
+    try {
+      function ensureChatPanel(){
+        if (document.getElementById('ai-chat-panel')) return;
+        // Shell
+        var panel = h('div', { id: 'ai-chat-panel', className: 'ai-chat-panel', role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'ai-chat-title' },
+          h('div', { className: 'ai-chat-header' },
+            h('div', { id: 'ai-chat-title', className: 'ai-chat-title', text: 'Ask AI' }),
+            h('div', { className: 'ai-chat-actions' },
+              h('button', { className: 'ai-chat-clear', type: 'button', title: 'Clear conversation', text: 'Clear' }),
+              h('button', { className: 'ai-chat-close', type: 'button', title: 'Close', text: 'Close' })
+            )
+          ),
+          h('div', { className: 'ai-chat-context' },
+            h('label', { className: 'ai-chat-ctx-row' },
+              h('input', { type: 'checkbox', className: 'ai-chat-include-selection', checked: 'checked' }),
+              h('span', { text: 'Include current text selection' })
+            ),
+            h('div', { className: 'ai-chat-selection-preview' },
+              h('div', { className: 'ai-chat-selection-empty', text: 'Select text in the page to include it as context.' }),
+              h('div', { className: 'ai-chat-selection-text' })
+            )
+          ),
+          h('div', { className: 'ai-chat-messages', id: 'ai-chat-messages' }),
+          h('form', { className: 'ai-chat-compose', id: 'ai-chat-form' },
+            h('textarea', { className: 'ai-chat-input', id: 'ai-chat-input', rows: '3', placeholder: 'Ask a question about this page…' }),
+            h('div', { className: 'ai-chat-sendrow' },
+              h('button', { className: 'ai-chat-send', id: 'ai-chat-send', type: 'submit', text: 'Send' })
+            )
+          )
+        );
+        document.body.appendChild(panel);
+
+        // Behavior
+        var closeBtn = panel.querySelector('.ai-chat-close');
+        if (closeBtn) closeBtn.addEventListener('click', function(){ document.body.classList.remove('ai-chat-open'); });
+        var clearBtn = panel.querySelector('.ai-chat-clear');
+        if (clearBtn) clearBtn.addEventListener('click', function(){
+          var msgs = panel.querySelector('#ai-chat-messages');
+          if (msgs) msgs.innerHTML = '';
+          chatState.messages = [];
+        });
+        var form = panel.querySelector('#ai-chat-form');
+        if (form) form.addEventListener('submit', function(e){ e.preventDefault(); sendChatMessage(); });
+        var ta = panel.querySelector('#ai-chat-input');
+        if (ta) ta.addEventListener('keydown', function(e){
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            form && form.dispatchEvent(new Event('submit', { cancelable: true }));
+          }
+        });
+      }
+
+      var chatState = { messages: [], currentSelection: '', sending: false };
+
+      function getTrimmedSelection(maxLen){
+        maxLen = maxLen || 1200;
+        var sel = window.getSelection && window.getSelection();
+        if (!sel || sel.isCollapsed) return '';
+        // Ignore selections that are inside the chat panel (preview, input, etc.)
+        try {
+          var panel = document.getElementById('ai-chat-panel');
+          if (panel && sel.rangeCount > 0) {
+            var a = sel.anchorNode, f = sel.focusNode;
+            var inside = (a && panel.contains(a)) || (f && panel.contains(f));
+            if (inside) return '';
+          }
+        } catch (_) {}
+        var text = (sel.toString() || '').trim();
+        // Normalize whitespace to keep inline math readable
+        // 1) Convert non-breaking spaces to regular spaces
+        text = text.replace(/\u00A0/g, ' ');
+        // 2) Collapse any sequence of whitespace (spaces, tabs, newlines) into a single space
+        text = text.replace(/\s+/g, ' ');
+        if (!text) return '';
+        if (text.length > maxLen) text = text.slice(0, maxLen) + '\u2026';
+        return text;
+      }
+
+      function updateSelectionPreview(){
+        var panel = document.getElementById('ai-chat-panel'); if (!panel) return;
+        var txt = chatState.currentSelection || '';
+        var empty = panel.querySelector('.ai-chat-selection-empty');
+        var box = panel.querySelector('.ai-chat-selection-text');
+        if (!box || !empty) return;
+        if (txt) {
+          empty.style.display = 'none';
+          box.textContent = txt;
+          box.style.display = 'block';
+        } else {
+          box.style.display = 'none';
+          empty.style.display = 'block';
+        }
+      }
+
+      function appendMessage(role, content){
+        var panel = document.getElementById('ai-chat-panel'); if (!panel) return;
+        var list = panel.querySelector('#ai-chat-messages'); if (!list) return;
+        var item = document.createElement('div');
+        item.className = 'ai-chat-msg ' + (role === 'user' ? 'from-user' : 'from-assistant');
+        var bubble = document.createElement('div');
+        bubble.className = 'ai-chat-bubble';
+        bubble.textContent = content;
+        item.appendChild(bubble);
+        list.appendChild(item);
+        list.scrollTop = list.scrollHeight + 999;
+      }
+
+      function appendTypingIndicator(){
+        var panel = document.getElementById('ai-chat-panel'); if (!panel) return null;
+        var list = panel.querySelector('#ai-chat-messages'); if (!list) return null;
+        var item = document.createElement('div');
+        item.className = 'ai-chat-msg from-assistant typing';
+        var bubble = document.createElement('div');
+        bubble.className = 'ai-chat-bubble';
+        var typing = document.createElement('div');
+        typing.className = 'ai-typing';
+        for (var i = 0; i < 3; i++) {
+          var dot = document.createElement('span');
+          dot.className = 'dot';
+          typing.appendChild(dot);
+        }
+        bubble.appendChild(typing);
+        item.appendChild(bubble);
+        list.appendChild(item);
+        list.scrollTop = list.scrollHeight + 999;
+        return item;
+      }
+
+      function removeTypingIndicator(el){
+        try { if (el && el.parentNode) el.parentNode.removeChild(el); } catch (_) {}
+      }
+
+      function setSending(isSending){
+        chatState.sending = !!isSending;
+        var btn = document.getElementById('ai-chat-send');
+        var input = document.getElementById('ai-chat-input');
+        if (btn) btn.disabled = !!isSending;
+        if (input) input.disabled = !!isSending;
+      }
+
+      function buildPayload(userText){
+        var includeSel = false;
+        var panel = document.getElementById('ai-chat-panel');
+        if (panel) {
+          var cb = panel.querySelector('.ai-chat-include-selection');
+          includeSel = !!(cb && cb.checked && chatState.currentSelection);
+        }
+        var msgs = [];
+        msgs.push({ role: 'system', content: 'You are an AI assistant helping readers of the book Learning Deep Representations of Data Distributions. Answer clearly and concisely. If relevant, point to sections or headings from the current page.' });
+        if (includeSel) msgs.push({ role: 'user', content: 'Context from selected text on the page:\n\n' + chatState.currentSelection });
+        msgs.push({ role: 'user', content: userText });
+        return msgs;
+      }
+
+      function getApiConfig(){
+        // Users can override via: window.CHAT_API = { endpoint, model }
+        // Default to calling a serverless proxy to avoid exposing API keys
+        window.CHAT_API = window.CHAT_API || {
+          endpoint: '/.netlify/functions/chat',
+          model: 'gpt-4o-mini'
+        };
+        var cfg = (window.CHAT_API && typeof window.CHAT_API === 'object') ? window.CHAT_API : null;
+        if (cfg && cfg.endpoint) return cfg;
+        // Fallback placeholder (mock)
+        return null;
+      }
+
+      function requestAssistant(messages){
+        var cfg = getApiConfig();
+        if (!cfg) {
+          return Promise.resolve({ content: 'Mock response: AI chat is not configured. Set window.CHAT_API = { endpoint, apiKey, model } to connect to your backend (OpenAI-style). You asked: ' + (messages[messages.length-1] && messages[messages.length-1].content || '') });
+        }
+        var endpoint = cfg.endpoint;
+        var body = { model: cfg.model || 'gpt-4o-mini', messages: messages, temperature: 0.2, stream: false };
+        var headers = { 'Content-Type': 'application/json' };
+        return fetch(endpoint, { method: 'POST', headers: headers, body: JSON.stringify(body) })
+          .then(function(r){ return r.json(); })
+          .then(function(j){
+            // Try to read OpenAI-style
+            var txt = (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || (j && j.message && j.message.content) || (typeof j === 'string' ? j : JSON.stringify(j));
+            return { content: txt || 'No content in response.' };
+          })
+          .catch(function(e){ return { content: 'Error contacting chat API: ' + (e && e.message ? e.message : String(e)) }; });
+      }
+
+      function sendChatMessage(){
+        var input = document.getElementById('ai-chat-input'); if (!input) return;
+        var text = (input.value || '').trim(); if (!text) return;
+        input.value = '';
+        appendMessage('user', text);
+        chatState.messages.push({ role: 'user', content: text });
+        setSending(true);
+        var payload = buildPayload(text);
+        var typingEl = appendTypingIndicator();
+        requestAssistant(payload).then(function(res){
+          removeTypingIndicator(typingEl);
+          var msg = (res && res.content) || 'No response.';
+          appendMessage('assistant', msg);
+          chatState.messages.push({ role: 'assistant', content: msg });
+        }).finally(function(){ removeTypingIndicator(typingEl); setSending(false); });
+      }
+
+      function openChat(){ ensureChatPanel(); document.body.classList.add('ai-chat-open'); }
+
+      chatToggle && chatToggle.addEventListener('click', function(e){ e.preventDefault(); ensureChatPanel(); document.body.classList.toggle('ai-chat-open'); });
+
+      // Track selection changes and update preview (debounced)
+      var selTimer = null;
+      function refreshSel(){
+        var s = getTrimmedSelection();
+        if (s) {
+          chatState.currentSelection = s;
+        }
+        updateSelectionPreview();
+      }
+      ['mouseup','keyup','selectionchange','touchend'].forEach(function(evt){ document.addEventListener(evt, function(){ if (selTimer) clearTimeout(selTimer); selTimer = setTimeout(refreshSel, 120); }, { passive: true }); });
+
+      // Clear stored selection when user clicks in the main text view (left content area)
+      function clearStoredSelection(){ chatState.currentSelection = ''; updateSelectionPreview(); }
+      function attachClearOnMainClick(){
+        try {
+          var main = document.querySelector('.ltx_page_main') || document.querySelector('.page');
+          if (!main) return;
+          // Avoid adding multiple listeners
+          if (main.getAttribute('data-chat-clear-listener')) return;
+          main.addEventListener('click', function(evt){
+            var panel = document.getElementById('ai-chat-panel');
+            if (panel && panel.contains(evt.target)) return; // ignore clicks inside chat
+            clearStoredSelection();
+          });
+          main.setAttribute('data-chat-clear-listener', '1');
+        } catch (_) {}
+      }
+      attachClearOnMainClick();
     } catch (e) {}
 
     // Wire up language dropdown (simple, non-intrusive behavior)
