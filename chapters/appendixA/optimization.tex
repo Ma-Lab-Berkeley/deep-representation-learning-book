@@ -462,13 +462,43 @@ where \(\eta_{k}\) is the parameter-wise adaptively set learning rate. This sche
 
 \section{Computing Gradients via Automatic Differentiation}\label{sec:autodiff}
 
-Above, we discussed several optimization algorithms for deep networks which assumed access to a \textit{first-order oracle}, i.e., a device which would allow us to compute \(\cL(\theta)\) and \(\nabla \cL(\theta)\). For simple functions \(\cL\), it is possible to do this by hand. However, for deep neural networks, it is intractable to do this by hand, and so we would require a general algorithm which would allow us to efficiently compute the gradients of arbitrary (sub)differentiable network architectures. In this section, we introduce the basics of \textit{automatic differentiation} (AD or \textit{autodiff}), which is a computationally efficient way to compute gradients and Jacobians with respect to the network parameters.
+Above, we discussed several optimization algorithms for deep networks which assumed access to a \textit{first-order oracle}, i.e., a device which would allow us to compute \(\cL(\theta)\) and \(\nabla \cL(\theta)\).
+For simple functions \(\cL\), it is possible to do this by hand.
+However, for deep neural networks, this quickly becomes tedious, and hinders
+rapid experimentation.
+Hence we require a general algorithm which would allow us to efficiently compute the gradients of arbitrary (sub)differentiable network architectures. 
 
-The first problem we need to cope with is the following. Above, we pretended that the parameter space \(\Theta\) was just some Euclidean space like \(\R^{n}\). In practice the parameters are really some collection of vectors, matrices, and higher-order objects: \(\Theta = \R^{m \times n} \times \R^{n} \times \R^{r \times q \times p} \times \R^{r \times q} \times \cdots\). While in theory this is the same thing as a large parameter space \(\R^{n^{\prime}}\) for \(n^{\prime}\) very large, computationally efficient algorithms for differentiation must treat these two spaces differently. Gradients and Jacobians with respect to different elements of this parameter space are best-represented as higher-dimensional objects; for example, the Jacobian of a function \(\R^{m \times n} \to \R^{r \times q \times p}\) (which may occur in the chain rule) has \textit{five coordinates}. The usual form of the derivative rules (e.g., chain rule) introduced in multivariable calculus assume that both the input and output are scalars or vectors, and thus does not prescribe a computationally efficient way to handle this kind of function. To this end, before introducing automatic differentiation, we will introduce a new calculus object called \textit{differentials}. 
+In this section, we introduce the basics of \textit{automatic differentiation}
+(AD or \textit{autodiff}), which is a computationally efficient way to compute
+gradients and Jacobians of general functions $f: \R^m \to \R^n$. We will show
+how this leads to the backpropagation algorithm for computing gradients of loss
+functions involving neural networks.
+A summary of the structure of this section is as follows:
+\begin{enumerate}
+    \item We introduce \textbf{differentials}, a convenient formalism for
+        calculating and organizing the derivatives of functions between
+        high-dimensional parameter spaces (which may themselves be products of
+        other spaces involving matrices, tensors, etc.).
+    \item We describe the basics of \textbf{forward-mode} and
+        \textbf{reverse-mode} automatic differentiation, which involves
+        considerations that are important for efficient computation of
+        gradients/Jacobians for different kinds of functions arising in machine
+        learning applications.
+    \item We describe \textbf{backpropagation} in the special case of a loss
+        function applied to a stack-of-layers neural network as an instantiation
+        of reverse-mode automatic differentiation.
+\end{enumerate}
+
+Our treatment will err on the mathematical side, to give the reader a deep
+understanding of the underlying mathematics. The reader should ensure to couple
+this understanding with a strong grasp of practical aspects of automatic
+differentiation for deep learning, for example as manifested in the outstanding
+tutorial of \textcite{karpathy-micrograd}.
 
 \subsection{Differentials}
 
-A full accounting of this subsection is given in the excellent guide \cite{bright2025matrix}. To motivate differentials, let us first consider the simple example of a differentiable function \(\cL \colon \R \to \R\) acting on a parameter \(\theta\). We can write 
+A full accounting of this subsection is given in the excellent guide \cite{bright2025matrix}.
+To motivate differentials, let us first consider the simple example of a differentiable function \(\cL \colon \R \to \R\) acting on a parameter \(\theta\). We can write 
 \begin{equation}
     \cL(\theta) - \cL(\theta_{0}) = \cL^{\prime}(\theta_{0})\cdot(\theta - \theta_{0}) + o(\abs{\theta - \theta_{0}}).
 \end{equation}
@@ -476,7 +506,8 @@ If we take \(\delta\theta \doteq \theta - \theta_{0}\) and \(\delta\cL \doteq \c
 \begin{equation}
     \delta\cL = \cL^{\prime}(\theta_{0})\cdot\delta\theta + o(\abs{\delta\theta}).
 \end{equation}
-We will (non-rigorously) define \(\odif{\theta}\) and \(\odif{\cL}\), i.e., the \textit{differentials} of \(\theta\) and \(\cL\), to be \textit{infinitesimally small} changes in \(\theta\) and \(\cL\). You can think of them as what you get when \(\delta\theta\) (and therefore \(\delta \cL\)) are extremely small. The goal of differential calculus, in some sense, is to study the relationships between the differentials \(\odif{\theta}\) and \(\odif{\cL}\), namely, seeing how small changes in the input of a function change the output. We should note that the differential \(\odif{\theta}\) is the \textit{same shape} as \(\theta\), and the differential \(\odif{\cL}\) is the \textit{same shape} as \(\cL\). In particular, we can write 
+We will (non-rigorously) define \(\odif{\theta}\) and \(\odif{\cL}\), i.e., the \textit{differentials} of \(\theta\) and \(\cL\), to be \textit{infinitesimally small} changes in \(\theta\) and \(\cL\). 
+Think of them as what one gets when \(\delta\theta\) (and therefore \(\delta \cL\)) are extremely small. The goal of differential calculus, in some sense, is to study the relationships between the differentials \(\odif{\theta}\) and \(\odif{\cL}\), namely, seeing how small changes in the input of a function change the output. We should note that the differential \(\odif{\theta}\) is the \textit{same shape} as \(\theta\), and the differential \(\odif{\cL}\) is the \textit{same shape} as \(\cL\). In particular, we can write 
 \begin{equation}
     \odif{\cL} = \cL^{\prime}(\theta)\cdot\odif{\theta},
 \end{equation}
@@ -492,13 +523,16 @@ for some notion of a derivative \(\cL^{\prime}(\theta)\). Since \(\theta\) (henc
     \textit{All products and powers \(\geq 2\) of differentials are equal to \(0\).}
 \end{quote}
 
-But now let us do as advertised and consider a higher-order tensor function \(\cL \colon \R^{m \times n} \to \R^{p \times q}\). Then our basic linearization equation is insufficient for this case: \(\odif{\cL} = \cL^{\prime}(\theta) \cdot \odif{\theta}\) does not make sense since \(\theta\) is an \(m \times n\) matrix but \(\odif{\cL}\) is a \(p \times q\) matrix, so there is no possible vector or matrix shape for \(\cL^{\prime}(\theta)\) that works in general (as no matrix can multiply a \(m \times n\) matrix to form a \(p \times q\) matrix unless \(m = p\)). So we must have a slightly more advanced interpretation. 
+% But now let us do as advertised and 
+Now consider a higher-order tensor function \(\cL \colon \R^{m \times n} \to \R^{p \times q}\). Then our basic linearization equation is insufficient for this case: \(\odif{\cL} = \cL^{\prime}(\theta) \cdot \odif{\theta}\) does not make sense since \(\theta\) is an \(m \times n\) matrix but \(\odif{\cL}\) is a \(p \times q\) matrix, so there is no possible vector or matrix shape for \(\cL^{\prime}(\theta)\) that works in general (as no matrix can multiply a \(m \times n\) matrix to form a \(p \times q\) matrix unless \(m = p\)). So we must have a slightly more advanced interpretation. 
 
 Namely, we consider \(\cL^{\prime}(\theta)\) as a \textit{linear transformation} whose input is \(\theta\)-space and whose output is \(\cL\)-space, which takes in a small change in \(\theta\) and outputs the corresponding small change in \(\cL\). Namely, we can write 
 \begin{equation}
     \odif{\cL} = \cL^{\prime}(\theta)[\odif{\theta}].
 \end{equation}
-In the previous cases, \(\cL^{\prime}(\theta)\) was first a linear operator \(\R \to \R\) whose action was to multiply its input by the scalar derivative of \(\cL\) with respect to \(\theta\), and then a linear operator \(\R^{n} \to \R\) whose action was to multiply its input by the Jacobian derivative of \(\cL\) with respect to \(\theta\). In general \(\cL^{\prime}(\theta)\) is the ``derivative'' of \(\cL\) w.r.t.~\(\theta\). You can think of \(\cL^{\prime}\) as a generalized version of the Jacobian of \(\cL\). As such, it follows some simple derivative rules, most crucially the chain rule.
+In the previous cases, \(\cL^{\prime}(\theta)\) was first a linear operator \(\R \to \R\) whose action was to multiply its input by the scalar derivative of \(\cL\) with respect to \(\theta\), and then a linear operator \(\R^{n} \to \R\) whose action was to multiply its input by the Jacobian derivative of \(\cL\) with respect to \(\theta\). In general \(\cL^{\prime}(\theta)\) is the ``derivative'' of \(\cL\) w.r.t.~\(\theta\). 
+Think of \(\cL^{\prime}\) as a generalized version of the Jacobian of \(\cL\).
+As such, it follows some simple derivative rules, most crucially the chain rule.
 
 \begin{theorem}[Differential Chain Rule]
     Suppose \(\cL = f \circ g\) where \(f\) and \(g\) are differentiable. Then 
@@ -512,7 +546,11 @@ In the previous cases, \(\cL^{\prime}(\theta)\) was first a linear operator \(\R
     in the sense of equality of linear operators. 
 \end{theorem}
 
-Let's do a couple examples.
+It is productive to think of the multivariate chain rule in functorial terms:
+composition of functions gets `turned into' matrix multiplication of Jacobians
+(composition of linear operators!).
+We illustrate the power of this result and this perspective through several
+examples.
 
 \begin{example}
     Consider the function \(f(\vX) = \vW\vX + \vb\vone^{\top}\). Then 
@@ -593,16 +631,42 @@ Let's do a couple examples.
     which represents a higher-order tensor multiplication operation that is nonetheless well-defined.
 \end{example}
 
-This gives us all the technology we need to compute differentials of everything. The last thing we cover in this section is a method to compute gradients using the differential. Namely, for a function \(\cL\) whose output is a scalar, we can define the gradient \(\nabla \cL\) as 
+This gives us all the technology we need to compute differentials of everything.
+The last thing we cover in this section is a method to compute gradients using
+the differential. Namely, for a function \(\cL\) whose output is a scalar, the
+gradient \(\nabla \cL\) is defined as 
 \begin{equation}
     \odif{\cL} = \cL^{\prime}(\theta)[\odif{\theta}] = \ip{\nabla \cL(\theta)}{\odif{\theta}},
 \end{equation}
-where the inner product here is the ``standard'' inner product for the specified objects (i.e., for vectors it's the \(\ell^{2}\) inner product, whereas for matrices it's the Frobenius inner product, and for higher-order tensors it's the analogous sum-of-coordinates inner product). So one way to compute the gradient \(\nabla \cL\) is to compute the differential \(\odif{\cL}\) and rewrite it in the form \(\ip{\text{something}}{\odif{\theta}}\), then that ``something'' is the gradient.
+where the inner product here is the ``standard'' inner product for the specified objects (i.e., for vectors it's the \(\ell^{2}\) inner product, whereas for matrices it's the Frobenius inner product, and for higher-order tensors it's the analogous sum-of-coordinates inner product). 
+This definition is the correct generalization of the `familiar' example of the
+gradient of a function from $\R^n$ to $\R$ as the vector of partial
+derivatives---a version of Taylor's theorem for general functions $f : \R^m \to
+\R^n$ makes this connection rigorous.
+So one way to compute the gradient \(\nabla \cL\) is to compute the differential
+\(\odif{\cL}\) and rewrite it in the form
+\(\ip{\text{something}}{\odif{\theta}}\), then that ``something'' is the
+gradient.
+
+
+
 
 
 \subsection{Automatic Differentiation}
 
-The main idea of AD is to compute the chain rule efficiently. Let us do a simple example to start. Let \(\cL\) be defined by \(\cL = a \circ b \circ c\) where \(a, b, c\) are differentiable. Then the \textit{chain rule} gives
+The main idea of AD is to compute the chain rule efficiently. 
+The basic problem we need to cope with is the following. In the optimization section
+of the appendix, we considered
+that the parameter space \(\Theta\) was an abstract Euclidean space like
+\(\R^{n}\). In practice the parameters are really some collection of vectors,
+matrices, and higher-order objects: \(\Theta = \R^{m \times n} \times \R^{n}
+\times \R^{r \times q \times p} \times \R^{r \times q} \times \cdots\). While in
+theory this is the same thing as a large parameter space \(\R^{n^{\prime}}\) for
+some (very large) \(n^{\prime}\), computationally efficient algorithms for differentiation must treat these two spaces differently. 
+Forward and reverse mode automatic differentiation are two different schemes for
+performing this computation.
+
+Let us do a simple example to start. Let \(\cL\) be defined by \(\cL = a \circ b \circ c\) where \(a, b, c\) are differentiable. Then the \textit{chain rule} gives
 \begin{equation}
     \cL^{\prime}(\theta) = a^{\prime}(b(c(\theta)))b^{\prime}(c(\theta))c^{\prime}(\theta).
 \end{equation}
