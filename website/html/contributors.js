@@ -10,7 +10,7 @@
   const CONTRIBUTORS = [
     { name: 'Yaodong Yu', affil: 'University of Maryland, College Park', badges: ['Chapter 4'] },
     { name: 'Ziyang Wu', affil: 'University of California, Berkeley', badges: ['Website'] },
-    { name: 'Tianzhe Chu', affil: 'University of Hong Kong', badges: ['AI Helper'] },
+    { name: 'Tianzhe Chu', affil: 'University of Hong Kong', badges: ['AI Helper', 'Chinese Translation'] },
   ];
 
   // Top bar and sidebar are inserted by shared-ui.js
