@@ -42,7 +42,14 @@ except ImportError as import_error:
 # Configuration and constants
 # ------------------------------
 
-LATEXML_TIMEOUT_SEC: int = 1080
+# Fixed directory structure paths
+_CONVERTER_FILE = Path(__file__).resolve()
+CONVERTER_DIR = _CONVERTER_FILE.parent  # website/latex_to_html/
+WEBSITE_ROOT = CONVERTER_DIR.parent # website/latex_to_html/ -> website/
+PROJECT_ROOT = WEBSITE_ROOT.parent # website -> repo_root/
+HTML_OUTPUT_DIR = WEBSITE_ROOT / "html"  # website/html/
+
+LATEXML_TIMEOUT_SEC: int = 0
 
 # Example lines in LaTeXML log we want to capture as missing packages
 MISSING_PACKAGE_RE = re.compile(
@@ -79,7 +86,7 @@ class LaTeXMLConfig:
     preload: str = (
         "[nobibtex,nobreakuntex,localrawstyles,mathlexemes,"
         "magnify=1.2,zoomout=1.2,tokenlimit=2499999999,iflimit=3599999,"
-        "absorblimit=1299999,pushbacklimit=599999]latexml.sty"
+        "absorblimit=1299999,pushbacklimit=599999999]latexml.sty"
     )
     pmml: bool = True
     mathtex: bool = True
@@ -163,38 +170,6 @@ def list_missing_packages(log_path: Path) -> List[str]:
 
 
 # ------------------------------
-# Asset management
-# ------------------------------
-
-class AssetManager:
-    """Ensure repository-shipped shared assets are present in output directories."""
-
-    def __init__(self, repo_root: Path) -> None:
-        self.repo_root = repo_root
-        self.src_css = repo_root / "html" / "book.css"
-        self.src_js = repo_root / "html" / "book.js"
-        self.src_shared_ui = repo_root / "html" / "shared-ui.js"
-
-    def ensure_shared_assets(self, output_dir: Path) -> None:
-        try:
-            output_dir.mkdir(parents=True, exist_ok=True)
-            if not self.src_css.exists() or not self.src_js.exists():
-                raise FileNotFoundError("Shared assets 'book.css'/'book.js' not found under repo html/")
-
-            out_css = output_dir / "book.css"
-            out_js = output_dir / "book.js"
-            # Always copy; files are small and this avoids stale assets
-            shutil.copy2(self.src_css, out_css)
-            shutil.copy2(self.src_js, out_js)
-            # Copy shared UI helpers if present (search, topbar wiring)
-            if self.src_shared_ui.exists():
-                shutil.copy2(self.src_shared_ui, output_dir / "shared-ui.js")
-            logging.info("Shared assets ensured (book.css, book.js, shared-ui.js if present)")
-        except Exception as exc:  # pragma: no cover - defensive
-            logging.warning(f"Failed to ensure shared assets: {exc}")
-
-
-# ------------------------------
 # LaTeXML runner
 # ------------------------------
 
@@ -230,7 +205,7 @@ class LaTeXMLRunner:
         extra_paths: Sequence[Path] = (
             tuple(self.latexml_cfg.extra_paths)
             if self.latexml_cfg.extra_paths
-            else (Path(__file__).parent,)
+            else (CONVERTER_DIR,)
         )
         for p in extra_paths:
             args.append(f"--path={str(p)}")
@@ -263,7 +238,7 @@ class LaTeXMLRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                timeout=self.latexml_cfg.timeout_sec + 5,
+                timeout=max(self.latexml_cfg.timeout_sec + 5, 3600),
             )
             if proc.returncode != 0:
                 logging.error("LaTeXML failed (code %s)", proc.returncode)
@@ -304,19 +279,18 @@ class HTMLPostProcessor:
             try:
                 soup = BeautifulSoup(html_file.read_text(encoding="utf-8"), "html.parser")
                 self._ensure_document_skeleton(soup)
-                self._inject_head_basics(soup)
-                self._inject_stacked_header_css(soup)
+                self._inject_head_basics(soup, html_file.name)
                 # Remove LaTeXML-emitted document relation links that we don't use
                 # (e.g., rel="up", rel="start", rel="chapter", rel="part", rel="appendix", "prev", "next").
                 self._remove_legacy_head_relations(soup)
                 self._ensure_body_top_anchor(soup)
                 # Attempt to resolve and fix missing images and unhelpful alt text early.
                 self._fix_images_in_document(soup, html_file.name, output_dir)
-                self._rebuild_header_navigation(soup, html_file.name, file_by_name, preface_file, chapter_files, appendix_files)
-                self._remove_hardcoded_top_bar(soup)
+                self._remove_center_header_navigation(soup)
                 self._remove_preface_toc_if_needed(soup, html_file.name)
                 self._remove_bibliography_backlinks(soup)
                 self._clean_footer_prev_next(soup)
+                self._convert_tcolorbox_svg_to_div(soup)
                 self._build_static_mini_toc(soup, html_file.name)
                 html_serialized = str(soup)
                 html_serialized = self._collapse_excess_blank_lines(html_serialized)
@@ -347,33 +321,60 @@ class HTMLPostProcessor:
             _head_tag = soup.new_tag("head")
             html_tag.insert(0, _head_tag)
 
-    def _inject_head_basics(self, soup: BeautifulSoup) -> None:
+    def _should_include_chapter_styling(self, html_filename: str) -> bool:
+        """Determine if a file should include chapter-specific CSS and JS.
+        
+        Returns True for:
+        - A*.html (appendices)
+        - Ch*.html (chapters)
+        - Chx*.html (preface)
+        - bib.html (bibliography)
+        """
+        filename_lower = html_filename.lower()
+        
+        # Check for chapter files (Ch1.html, Ch2.html, etc.)
+        if re.match(r"^ch\d+\.html$", filename_lower):
+            return True
+        
+        # Check for appendix files (A1.html, A2.html, etc.)
+        if re.match(r"^a\d+\.html$", filename_lower):
+            return True
+        
+        # Check for preface files (Chx1.html, Chx2.html, etc.)
+        if re.match(r"^chx\d+\.html$", filename_lower):
+            return True
+        
+        # Check for bibliography
+        if filename_lower == "bib.html":
+            return True
+        
+        return False
+
+    def _inject_head_basics(self, soup: BeautifulSoup, html_filename: str) -> None:
         head_tag = ensure_tag(soup.find("head"), "head")
         if not head_tag:
             return
         if head_tag.find("meta", {"name": "viewport"}) is None:
             head_tag.insert(0, soup.new_tag("meta", attrs={"name": "viewport", "content": "width=device-width, initial-scale=1"}))
-        if head_tag.find("link", {"href": "book.css"}) is None:
-            head_tag.append(soup.new_tag("link", rel="stylesheet", href="book.css", type="text/css"))
-        # Ensure external JS in preferred order: shared-ui.js, then book.js
-        if soup.find("script", {"src": "shared-ui.js"}) is None:
-            sui = soup.new_tag("script", src="shared-ui.js")
+        
+        # Always add common CSS/JS for all files
+        if head_tag.find("link", {"href": "common.css"}) is None:
+            head_tag.append(soup.new_tag("link", rel="stylesheet", href="common.css", type="text/css"))
+        if soup.find("script", {"src": "common.js"}) is None:
+            sui = soup.new_tag("script", src="common.js")
             sui.attrs["defer"] = "defer"
             head_tag.append(sui)
-        if soup.find("script", {"src": "book.js"}) is None:
-            cjs = soup.new_tag("script", src="book.js")
-            cjs.attrs["defer"] = "defer"
-            head_tag.append(cjs)
+        
+        # Only add chapter-specific CSS/JS for chapter, appendix, preface, and bibliography files
+        if self._should_include_chapter_styling(html_filename):
+            if head_tag.find("link", {"href": "chapter.css"}) is None:
+                head_tag.append(soup.new_tag("link", rel="stylesheet", href="chapter.css", type="text/css"))
+            if soup.find("script", {"src": "chapter.js"}) is None:
+                cjs = soup.new_tag("script", src="chapter.js")
+                cjs.attrs["defer"] = "defer"
+                head_tag.append(cjs)
 
-    def _inject_stacked_header_css(self, soup: BeautifulSoup) -> None:  # pragma: no cover - inline CSS moved to chapter.css
-        head_tag = ensure_tag(soup.find("head"), "head")
-        if not head_tag:
-            return
-        # Remove legacy inline style blocks we previously injected
-        for legacy_id in ["stacked-topbars", "navbar-removed-fix"]:
-            legacy = ensure_tag(head_tag.find(id=legacy_id))
-            if legacy:
-                legacy.decompose()
+
 
     def _remove_legacy_head_relations(self, soup: BeautifulSoup) -> None:
         """Remove LaTeXML relational <link> elements we do not use.
@@ -513,9 +514,14 @@ class HTMLPostProcessor:
             num = int(m_ch.group(1))
             chapter_dir = self.repo_root / "chapters" / f"chapter{num}"
             if chapter_dir.is_dir():
-                tex_files = sorted([p for p in chapter_dir.glob("*.tex") if "_zh" not in p.name.lower()])
-                if tex_files:
-                    return tex_files[0]
+                tex_files = sorted([p for p in chapter_dir.glob("*.tex")])
+                # Prefer non-Chinese, non-temporary/draft files
+                def is_preferred(p: Path) -> bool:
+                    n = p.name.lower()
+                    undesirable = ("zh" in n) or ("tmp" in n) or ("draft" in n) or ("old" in n) or ("backup" in n)
+                    return not undesirable
+                preferred = [p for p in tex_files if is_preferred(p)]
+                return preferred[0] if preferred else (tex_files[0] if tex_files else None)
         m_pref = re.match(r"^Chx\d+\.html$", name, flags=re.IGNORECASE)
         if m_pref:
             cand = self.repo_root / "chapters" / "preface" / "preface.tex"
@@ -527,9 +533,13 @@ class HTMLPostProcessor:
             app_dir_name = app_map.get(num)
             if app_dir_name:
                 app_dir = self.repo_root / "chapters" / app_dir_name
-                tex_files = sorted([p for p in app_dir.glob("*.tex") if "_zh" not in p.name.lower()])
-                if tex_files:
-                    return tex_files[0]
+                tex_files = sorted([p for p in app_dir.glob("*.tex")])
+                def is_preferred_app(p: Path) -> bool:
+                    n = p.name.lower()
+                    undesirable = ("zh" in n) or ("tmp" in n) or ("draft" in n) or ("old" in n) or ("backup" in n)
+                    return not undesirable
+                preferred = [p for p in tex_files if is_preferred_app(p)]
+                return preferred[0] if preferred else (tex_files[0] if tex_files else None)
         return None
 
     def _sanitize_filename(self, stem: str) -> str:
@@ -611,12 +621,26 @@ class HTMLPostProcessor:
                 if dir_name:
                     rel_img_dir = Path("chapters") / dir_name / "figs"
 
-            figures = list(soup.find_all("figure"))
-            for fig in figures:
-                fig_tag = ensure_tag(fig)
-                if not fig_tag:
+            # Process only top-level LaTeX figure containers (ids like F23),
+            # and resolve all nested <img> within each container using the next
+            # group of includegraphics() paths from the source .tex.
+            all_figs = list(soup.find_all("figure"))
+            container_figs: List[Tag] = []
+            for fig in all_figs:
+                ft = ensure_tag(fig)
+                if not ft:
                     continue
+                fig_id = cast(Optional[str], ft.get("id"))
+                if fig_id and re.match(r"^F\d+$", fig_id):
+                    container_figs.append(ft)
+
+            for container in container_figs:
+                fig_tag = container
                 caption_text = self._figure_caption_text(fig_tag)
+                # Paths for this LaTeX figure environment
+                paths_for_group: List[str] = include_groups[group_idx] if group_idx < len(include_groups) else []
+                path_idx_for_group = 0
+
                 for img_any in fig_tag.find_all("img"):
                     img = ensure_tag(img_any)
                     if not img:
@@ -635,10 +659,12 @@ class HTMLPostProcessor:
                     src_attr = cast(Optional[str], img.get("src"))
                     is_missing = (not src_attr) or ("ltx_missing" in classes or "ltx_missing_image" in classes)
 
-                    # Determine includegraphics path for this image using grouped mapping
+                    # Determine includegraphics path for this image using the current figure's paths.
                     include_path: Optional[str] = None
-                    if is_missing:
-                        include_path = get_next_include_path()
+                    if path_idx_for_group < len(paths_for_group):
+                        include_path = paths_for_group[path_idx_for_group]
+                    # Always advance within the group to align with nested subfigure order
+                    path_idx_for_group += 1
 
                     if not is_missing:
                         continue
@@ -702,6 +728,8 @@ class HTMLPostProcessor:
                                         del img["class"]
                             except Exception:
                                 pass
+                # After finishing this container, move to the next source figure group
+                group_idx += 1
         except Exception as exc:  # pragma: no cover - defensive
             logging.warning("Failed to fix images for %s: %s", html_name, exc)
 
@@ -775,44 +803,23 @@ class HTMLPostProcessor:
 
         return (None, None)
 
-    def _rebuild_header_navigation(
-        self,
-        soup: BeautifulSoup,
-        this_name: str,
-        file_by_name: dict[str, Path],
-        preface_file: Optional[str],
-        chapter_files: List[str],
-        appendix_files: List[str],
-    ) -> None:
+    def _remove_center_header_navigation(self, soup: BeautifulSoup) -> None:
+        """Remove the secondary top bar (centered header navigation) for ALL pages.
+        
+        Sidebar already provides navigation; keep header minimal.
+        """
         header_tag = ensure_tag(soup.find("header", class_="ltx_page_header"))
         if not header_tag:
             return
 
-        # Remove the secondary top bar (centered header navigation) for ALL pages.
-        # Sidebar already provides navigation; keep header minimal.
         try:
             center_div = ensure_tag(header_tag.find("div", class_="ltx_align_center"))
             if center_div:
                 center_div.decompose()
         except Exception:
             pass
-        return
 
-        # Function now intentionally no-ops beyond removing the center header content.
-        # We still keep the prev/next relations out of <head> elsewhere.
 
-    # ---------- topbar ----------
-    def _remove_hardcoded_top_bar(self, soup: BeautifulSoup) -> None:
-        """Remove any previously injected hard-coded topbar.
-
-        The runtime navbar from html/shared-ui.js will render on page load.
-        """
-        try:
-            existing = ensure_tag(soup.find(id="book-topbar"))
-            if existing:
-                existing.decompose()
-        except Exception:
-            pass
 
     # ---------- cleanups ----------
     def _remove_preface_toc_if_needed(self, soup: BeautifulSoup, name: str) -> None:
@@ -933,6 +940,60 @@ class HTMLPostProcessor:
         else:
             container.insert(0, toc_div)
 
+    # ---------- tcolorbox conversion ----------
+    def _convert_tcolorbox_svg_to_div(self, soup: BeautifulSoup) -> None:
+        """Convert SVG tcolorbox environments to styled div.tcbox elements.
+        
+        This replicates the client-side JavaScript functionality that finds SVG pictures
+        containing foreignObject with tcolorbox content and converts them to properly
+        styled HTML div elements at build time.
+        """
+        try:
+            # Find all SVG pictures that might contain tcolorbox content
+            svg_pictures = soup.find_all("svg", class_="ltx_picture")
+            converted_count = 0
+            
+            for svg in svg_pictures:
+                # Look for the specific structure: svg > g > foreignobject > span.ltx_inline-block.ltx_minipage
+                # The foreignobject might be nested inside <g> elements
+                svg_tag = ensure_tag(svg)
+                if not svg_tag:
+                    continue
+                # Use CSS selector for better typing compatibility
+                minipage = svg_tag.select_one("span.ltx_inline-block.ltx_minipage")
+                if not minipage:
+                    continue
+                
+                # Extract plain text content to match original JavaScript behavior
+                # The original JS used innerText/textContent which preserves inter-element whitespace
+                raw_text = minipage.get_text()  # Don't strip=True, preserves spaces between elements
+                if not raw_text:
+                    continue
+                
+                # Normalize whitespace (equivalent to JS text.replace(/\s+/g, ' '))
+                # This collapses multiple spaces/newlines but preserves single spaces
+                normalized_text = re.sub(r'\s+', ' ', raw_text).strip()
+                
+                # Create the replacement div.tcbox structure
+                wrapper = soup.new_tag("div")
+                wrapper["class"] = "tcbox"
+                
+                p_elem = soup.new_tag("p")
+                p_elem["class"] = "ltx_p"
+                p_elem.string = normalized_text
+                
+                wrapper.append(p_elem)
+                
+                # Replace the SVG with the new div
+                svg.replace_with(wrapper)
+                converted_count += 1
+            
+            if converted_count > 0:
+                logging.info("Converted %d tcolorbox SVG elements to div.tcbox", converted_count)
+                
+        except Exception as exc:  # pragma: no cover - defensive
+            logging.warning("Failed to convert tcolorbox SVG elements: %s", exc)
+
 
 # ------------------------------
 # Search index generation
@@ -976,7 +1037,11 @@ class SearchIndexBuilder:
                 targets: List[Tag] = []
                 targets.extend(cast(List[Tag], soup.select("section.ltx_section[id]")))
                 targets.extend(cast(List[Tag], soup.select("section.ltx_subsection[id]")))
+                # Capture paragraph-level containers. LaTeXML emits either
+                # section.ltx_paragraph (older) or div.ltx_para (newer) for paragraphs.
+                # Include both to maximize recall.
                 targets.extend(cast(List[Tag], soup.select("section.ltx_paragraph[id]")))
+                targets.extend(cast(List[Tag], soup.select("div.ltx_para[id]")))
                 targets.extend(cast(List[Tag], soup.select(".ltx_theorem[id]")))
                 targets.extend(cast(List[Tag], soup.select(".ltx_equation[id]")))
                 targets.extend(cast(List[Tag], soup.select(".ltx_equationgroup[id]")))
@@ -1005,7 +1070,8 @@ class SearchIndexBuilder:
                     title = strip_whitespace(raw_title)[:200]
                     if not title:
                         continue
-                    snippet = strip_whitespace(el.get_text(" ", strip=True))[:280]
+                    # Allow a longer snippet to improve search recall without bloating the index too much.
+                    snippet = strip_whitespace(el.get_text(" ", strip=True))[:600]
                     entries.append({
                         "page": page_label,
                         "href": f"{html_path.name}#{el_id}",
@@ -1030,19 +1096,17 @@ class SearchIndexBuilder:
 
 def convert_latex_to_html(source_filepath: Path, output_dir: Path, verbose: bool = False) -> bool:
     """Orchestrate the full conversion + post-process pipeline."""
-    repo_root = Path(__file__).resolve().parents[1]
     resource_cfg = ResourceConfig()
     latexml_cfg = LaTeXMLConfig()
     runner = LaTeXMLRunner(resource_cfg, latexml_cfg)
-    assets = AssetManager(repo_root)
-    post = HTMLPostProcessor(repo_root)
+    post = HTMLPostProcessor(PROJECT_ROOT)
     search = SearchIndexBuilder()
 
     ok = runner.run(source_filepath, output_dir, verbose)
     if not ok:
         return False
 
-    assets.ensure_shared_assets(output_dir)
+    # Assets (CSS/JS) are already in website/html/, no need to copy
     post.post_process_all(output_dir)
     search.generate(output_dir)
     return True
@@ -1050,41 +1114,14 @@ def convert_latex_to_html(source_filepath: Path, output_dir: Path, verbose: bool
 
 def postprocess_only(source_filepath: str, output_dir_arg: Optional[str]) -> Tuple[bool, Path]:
     """Run only the HTML post-processing and search indexing phases."""
-    repo_root = Path(__file__).resolve().parents[1]
-    default_repo_html = repo_root / "html"
     if output_dir_arg:
         output_dir = Path(output_dir_arg).resolve()
     else:
-        src_path = Path(source_filepath).resolve() if source_filepath else default_repo_html
-
-        # If user points to an HTML file or an existing HTML directory, use that directory directly.
-        try:
-            if src_path.exists():
-                if src_path.is_file():
-                    # If it's already an .html file, operate on its parent directory
-                    if src_path.suffix.lower() == ".html":
-                        output_dir = src_path.parent
-                    else:
-                        # Assume LaTeX source; default to sibling html directory
-                        output_dir = src_path.parent / "html"
-                else:
-                    # It's a directory. If it looks like an HTML output dir, use it as-is.
-                    looks_like_html_dir = (
-                        src_path.name.lower() == "html"
-                        or any(p.suffix.lower() == ".html" for p in src_path.glob("*.html"))
-                    )
-                    output_dir = src_path if looks_like_html_dir else (src_path / "html")
-            else:
-                # Fallback to repo html/
-                output_dir = default_repo_html
-        except Exception:
-            # Defensive fallback
-            output_dir = default_repo_html
+        output_dir = HTML_OUTPUT_DIR
 
     logging.info("Post-processing HTML in: %s", output_dir)
-    assets = AssetManager(repo_root)
-    assets.ensure_shared_assets(output_dir)
-    post = HTMLPostProcessor(repo_root)
+    # Assets (CSS/JS) are already in website/html/, no need to copy
+    post = HTMLPostProcessor(PROJECT_ROOT)
     post.post_process_all(output_dir)
     SearchIndexBuilder().generate(output_dir)
     return True, output_dir
@@ -1125,7 +1162,11 @@ def main() -> None:
             raise SystemExit(1)
 
         source = Path(args.source_filepath).resolve()
-        output_dir = Path(args.output_dir).resolve() if args.output_dir else (source.parent / "html")
+        if args.output_dir:
+            output_dir = Path(args.output_dir).resolve()
+        else:
+            # Default to website/html/ directory
+            output_dir = HTML_OUTPUT_DIR
         logging.info("Source directory: %s", source.parent)
         logging.info("Output directory: %s", output_dir)
         success = convert_latex_to_html(source, output_dir, args.verbose)

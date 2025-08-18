@@ -1,4 +1,3 @@
-/* Extracted from contributors.html inline script */
 (function(){
   const AUTHORS = [
     { name: 'Sam Buchanan', affil: 'Toyota Technological Institute at Chicago', badges: ['Author', 'Lead Editor'] },
@@ -10,10 +9,11 @@
   const CONTRIBUTORS = [
     { name: 'Yaodong Yu', affil: 'University of Maryland, College Park', badges: ['Chapter 4'] },
     { name: 'Ziyang Wu', affil: 'University of California, Berkeley', badges: ['Website'] },
-    { name: 'Tianzhe Chu', affil: 'University of Hong Kong', badges: ['AI Helper'] },
+    { name: 'Tianzhe Chu', affil: 'University of Hong Kong', badges: ['AI Helper', 'Chinese Translation'] },
+    { name: 'Kerui Min', affil: 'MetaSOTA', badges: ['Chinese Translation'] },
   ];
 
-  // Top bar and sidebar are inserted by shared-ui.js
+  // Top bar and sidebar are inserted by common.js
 
   function Badges({ items }) {
     if (!items || !items.length) return null;
@@ -43,7 +43,7 @@
           React.createElement('h2', { style: { margin: '16px 0 8px', fontSize: '18px' } }, 'Contributors'),
           CONTRIBUTORS.map((p) => React.createElement(Card, { key: p.name, ...p }))
         ),
-        React.createElement('div', { className: 'foot' }, '© ', new Date().getFullYear(), ' The Authors. All rights reserved.')
+        React.createElement('div', { className: 'foot' }, '© ', new Date().getFullYear(), ' Sam Buchanan, Druv Pai, Peng Wang, and Yi Ma. All rights reserved.')
       )
     );
   }
@@ -57,8 +57,8 @@
   }
 
   ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-  if (window.insertTopBar) { try { window.insertTopBar(Object.assign({}, window.TOPBAR_OPTIONS || {}, { forceReplace: true })); } catch(e) {} }
-  if (window.insertSidebar) { try { window.insertSidebar('.layout-with-sidebar', window.NAV_LINKS, window.TOC); } catch(e) {} }
+  // if (window.insertTopBar) { try { window.insertTopBar(Object.assign({}, window.TOPBAR_OPTIONS || {}, { forceReplace: true })); } catch(e) {} }
+  // if (window.insertSidebar) { try { window.insertSidebar('.layout-with-sidebar', window.NAV_LINKS, window.TOC); } catch(e) {} }
 })();
 
 

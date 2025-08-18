@@ -1,4 +1,4 @@
-name: Deploy static site to Pages
+name: Build and deploy book site to GitHub Pages
 on:
   push:
     branches: ["main"]
@@ -19,11 +19,63 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    env:
+      TEXLIVE_APT_VERSION: "2023.20240207-1"
+      LATEXMK_APT_VERSION: "1:4.83-1"
+      BIBER_APT_VERSION: "2.19-2"
+      IMAGEMAGICK_APT_VERSION: "8:6.9.12.98+dfsg1-5.2build2"
+      LATEXML_APT_VERSION: "0.8.8-1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv (Python)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          cache-dependency-glob: "pyproject.toml,uv.lock"
+
+      - name: Restore APT cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-cache/archives
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/deploy-pages.yml') }}
+          restore-keys: |
+            apt-${{ runner.os }}-
+
+      - name: Install TeX Live 2023, latexmk, biber, ImageMagick, LaTeXML (apt, cached)
+        run: |
+          mkdir -p "${RUNNER_TEMP}/apt-cache/archives/partial"
+          sudo apt-get update -o dir::cache::archives="${RUNNER_TEMP}/apt-cache/archives"
+          sudo apt-get install -y -o dir::cache::archives="${RUNNER_TEMP}/apt-cache/archives" \
+                       texlive-full=${{ env.TEXLIVE_APT_VERSION }} \
+                       latexmk=${{ env.LATEXMK_APT_VERSION }} \
+                       biber=${{ env.BIBER_APT_VERSION }} \
+                       imagemagick=${{ env.IMAGEMAGICK_APT_VERSION }} \
+                       latexml=${{ env.LATEXML_APT_VERSION }}
+
+      - name: Build PDF with latexmk (pdflatex)
+        run: |
+          latexmk -pdf -interaction=nonstopmode -shell-escape book-main.tex
+
+      - name: Build HTML site using LaTeXML (via uv)
+        run: |
+          cd website/latex_to_html
+          uv run --no-project --with beautifulsoup4 latex_to_html_converter.py ../../book-main.tex ../html
+          cd ../..
+
+      - name: Copy generated PDF into site output
+        run: |
+          mv book-main.pdf website/html/book-main.pdf
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: website/html
-      - id: deployment
+
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4

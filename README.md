@@ -2,12 +2,12 @@
 
 
 This repository is the _source code_ for the book "Learning Deep Representations of Data Distributions". 
-If you just want to read the book, _you should not need this repository_. We have a copy at `INSERT LINK` that will be updated periodically.
+If you just want to read the book, _you should not need this repository_. We have a copy at [this link](https://ma-lab-berkeley.github.io/deep-representation-learning-book/book-main.pdf) that will be updated periodically.
 
 Generally, you should be accessing the source code for one of the following purposes:
 - You want to build the book, or one of its chapters, from scratch. See [this section](#building-the-book-or-chapter).
 - You want to use the source code that generated a figure in the book. See [this section](#using-the-code).
-- (TEMP) You want to edit the website. See [this section](#building-the-website).
+- You want to edit the website. See [this section](#building-the-website).
 - You want to ask a question, or tell us that something in the repository doesn't work quite right. See [this section](#raising-an-issue).
 - You want to contribute some content, for example a translation, or some technical content within one or more chapters. See [this section](#making-a-contribution).
 
@@ -59,6 +59,10 @@ and read `classic-models.pdf`. (`classic-models.tex` is the chapter file for Cha
 - Start an HTTP server using `uv run python3 -m http.server <PORT>`. (The constant `<PORT>` represents a free port and is otherwise completely arbitrary; one possibility is `13579`.)
 - Navigate to `http://localhost:<PORT>/index.html`. 
 
+Note: The AI helper calls a variety of different models by making queries to a [Cloudflare Worker](https://workers.cloudflare.com/) proxy. We use this proxy because we do not want to expose API keys to everyone. As such, the worker will unfortunately not be open-sourced. If you really need access, talk to [Druv](https://druvpai.github.io/).
+
+Note: To build the website using `latex_to_html_converter.py` with a working bibliography, you need to make sure the `book-main.bbl` file is up to date, which may mean that you have to [build the book](#building-the-book-or-a-chapter) first.
+
 ## Raising an Issue
 
 ### Prerequisites for Raising an Issue
@@ -85,7 +89,7 @@ Use the GitHub "Raise Issue" UI, [linked here](https://github.com/Ma-Lab-Berkele
 - Make a new branch on GitHub, and call it whatever you like (among names that are not taken), e.g., `my_new_branch`.
 - Clone the repository locally using `git clone`:
 ```
-git clone https://github.com/Ma-Lab-Berkeley/learning-deep-representations-book.git
+git clone https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book.git
 ```
 - Change the branch, i.e.,
 ```
@@ -116,12 +120,8 @@ Many thanks!
   title={Learning Deep Representations of Data Distributions},
   author={Buchanan, Sam and Pai, Druv and Wang, Peng and Ma, Yi},
   year={2025},
-  publisher={Online}
+  publisher={Online},
+  url={https://ma-lab-berkeley.github.io/deep-representation-learning-book/},
+  note={Available online}
 }
 ```
-
-## INTERNAL USE
-
-### TODOs
-- finish the rest of the readme
-- fix code
