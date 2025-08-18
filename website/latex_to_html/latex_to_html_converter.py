@@ -79,7 +79,7 @@ class LaTeXMLConfig:
     preload: str = (
         "[nobibtex,nobreakuntex,localrawstyles,mathlexemes,"
         "magnify=1.2,zoomout=1.2,tokenlimit=2499999999,iflimit=3599999,"
-        "absorblimit=1299999,pushbacklimit=599999]latexml.sty"
+        "absorblimit=1299999,pushbacklimit=599999999]latexml.sty"
     )
     pmml: bool = True
     mathtex: bool = True
