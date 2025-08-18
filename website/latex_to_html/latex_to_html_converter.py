@@ -329,6 +329,7 @@ class HTMLPostProcessor:
         try:
             unwanted = [output_dir / "book-main.html"]
             unwanted.extend(output_dir.glob("Ptx*.html"))
+            unwanted.extend([output_dir / "Chx2.html", output_dir / "Chx3.html"])
             for f in unwanted:
                 if f.exists():
                     f.unlink()

@@ -310,10 +310,10 @@
       }
 
       function getApiConfig(){
-        // Users can override via: window.CHAT_API = { endpoint, model }
-        // Default to calling a serverless proxy to avoid exposing API keys
+        // Users can set window.CHAT_API = { endpoint, apiKey, model }
         window.CHAT_API = window.CHAT_API || {
-          endpoint: '/.netlify/functions/chat',
+          endpoint: 'https://api.openai.com/v1/chat/completions',
+          apiKey: '',
           model: 'gpt-4o-mini'
         };
         var cfg = (window.CHAT_API && typeof window.CHAT_API === 'object') ? window.CHAT_API : null;
@@ -330,6 +330,7 @@
         var endpoint = cfg.endpoint;
         var body = { model: cfg.model || 'gpt-4o-mini', messages: messages, temperature: 0.2, stream: false };
         var headers = { 'Content-Type': 'application/json' };
+        if (cfg.apiKey) headers['Authorization'] = 'Bearer ' + cfg.apiKey;
         return fetch(endpoint, { method: 'POST', headers: headers, body: JSON.stringify(body) })
           .then(function(r){ return r.json(); })
           .then(function(j){
