@@ -513,9 +513,14 @@ class HTMLPostProcessor:
             num = int(m_ch.group(1))
             chapter_dir = self.repo_root / "chapters" / f"chapter{num}"
             if chapter_dir.is_dir():
-                tex_files = sorted([p for p in chapter_dir.glob("*.tex") if "_zh" not in p.name.lower()])
-                if tex_files:
-                    return tex_files[0]
+                tex_files = sorted([p for p in chapter_dir.glob("*.tex")])
+                # Prefer non-Chinese, non-temporary/draft files
+                def is_preferred(p: Path) -> bool:
+                    n = p.name.lower()
+                    undesirable = ("zh" in n) or ("tmp" in n) or ("draft" in n) or ("old" in n) or ("backup" in n)
+                    return not undesirable
+                preferred = [p for p in tex_files if is_preferred(p)]
+                return preferred[0] if preferred else (tex_files[0] if tex_files else None)
         m_pref = re.match(r"^Chx\d+\.html$", name, flags=re.IGNORECASE)
         if m_pref:
             cand = self.repo_root / "chapters" / "preface" / "preface.tex"
@@ -527,9 +532,13 @@ class HTMLPostProcessor:
             app_dir_name = app_map.get(num)
             if app_dir_name:
                 app_dir = self.repo_root / "chapters" / app_dir_name
-                tex_files = sorted([p for p in app_dir.glob("*.tex") if "_zh" not in p.name.lower()])
-                if tex_files:
-                    return tex_files[0]
+                tex_files = sorted([p for p in app_dir.glob("*.tex")])
+                def is_preferred_app(p: Path) -> bool:
+                    n = p.name.lower()
+                    undesirable = ("zh" in n) or ("tmp" in n) or ("draft" in n) or ("old" in n) or ("backup" in n)
+                    return not undesirable
+                preferred = [p for p in tex_files if is_preferred_app(p)]
+                return preferred[0] if preferred else (tex_files[0] if tex_files else None)
         return None
 
     def _sanitize_filename(self, stem: str) -> str:
@@ -611,12 +620,26 @@ class HTMLPostProcessor:
                 if dir_name:
                     rel_img_dir = Path("chapters") / dir_name / "figs"
 
-            figures = list(soup.find_all("figure"))
-            for fig in figures:
-                fig_tag = ensure_tag(fig)
-                if not fig_tag:
+            # Process only top-level LaTeX figure containers (ids like F23),
+            # and resolve all nested <img> within each container using the next
+            # group of includegraphics() paths from the source .tex.
+            all_figs = list(soup.find_all("figure"))
+            container_figs: List[Tag] = []
+            for fig in all_figs:
+                ft = ensure_tag(fig)
+                if not ft:
                     continue
+                fig_id = cast(Optional[str], ft.get("id"))
+                if fig_id and re.match(r"^F\d+$", fig_id):
+                    container_figs.append(ft)
+
+            for container in container_figs:
+                fig_tag = container
                 caption_text = self._figure_caption_text(fig_tag)
+                # Paths for this LaTeX figure environment
+                paths_for_group: List[str] = include_groups[group_idx] if group_idx < len(include_groups) else []
+                path_idx_for_group = 0
+
                 for img_any in fig_tag.find_all("img"):
                     img = ensure_tag(img_any)
                     if not img:
@@ -635,10 +658,12 @@ class HTMLPostProcessor:
                     src_attr = cast(Optional[str], img.get("src"))
                     is_missing = (not src_attr) or ("ltx_missing" in classes or "ltx_missing_image" in classes)
 
-                    # Determine includegraphics path for this image using grouped mapping
+                    # Determine includegraphics path for this image using the current figure's paths.
                     include_path: Optional[str] = None
-                    if is_missing:
-                        include_path = get_next_include_path()
+                    if path_idx_for_group < len(paths_for_group):
+                        include_path = paths_for_group[path_idx_for_group]
+                    # Always advance within the group to align with nested subfigure order
+                    path_idx_for_group += 1
 
                     if not is_missing:
                         continue
@@ -702,6 +727,8 @@ class HTMLPostProcessor:
                                         del img["class"]
                             except Exception:
                                 pass
+                # After finishing this container, move to the next source figure group
+                group_idx += 1
         except Exception as exc:  # pragma: no cover - defensive
             logging.warning("Failed to fix images for %s: %s", html_name, exc)
 
@@ -1030,12 +1057,23 @@ class SearchIndexBuilder:
 
 def convert_latex_to_html(source_filepath: Path, output_dir: Path, verbose: bool = False) -> bool:
     """Orchestrate the full conversion + post-process pipeline."""
-    repo_root = Path(__file__).resolve().parents[1]
+    # Detect roots dynamically to support different layouts (e.g., when moved under website/)
+    def _detect_roots() -> Tuple[Path, Path]:
+        here = Path(__file__).resolve()
+        ancestors = [here.parent] + list(here.parents)
+        # Project root contains top-level 'chapters/' directory
+        project_root = next((p for p in ancestors if (p / "chapters").is_dir()), here.parents[2])
+        # Website root contains 'html/' with assets (book.css)
+        site_root = next((p for p in ancestors if (p / "html").is_dir() and (p / "html" / "book.css").exists()),
+                         (project_root / "website") if (project_root / "website" / "html").is_dir() else project_root)
+        return project_root, site_root
+
+    project_root, site_root = _detect_roots()
     resource_cfg = ResourceConfig()
     latexml_cfg = LaTeXMLConfig()
     runner = LaTeXMLRunner(resource_cfg, latexml_cfg)
-    assets = AssetManager(repo_root)
-    post = HTMLPostProcessor(repo_root)
+    assets = AssetManager(site_root)
+    post = HTMLPostProcessor(project_root)
     search = SearchIndexBuilder()
 
     ok = runner.run(source_filepath, output_dir, verbose)
@@ -1050,8 +1088,17 @@ def convert_latex_to_html(source_filepath: Path, output_dir: Path, verbose: bool
 
 def postprocess_only(source_filepath: str, output_dir_arg: Optional[str]) -> Tuple[bool, Path]:
     """Run only the HTML post-processing and search indexing phases."""
-    repo_root = Path(__file__).resolve().parents[1]
-    default_repo_html = repo_root / "html"
+    # Detect roots dynamically to support different layouts (e.g., when moved under website/)
+    def _detect_roots() -> Tuple[Path, Path]:
+        here = Path(__file__).resolve()
+        ancestors = [here.parent] + list(here.parents)
+        project_root = next((p for p in ancestors if (p / "chapters").is_dir()), here.parents[2])
+        site_root = next((p for p in ancestors if (p / "html").is_dir() and (p / "html" / "book.css").exists()),
+                         (project_root / "website") if (project_root / "website" / "html").is_dir() else project_root)
+        return project_root, site_root
+
+    project_root, site_root = _detect_roots()
+    default_repo_html = site_root / "html"
     if output_dir_arg:
         output_dir = Path(output_dir_arg).resolve()
     else:
@@ -1082,9 +1129,9 @@ def postprocess_only(source_filepath: str, output_dir_arg: Optional[str]) -> Tup
             output_dir = default_repo_html
 
     logging.info("Post-processing HTML in: %s", output_dir)
-    assets = AssetManager(repo_root)
+    assets = AssetManager(site_root)
     assets.ensure_shared_assets(output_dir)
-    post = HTMLPostProcessor(repo_root)
+    post = HTMLPostProcessor(project_root)
     post.post_process_all(output_dir)
     SearchIndexBuilder().generate(output_dir)
     return True, output_dir

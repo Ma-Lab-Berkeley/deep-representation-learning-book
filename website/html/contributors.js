@@ -1,4 +1,3 @@
-/* Extracted from contributors.html inline script */
 (function(){
   const AUTHORS = [
     { name: 'Sam Buchanan', affil: 'Toyota Technological Institute at Chicago', badges: ['Author', 'Lead Editor'] },

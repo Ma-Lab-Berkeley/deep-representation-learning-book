@@ -30,7 +30,8 @@
           React.createElement('div', { className: 'hero-figure' },
             React.createElement('a', { className: 'cover-ph', href: 'Chx1.html', title: 'Read the Book' },
               React.createElement('img', { className: 'cover-img', src: 'book-cover.png', alt: 'Book cover: Learning Deep Representations of Data Distributions', loading: 'lazy' })
-            )
+            ),
+            React.createElement('div', { className: 'cover-version' }, 'Version 1.0\nReleased August 18, 2025')
           )
         ),
         React.createElement('section', { className: 'sections' },

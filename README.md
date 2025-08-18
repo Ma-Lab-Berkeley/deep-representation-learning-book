@@ -61,6 +61,8 @@ and read `classic-models.pdf`. (`classic-models.tex` is the chapter file for Cha
 
 Note: The AI helper calls a variety of different models by making queries to a [Cloudflare Worker](https://workers.cloudflare.com/) proxy. We use this proxy because we do not want to expose API keys to everyone. As such, the worker will unfortunately not be open-sourced. If you really need access, talk to [Druv](https://druvpai.github.io/).
 
+Note: To build the website using `latex_to_html_converter.py` with a working bibliography, you need to make sure the `book-main.bbl` file is up to date, which may mean that you have to [build the book](#building-the-book-or-a-chapter) first.
+
 ## Raising an Issue
 
 ### Prerequisites for Raising an Issue
