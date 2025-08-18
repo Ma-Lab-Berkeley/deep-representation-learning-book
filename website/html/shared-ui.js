@@ -312,7 +312,7 @@
       function getApiConfig(){
         // Users can set window.CHAT_API = { endpoint, apiKey, model }
         window.CHAT_API = window.CHAT_API || {
-          endpoint: 'https://deep-representation-learning-book-proxy.druvpai.workers.dev/api/chat',
+          endpoint: 'https://deep-representation-learning-book-proxy.tianzhechu.workers.dev/api/chat',
         };
         var cfg = (window.CHAT_API && typeof window.CHAT_API === 'object') ? window.CHAT_API : null;
         if (cfg && cfg.endpoint) return cfg;
@@ -326,7 +326,7 @@
           return Promise.resolve({ content: 'Mock response: AI chat is not configured. Set window.CHAT_API = { endpoint, apiKey, model } to connect to your backend (OpenAI-style). You asked: ' + (messages[messages.length-1] && messages[messages.length-1].content || '') });
         }
         var endpoint = cfg.endpoint;
-        var body = { model: cfg.model || 'gpt-4o-mini', messages: messages, temperature: 0.2, stream: false };
+        var body = { model: cfg.model || 'bookqa-7b', messages: messages, temperature: 0.2, stream: false };
         var headers = { 'Content-Type': 'application/json' };
         if (cfg.apiKey) headers['Authorization'] = 'Bearer ' + cfg.apiKey;
         return fetch(endpoint, { method: 'POST', headers: headers, body: JSON.stringify(body) })
