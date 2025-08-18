@@ -317,6 +317,7 @@ class HTMLPostProcessor:
                 self._remove_preface_toc_if_needed(soup, html_file.name)
                 self._remove_bibliography_backlinks(soup)
                 self._clean_footer_prev_next(soup)
+                self._convert_tcolorbox_svg_to_div(soup)
                 self._build_static_mini_toc(soup, html_file.name)
                 html_serialized = str(soup)
                 html_serialized = self._collapse_excess_blank_lines(html_serialized)
@@ -959,6 +960,67 @@ class HTMLPostProcessor:
             container_title.insert_after(toc_div)
         else:
             container.insert(0, toc_div)
+
+    # ---------- tcolorbox conversion ----------
+    def _convert_tcolorbox_svg_to_div(self, soup: BeautifulSoup) -> None:
+        """Convert SVG tcolorbox environments to styled div.tcbox elements.
+        
+        This replicates the client-side JavaScript functionality that finds SVG pictures
+        containing foreignObject with tcolorbox content and converts them to properly
+        styled HTML div elements at build time.
+        """
+        try:
+            # Find all SVG pictures that might contain tcolorbox content
+            svg_pictures = soup.find_all("svg", class_="ltx_picture")
+            converted_count = 0
+            
+            for svg in svg_pictures:
+                # Look for the specific structure: svg > g > foreignobject > span.ltx_inline-block.ltx_minipage
+                # The foreignobject might be nested inside <g> elements
+                minipage = svg.find("span", class_=lambda classes: (
+                    classes and "ltx_inline-block" in classes and "ltx_minipage" in classes
+                ))
+                if not minipage:
+                    continue
+                
+                # Extract and preserve HTML content, not just plain text
+                # Look for the inner span.ltx_p that contains the formatted content
+                inner_p = minipage.find("span", class_="ltx_p")
+                if not inner_p or not inner_p.contents:
+                    continue
+                
+                # Create the replacement div.tcbox structure
+                wrapper = soup.new_tag("div")
+                wrapper["class"] = "tcbox"
+                
+                p_elem = soup.new_tag("p")
+                p_elem["class"] = "ltx_p"
+                
+                # Clone the contents of the inner span.ltx_p to preserve all formatting
+                for content in list(inner_p.contents):
+                    if hasattr(content, 'name'):
+                        # It's a tag, clone it deeply
+                        import copy
+                        cloned = copy.deepcopy(content)
+                        p_elem.append(cloned)
+                    else:
+                        # It's text, normalize whitespace
+                        if isinstance(content, str):
+                            normalized = re.sub(r'\s+', ' ', content).strip()
+                            if normalized:
+                                p_elem.append(normalized)
+                
+                wrapper.append(p_elem)
+                
+                # Replace the SVG with the new div
+                svg.replace_with(wrapper)
+                converted_count += 1
+            
+            if converted_count > 0:
+                logging.info("Converted %d tcolorbox SVG elements to div.tcbox", converted_count)
+                
+        except Exception as exc:  # pragma: no cover - defensive
+            logging.warning("Failed to convert tcolorbox SVG elements: %s", exc)
 
 
 # ------------------------------

@@ -188,25 +188,7 @@
       });
     });
 
-    // 5) Repair tcolorbox-like environments emitted as SVG boxes with foreignObject
-    //    We detect an SVG picture that contains a single foreignObject with an inner
-    //    span.ltx_minipage (the usual LaTeXML output for tcolorbox). We then unwrap
-    //    the text and replace the whole SVG with a div.tcbox so it looks consistent.
-    try {
-      document.querySelectorAll('svg.ltx_picture').forEach((svg) => {
-        const minipage = svg.querySelector('foreignobject span.ltx_inline-block.ltx_minipage');
-        if (!minipage) return;
-        const raw = (minipage.innerText || minipage.textContent || '').trim();
-        if (!raw) return;
-        const text = raw.replace(/\s+/g, ' ');
-        const wrapper = document.createElement('div');
-        wrapper.className = 'tcbox';
-        const p = document.createElement('p');
-        p.className = 'ltx_p';
-        p.textContent = text;
-        wrapper.appendChild(p);
-        svg.replaceWith(wrapper);
-      });
-    } catch (e) {}
+    // 5) tcolorbox conversion is now handled at build time by latex_to_html_converter.py
+    //    This client-side conversion has been removed to avoid duplication.
   });
 })();
