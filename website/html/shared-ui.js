@@ -312,9 +312,7 @@
       function getApiConfig(){
         // Users can set window.CHAT_API = { endpoint, apiKey, model }
         window.CHAT_API = window.CHAT_API || {
-          endpoint: 'https://api.openai.com/v1/chat/completions',
-          apiKey: '',
-          model: 'gpt-4o-mini'
+          endpoint: 'https://deep-representation-learning-book-proxy.druvpai.workers.dev/api/chat',
         };
         var cfg = (window.CHAT_API && typeof window.CHAT_API === 'object') ? window.CHAT_API : null;
         if (cfg && cfg.endpoint) return cfg;
