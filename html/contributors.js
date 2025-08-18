@@ -9,6 +9,8 @@
 
   const CONTRIBUTORS = [
     { name: 'Yaodong Yu', affil: 'University of Maryland, College Park', badges: ['Chapter 4'] },
+    { name: 'Ziyang Wu', affil: 'University of California, Berkeley', badges: ['Website'] },
+    { name: 'Tianzhe Chu', affil: 'University of Hong Kong', badges: ['AI Helper'] },
   ];
 
   // Top bar and sidebar are inserted by shared-ui.js
@@ -34,9 +36,10 @@
         React.createElement('h1', null, 'Contributors'),
         React.createElement('p', { className: 'intro' }, 'Core authors and contributors of the book.'),
         React.createElement('section', { 'aria-label': 'Core Team', className: 'authors-grid' },
+          React.createElement('h2', { style: { margin: '16px 0 8px', fontSize: '18px' } }, 'Core Editorial Team'),
           AUTHORS.map((p) => React.createElement(Card, { key: p.name, ...p }))
         ),
-        React.createElement('section', { 'aria-label': 'Contributors', className: 'contributors' },
+        React.createElement('section', { 'aria-label': 'Contributors', className: 'authors-grid' },
           React.createElement('h2', { style: { margin: '16px 0 8px', fontSize: '18px' } }, 'Contributors'),
           CONTRIBUTORS.map((p) => React.createElement(Card, { key: p.name, ...p }))
         ),

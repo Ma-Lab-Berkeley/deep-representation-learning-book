@@ -9,9 +9,17 @@
             React.createElement('h1', { className: 'hero-title' }, 'Learning Deep Representations of Data Distributions'),
             React.createElement('div', { className: 'hero-authors' }, 'Sam Buchanan · Druv Pai · Peng Wang · Yi Ma'),
             React.createElement('p', { className: 'hero-sub' }, 'A modern fully open-source textbook exploring why and how deep neural networks learn compact and information-dense representations of high-dimensional real-world data.'),
-            React.createElement('div', { className: 'pub-info' },
-              React.createElement('div', { className: 'pub-info-title' }, 'Publication Information'),
-              React.createElement('p', null, 'Placeholder: publication details (publisher, edition, ISBN, publication date) will go here.')
+            // React.createElement('div', { className: 'pub-info' },
+            //   React.createElement('div', { className: 'pub-info-title' }, 'Publication Information'),
+            //   React.createElement('p', null, 'Placeholder: publication details (publisher, edition, ISBN, publication date) will go here.')
+            // ),
+            React.createElement('div', { className: 'citation-info' },
+              React.createElement('code', { style: { 'whiteSpace': 'pre-wrap' } }, String.raw`@book{ldrdd2025,
+  title={Learning Deep Representations of Data Distributions},
+  author={Buchanan, Sam and Pai, Druv and Wang, Peng and Ma, Yi},
+  year={2025},
+  publisher={Online}
+}`)
             ),
             React.createElement('div', { className: 'cta-row' },
               React.createElement('a', { className: 'btn', href: 'Chx1.html' }, 'Read the Book'),
@@ -19,8 +27,8 @@
             )
           ),
           React.createElement('div', { className: 'hero-figure' },
-            React.createElement('div', { className: 'cover-ph' },
-              React.createElement('span', null, 'Book cover placeholder (A4 portrait)')
+            React.createElement('a', { className: 'cover-ph', href: 'Chx1.html', title: 'Read the Book' },
+              React.createElement('img', { className: 'cover-img', src: 'book-cover.png', alt: 'Book cover: Learning Deep Representations of Data Distributions', loading: 'lazy' })
             )
           )
         ),
@@ -34,12 +42,18 @@
           ),
           React.createElement('div', { className: 'section-card' },
             React.createElement('h3', null, 'Acknowledgements'),
-            React.createElement('p', null, 'Placeholder: acknowledgements to contributors, collaborators, reviewers, and supporting institutions.')
+            React.createElement('p', null, 'This book is primarily based on research results that have been developed within the past eight years. Thanks to generous funding from UC Berkeley (2018) and the University of Hong Kong (2023), Yi Ma was able to embark and focus on this new exciting research direction in the past eight years. Through these years, related to this research direction, Yi Ma and his research team at Berkeley have been supported by the following research grants:'),
+            React.createElement('ul', null,
+              React.createElement('li', null, "The multi-university ", React.createElement('em', null, 'THEORINET'), " project for the Foundations of Deep Learning, jointly funded by the Simons Foundation and the National Science Foundation (DMS grant #2031899)"),
+              React.createElement('li', null, "The ", React.createElement('em', null, 'Closed-Loop Data Transcription via Minimaxing Rate Reduction'), " project funded by the Office of Naval Research (grant N00014-22-1-2102);"),
+              React.createElement('li', null, "The ", React.createElement('em', null, 'Principled Approaches to Deep Learning for Low-dimensional Structures'), " project funded by the National Science Foundation (CISE grant #2402951)."),
+            ),
+            React.createElement('p', null, 'This book would have not been possible without the financial support for these research projects. The authors have drawn tremendous inspiration from research results by colleagues and students who have been involved in these projects.'),
           ),
-          React.createElement('div', { className: 'section-card' },
-            React.createElement('h3', null, 'Citation'),
-            React.createElement('p', null, 'Placeholder: citation information and BibTeX entry will be provided here.')
-          )
+          // React.createElement('div', { className: 'section-card' },
+          //   React.createElement('h3', null, 'Citation'),
+          //   React.createElement('p', null, 'Placeholder: citation information and BibTeX entry will be provided here.')
+          // )
         ),
         React.createElement('div', { className: 'footer' }, '© ', new Date().getFullYear(), ' The Authors. All rights reserved.')
       )

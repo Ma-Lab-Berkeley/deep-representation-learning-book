@@ -1,5 +1,19 @@
 /* Shared UI inserter: top bar and optional sidebars */
 (function(){
+  // Ensure Inter font is available on all pages (chapters don't include it by default)
+  try {
+    var hasInter = Array.prototype.some.call(document.querySelectorAll('link[rel="stylesheet"]'), function(l){
+      var href = l.getAttribute('href') || '';
+      return href.indexOf('fonts.googleapis.com') !== -1 && href.indexOf('Inter') !== -1;
+    });
+    if (!hasInter) {
+      var gf = document.createElement('link');
+      gf.rel = 'stylesheet';
+      gf.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap';
+      var head = document.head || document.getElementsByTagName('head')[0];
+      if (head) head.appendChild(gf);
+    }
+  } catch (_) {}
   var DEFAULT_NAV_LINKS = [
     { label: 'Contributors', href: 'contributors.html' },
     { label: 'How to Contribute?', href: 'https://github.com/Ma-Lab-Berkeley/ldrdd-book#making-a-contribution', external: true }
@@ -248,6 +262,31 @@
         list.scrollTop = list.scrollHeight + 999;
       }
 
+      function appendTypingIndicator(){
+        var panel = document.getElementById('ai-chat-panel'); if (!panel) return null;
+        var list = panel.querySelector('#ai-chat-messages'); if (!list) return null;
+        var item = document.createElement('div');
+        item.className = 'ai-chat-msg from-assistant typing';
+        var bubble = document.createElement('div');
+        bubble.className = 'ai-chat-bubble';
+        var typing = document.createElement('div');
+        typing.className = 'ai-typing';
+        for (var i = 0; i < 3; i++) {
+          var dot = document.createElement('span');
+          dot.className = 'dot';
+          typing.appendChild(dot);
+        }
+        bubble.appendChild(typing);
+        item.appendChild(bubble);
+        list.appendChild(item);
+        list.scrollTop = list.scrollHeight + 999;
+        return item;
+      }
+
+      function removeTypingIndicator(el){
+        try { if (el && el.parentNode) el.parentNode.removeChild(el); } catch (_) {}
+      }
+
       function setSending(isSending){
         chatState.sending = !!isSending;
         var btn = document.getElementById('ai-chat-send');
@@ -271,11 +310,11 @@
       }
 
       function getApiConfig(){
-        // Users can set window.CHAT_API = { endpoint, apiKey, model }
-        window.CHAT_API = {
-          endpoint: 'https://api.openai.com/v1/chat/completions', // or your proxy endpoint
-          apiKey: '', // if your endpoint needs it
-          model: 'gpt-4o-mini'     // or your preferred model
+        // Users can override via: window.CHAT_API = { endpoint, model }
+        // Default to calling a serverless proxy to avoid exposing API keys
+        window.CHAT_API = window.CHAT_API || {
+          endpoint: '/.netlify/functions/chat',
+          model: 'gpt-4o-mini'
         };
         var cfg = (window.CHAT_API && typeof window.CHAT_API === 'object') ? window.CHAT_API : null;
         if (cfg && cfg.endpoint) return cfg;
@@ -291,7 +330,6 @@
         var endpoint = cfg.endpoint;
         var body = { model: cfg.model || 'gpt-4o-mini', messages: messages, temperature: 0.2, stream: false };
         var headers = { 'Content-Type': 'application/json' };
-        if (cfg.apiKey) headers['Authorization'] = 'Bearer ' + cfg.apiKey;
         return fetch(endpoint, { method: 'POST', headers: headers, body: JSON.stringify(body) })
           .then(function(r){ return r.json(); })
           .then(function(j){
@@ -310,11 +348,13 @@
         chatState.messages.push({ role: 'user', content: text });
         setSending(true);
         var payload = buildPayload(text);
+        var typingEl = appendTypingIndicator();
         requestAssistant(payload).then(function(res){
+          removeTypingIndicator(typingEl);
           var msg = (res && res.content) || 'No response.';
           appendMessage('assistant', msg);
           chatState.messages.push({ role: 'assistant', content: msg });
-        }).finally(function(){ setSending(false); });
+        }).finally(function(){ removeTypingIndicator(typingEl); setSending(false); });
       }
 
       function openChat(){ ensureChatPanel(); document.body.classList.add('ai-chat-open'); }
