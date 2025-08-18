@@ -983,11 +983,15 @@ class HTMLPostProcessor:
                 if not minipage:
                     continue
                 
-                # Extract and preserve HTML content, not just plain text
-                # Look for the inner span.ltx_p that contains the formatted content
-                inner_p = minipage.find("span", class_="ltx_p")
-                if not inner_p or not inner_p.contents:
+                # Extract plain text content to match original JavaScript behavior
+                # The original JS used innerText/textContent which preserves inter-element whitespace
+                raw_text = minipage.get_text()  # Don't strip=True, preserves spaces between elements
+                if not raw_text:
                     continue
+                
+                # Normalize whitespace (equivalent to JS text.replace(/\s+/g, ' '))
+                # This collapses multiple spaces/newlines but preserves single spaces
+                normalized_text = re.sub(r'\s+', ' ', raw_text).strip()
                 
                 # Create the replacement div.tcbox structure
                 wrapper = soup.new_tag("div")
@@ -995,20 +999,7 @@ class HTMLPostProcessor:
                 
                 p_elem = soup.new_tag("p")
                 p_elem["class"] = "ltx_p"
-                
-                # Clone the contents of the inner span.ltx_p to preserve all formatting
-                for content in list(inner_p.contents):
-                    if hasattr(content, 'name'):
-                        # It's a tag, clone it deeply
-                        import copy
-                        cloned = copy.deepcopy(content)
-                        p_elem.append(cloned)
-                    else:
-                        # It's text, normalize whitespace
-                        if isinstance(content, str):
-                            normalized = re.sub(r'\s+', ' ', content).strip()
-                            if normalized:
-                                p_elem.append(normalized)
+                p_elem.string = normalized_text
                 
                 wrapper.append(p_elem)
                 
