@@ -2,7 +2,7 @@
 
 
 This repository is the _source code_ for the book "Learning Deep Representations of Data Distributions". 
-If you just want to read the book, _you should not need this repository_. We have a copy at `INSERT LINK` that will be updated periodically.
+If you just want to read the book, _you should not need this repository_. We have a copy at [this link](https://ma-lab-berkeley.github.io/deep-representation-learning-book/book-main.pdf) that will be updated periodically.
 
 Generally, you should be accessing the source code for one of the following purposes:
 - You want to build the book, or one of its chapters, from scratch. See [this section](#building-the-book-or-chapter).
@@ -120,6 +120,8 @@ Many thanks!
   title={Learning Deep Representations of Data Distributions},
   author={Buchanan, Sam and Pai, Druv and Wang, Peng and Ma, Yi},
   year={2025},
-  publisher={Online}
+  publisher={Online},
+  url={https://ma-lab-berkeley.github.io/deep-representation-learning-book/},
+  note={Available online}
 }
 ```
