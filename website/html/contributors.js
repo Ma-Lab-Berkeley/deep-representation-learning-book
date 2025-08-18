@@ -43,7 +43,7 @@
           React.createElement('h2', { style: { margin: '16px 0 8px', fontSize: '18px' } }, 'Contributors'),
           CONTRIBUTORS.map((p) => React.createElement(Card, { key: p.name, ...p }))
         ),
-        React.createElement('div', { className: 'foot' }, '© ', new Date().getFullYear(), ' The Authors. All rights reserved.')
+        React.createElement('div', { className: 'foot' }, '© ', new Date().getFullYear(), ' Sam Buchanan, Druv Pai, Peng Wang, and Yi Ma. All rights reserved.')
       )
     );
   }

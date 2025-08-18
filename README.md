@@ -59,6 +59,8 @@ and read `classic-models.pdf`. (`classic-models.tex` is the chapter file for Cha
 - Start an HTTP server using `uv run python3 -m http.server <PORT>`. (The constant `<PORT>` represents a free port and is otherwise completely arbitrary; one possibility is `13579`.)
 - Navigate to `http://localhost:<PORT>/index.html`. 
 
+Note: The AI helper calls a variety of different models by making queries to a [Cloudflare Worker](https://workers.cloudflare.com/) proxy. We use this proxy because we do not want to expose API keys to everyone. As such, the worker will unfortunately not be open-sourced. If you really need access, talk to [Druv](https://druvpai.github.io/).
+
 ## Raising an Issue
 
 ### Prerequisites for Raising an Issue
@@ -85,7 +87,7 @@ Use the GitHub "Raise Issue" UI, [linked here](https://github.com/Ma-Lab-Berkele
 - Make a new branch on GitHub, and call it whatever you like (among names that are not taken), e.g., `my_new_branch`.
 - Clone the repository locally using `git clone`:
 ```
-git clone https://github.com/Ma-Lab-Berkeley/learning-deep-representations-book.git
+git clone https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book.git
 ```
 - Change the branch, i.e.,
 ```
@@ -119,9 +121,3 @@ Many thanks!
   publisher={Online}
 }
 ```
-
-## INTERNAL USE
-
-### TODOs
-- finish the rest of the readme
-- fix code
