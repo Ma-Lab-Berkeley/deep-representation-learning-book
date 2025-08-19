@@ -49,6 +49,7 @@ and read `classic-models.pdf`. (`classic-models.tex` is the chapter file for Cha
 - A local `pdflatex` distribution ([TexLive](https://www.tug.org/texlive/) is a recommended choice)
 - The Python package manager [`uv`](https://docs.astral.sh/uv/)
 - A `latexml` installation which can be obtained in [several ways](https://math.nist.gov/~BMiller/LaTeXML/get.html)
+- An installation of [`ImageMagick`](https://imagemagick.org/)
 
 ### How to Build the Website
 
