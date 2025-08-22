@@ -32,6 +32,8 @@ latexmk classic-models.tex
 ```
 and read `classic-models.pdf`. (`classic-models.tex` is the chapter file for Chapter 2). We did some LaTeX hacks so that compiling the main book or individual chapters should work in your IDE (please file an issue if it doesn't work).
 
+You can do the same with the Chinese translation of the book (though note you may need to use `latexmk  book-main_zh.tex -f`, etc., the force flag being due to missing characters).
+
 ## Using the Code
 
 ### Prerequisites for Using the Code

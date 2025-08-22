@@ -24,6 +24,7 @@
             React.createElement('div', { className: 'cta-row' },
               React.createElement('a', { className: 'btn', href: 'Chx1.html' }, 'Read the Book (HTML)'),
               React.createElement('a', { className: 'btn', href: 'book-main.pdf' }, 'Read the Book (PDF)'),
+              React.createElement('a', { className: 'btn', href: 'zh/book-main.pdf' }, 'Read the Book (PDF-ZH)'),
               React.createElement('a', { className: 'btn secondary', href: 'https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book', target: '_blank', rel: 'noopener noreferrer' }, 'GitHub Repository')
             )
           ),
