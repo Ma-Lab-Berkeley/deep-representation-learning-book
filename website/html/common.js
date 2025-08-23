@@ -16,23 +16,29 @@
         if (head) head.appendChild(gf);
       }
     } catch (_) {}
-    var DEFAULT_NAV_LINKS = [
-      { label: 'Contributors', href: 'contributors.html' },
-      { label: 'How to Contribute?', href: 'https://github.com/Ma-Lab-Berkeley/ldrdd-book#making-a-contribution', external: true }
-    ];
-    var DEFAULT_TOC = [
-      { label: 'Preface', href: 'Chx1.html' },
-      { label: 'Chapter 1', subtitle: 'Introduction', href: 'Ch1.html' },
-      { label: 'Chapter 2', subtitle: 'Learning Linear and Independent Structures', href: 'Ch2.html' },
-      { label: 'Chapter 3', subtitle: 'Pursuing Low-Dimensional Distributions via Lossy Compression', href: 'Ch3.html' },
-      { label: 'Chapter 4', subtitle: 'Deep Representations from Unrolled Optimization', href: 'Ch4.html' },
-      { label: 'Chapter 5', subtitle: 'Consistent and Self-Consistent Representations', href: 'Ch5.html' },
-      { label: 'Chapter 6', subtitle: 'Inference with Low-Dimensional Distributions', href: 'Ch6.html' },
-      { label: 'Chapter 7', subtitle: 'Learning Representations for Real-World Data', href: 'Ch7.html' },
-      { label: 'Chapter 8', subtitle: 'Future Study of Intelligence', href: 'Ch8.html' },
-      { label: 'Appendix A', subtitle: 'Optimization Methods', href: 'A1.html' },
-      { label: 'Appendix B', subtitle: 'Entropy, Diffusion, Denoising, and Lossy Coding', href: 'A2.html' },
-    ];
+    function getDefaultNavLinks() {
+      return window.BOOK_COMPONENTS ? window.BOOK_COMPONENTS.buildNavLinks() : [
+        { label: 'Contributors', href: 'contributors.html' },
+        { label: 'How to Contribute?', href: 'https://github.com/Ma-Lab-Berkeley/ldrdd-book#making-a-contribution', external: true }
+      ];
+    }
+    var DEFAULT_NAV_LINKS = getDefaultNavLinks();
+    function getDefaultTOC() {
+      return window.BOOK_COMPONENTS ? window.BOOK_COMPONENTS.buildTOC() : [
+        { label: 'Preface', href: 'Chx1.html' },
+        { label: 'Chapter 1', subtitle: 'Introduction', href: 'Ch1.html' },
+        { label: 'Chapter 2', subtitle: 'Learning Linear and Independent Structures', href: 'Ch2.html' },
+        { label: 'Chapter 3', subtitle: 'Pursuing Low-Dimensional Distributions via Lossy Compression', href: 'Ch3.html' },
+        { label: 'Chapter 4', subtitle: 'Deep Representations from Unrolled Optimization', href: 'Ch4.html' },
+        { label: 'Chapter 5', subtitle: 'Consistent and Self-Consistent Representations', href: 'Ch5.html' },
+        { label: 'Chapter 6', subtitle: 'Inference with Low-Dimensional Distributions', href: 'Ch6.html' },
+        { label: 'Chapter 7', subtitle: 'Learning Representations for Real-World Data', href: 'Ch7.html' },
+        { label: 'Chapter 8', subtitle: 'Future Study of Intelligence', href: 'Ch8.html' },
+        { label: 'Appendix A', subtitle: 'Optimization Methods', href: 'A1.html' },
+        { label: 'Appendix B', subtitle: 'Entropy, Diffusion, Denoising, and Lossy Coding', href: 'A2.html' },
+      ];
+    }
+    var DEFAULT_TOC = getDefaultTOC();
 
     function h(tag, props){
       var SVG_NS = 'http://www.w3.org/2000/svg';
@@ -241,9 +247,9 @@
       } else if (existing && !shouldReplace) {
         return; // keep existing shared topbar
       }
-      var title = (options && options.title) || 'Learning Deep Representations of Data Distributions';
-      var langLabel = (options && options.langLabel) || 'CN';
-      var brandHref = (options && options.brandHref) || 'index.html';
+      var title = (options && options.title) || (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.ui.bookTitle) || 'Learning Deep Representations of Data Distributions';
+      var langLabel = (options && options.langLabel) || (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.ui.langLabel) || 'CN';
+      var brandHref = (options && options.brandHref) || (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.ui.brandHref) || 'index.html';
 
       // Logo SVG
       var logo = h('span', { className: 'logo' },
@@ -259,7 +265,8 @@
       );
 
       // Search shell only; book.js wires events
-      var search = h('div', { className:'search' }, h('input', { className:'search-input', type:'search', placeholder:'Search pages…', 'aria-label':'Search' }), h('div', { className:'search-results' }));
+      var searchPlaceholder = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.ui.searchPlaceholder) || 'Search pages…';
+      var search = h('div', { className:'search' }, h('input', { className:'search-input', type:'search', placeholder:searchPlaceholder, 'aria-label':'Search' }), h('div', { className:'search-results' }));
 
       var ghIcon = h('svg', { xmlns:'http://www.w3.org/2000/svg', width:'16', height:'16', viewBox:'0 0 16 16', fill:'currentColor', role:'img', 'aria-label':'GitHub' },
         h('path', { d:'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.2 1.87.86 2.33.66.07-.52.28-.86.51-1.06-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z' })
@@ -271,14 +278,16 @@
           h('span', { className: 'lang-label', text: langLabel })
         ),
         h('div', { className: 'lang-menu', role: 'listbox' },
-          h('button', { className: 'lang-item', role: 'option', 'data-lang': 'en', type:'button', text: 'English' }),
-          h('button', { className: 'lang-item', role: 'option', 'data-lang': 'zh', type:'button', text: '中文' })
+          h('button', { className: 'lang-item', role: 'option', 'data-lang': 'en', type:'button', text: (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.languages.en) || 'English' }),
+          h('button', { className: 'lang-item', role: 'option', 'data-lang': 'zh', type:'button', text: (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.languages.zh) || '中文' })
         )
       );
 
-      var chatToggle = h('button', { className: 'chat-toggle', type: 'button', title: 'Ask AI about this page' },
+      var chatTitle = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.askAITitle) || 'Ask AI about this page';
+      var chatLabel = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.chatWithAI) || 'Chat with AI';
+      var chatToggle = h('button', { className: 'chat-toggle', type: 'button', title: chatTitle },
         h('span', { className: 'chat-toggle-icon', html: '&#128172;' }),
-        h('span', { className: 'chat-toggle-label', text: 'Chat with AI' })
+        h('span', { className: 'chat-toggle-label', text: chatLabel })
       );
 
       // Hamburger menu icon
@@ -286,9 +295,10 @@
         h('path', { d:'M2 3h12a1 1 0 0 1 0 2H2a1 1 0 0 1 0-2zm0 4h12a1 1 0 0 1 0 2H2a1 1 0 0 1 0-2zm0 4h12a1 1 0 0 1 0 2H2a1 1 0 0 1 0-2z' })
       );
 
+      var menuLabel = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.ui.menu) || 'Menu';
       var hamburgerToggle = h('button', { className: 'hamburger-toggle', type: 'button', title: 'Toggle navigation menu' },
         hamburgerIcon,
-        h('span', { className: 'hamburger-label', text: 'Menu' })
+        h('span', { className: 'hamburger-label', text: menuLabel })
       );
 
       var bar = h('div', { className:'book-topbar', id:'book-topbar', 'data-shared-ui':'1' },
@@ -297,11 +307,95 @@
           search,
           langSelect,
           chatToggle,
-          h('a', { className:'gh-link', href:'https://github.com/Ma-Lab-Berkeley/ldrdd-book', target:'_blank', rel:'noopener noreferrer' }, ghIcon, h('span', { text:'GitHub' })),
+          h('a', { className:'gh-link', href:'https://github.com/Ma-Lab-Berkeley/ldrdd-book', target:'_blank', rel:'noopener noreferrer' }, ghIcon, h('span', { text: (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.ui.github) || 'GitHub' })),
           hamburgerToggle
         )
       );
       document.body.insertBefore(bar, document.body.firstChild);
+
+      // Wire language selector dropdown + navigation
+      try {
+        function getCurrentLangFromPath(){
+          try { var p = (window.location && window.location.pathname) || ''; return /\/zh(?:\/|$)/i.test(p) ? 'zh' : 'en'; } catch (_) { return 'en'; }
+        }
+        function toEnglishPath(path){
+          try {
+            var p = (path || '/');
+            var parts = p.split('/');
+            var nonEmptyIdxs = [];
+            for (var i = 0; i < parts.length; i++) { if (parts[i]) nonEmptyIdxs.push(i); }
+            // If there are fewer than 2 non-empty segments, return '/' (e.g., '/zh/' -> '/') or original if already root
+            if (nonEmptyIdxs.length < 2) { return '/'; }
+            // Remove the penultimate non-empty segment (language directory)
+            var idxToRemove = nonEmptyIdxs[nonEmptyIdxs.length - 2];
+            parts.splice(idxToRemove, 1);
+            var out = parts.join('/');
+            out = out.replace(/\/{2,}/g, '/');
+            if (out.length > 1 && out.endsWith('/')) out = out.slice(0, -1);
+            if (!out) out = '/';
+            if (out[0] !== '/') out = '/' + out;
+            return out;
+          } catch(_) { return path || '/'; }
+        }
+        function toChinesePath(path){
+          try {
+            var p = (path||'/'); if (/\/zh(?:\/|$)/i.test(p)) return p; // already zh
+            // Insert '/zh' right before the last segment (filename or trailing slash)
+            var parts = p.split('/'); if (parts.length === 0) return '/zh/';
+            var last = parts.pop(); // may be '' if p ends with '/'
+            // Ensure leading slash
+            var base = parts.join('/'); if (!base) base = '';
+            if (base === '' && last === '') { return '/zh/'; }
+            if (last === '') { return base + '/zh/'; }
+            return base + '/zh/' + last;
+          } catch(_) { return '/zh/'; }
+        }
+        function buildLangUrl(target){
+          try {
+            var loc = window.location || { pathname: '/' };
+            var path = loc.pathname || '/';
+            return target === 'zh' ? toChinesePath(path) : toEnglishPath(path);
+          } catch(_) { return target === 'zh' ? '/zh/' : '/'; }
+        }
+
+        var langSelect = bar.querySelector('.lang-select');
+        var langBtn = bar.querySelector('.lang-toggle');
+        var langMenu = bar.querySelector('.lang-menu');
+        var langLabelEl = bar.querySelector('.lang-label');
+        if (langLabelEl) { try { var curr = getCurrentLangFromPath(); langLabelEl.textContent = curr === 'zh' ? '中文' : 'EN'; } catch(_) {} }
+        function positionLangMenu(){
+          try {
+            if (!langBtn || !langMenu || !langSelect || !langSelect.classList.contains('open')) return;
+            var r = langBtn.getBoundingClientRect();
+            var menuW = Math.max(160, Math.min(260, r.width));
+            langMenu.style.position = 'fixed';
+            langMenu.style.top = Math.round(r.bottom + 6) + 'px';
+            langMenu.style.left = Math.round(r.right - menuW) + 'px';
+            langMenu.style.minWidth = menuW + 'px';
+            langMenu.style.zIndex = '1200';
+          } catch(_) {}
+        }
+
+        if (langBtn && langSelect) {
+          langBtn.addEventListener('click', function(e){ e.preventDefault(); langSelect.classList.toggle('open'); positionLangMenu(); });
+          document.addEventListener('click', function(evt){ try { if (!langSelect.contains(evt.target)) langSelect.classList.remove('open'); } catch(_){} }, { passive: true });
+          document.addEventListener('keydown', function(e){ if (e.key === 'Escape') { try { langSelect.classList.remove('open'); } catch(_){} } }, { passive: true });
+          window.addEventListener('resize', function(){ positionLangMenu(); }, { passive: true });
+          window.addEventListener('scroll', function(){ positionLangMenu(); }, { passive: true });
+          try {
+            var items = langSelect.querySelectorAll('.lang-item');
+            for (var i=0;i<items.length;i++){
+              (function(btn){ btn.addEventListener('click', function(){
+                try {
+                  var target = btn.getAttribute('data-lang') || '';
+                  var current = getCurrentLangFromPath();
+                  if (target && target !== current) { var url = buildLangUrl(target); if (url) { window.location.href = url; } }
+                } catch(_) {}
+              }); })(items[i]);
+            }
+          } catch(_) {}
+        }
+      } catch (_) {}
 
       // Wire up search behavior (unified for all pages) - now using Lunr
       try {
@@ -372,29 +466,32 @@
         function ensureChatPanel(){
           if (document.getElementById('ai-chat-panel')) return;
           // Shell
+          var chatTitleText = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.title) || 'Ask AI';
+          var clearText = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.clear) || 'Clear';
+          var closeText = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.close) || 'Close';
           var panel = h('div', { id: 'ai-chat-panel', className: 'ai-chat-panel', role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'ai-chat-title' },
             h('div', { className: 'ai-chat-header' },
-              h('div', { id: 'ai-chat-title', className: 'ai-chat-title', text: 'Ask AI' }),
+              h('div', { id: 'ai-chat-title', className: 'ai-chat-title', text: chatTitleText }),
               h('div', { className: 'ai-chat-actions' },
-                h('button', { className: 'ai-chat-clear', type: 'button', title: 'Clear conversation', text: 'Clear' }),
-                h('button', { className: 'ai-chat-close', type: 'button', title: 'Close', text: 'Close' })
+                h('button', { className: 'ai-chat-clear', type: 'button', title: 'Clear conversation', text: clearText }),
+                h('button', { className: 'ai-chat-close', type: 'button', title: 'Close', text: closeText })
               )
             ),
             h('div', { className: 'ai-chat-context' },
               h('label', { className: 'ai-chat-ctx-row' },
                 h('input', { type: 'checkbox', className: 'ai-chat-include-selection', checked: 'checked' }),
-                h('span', { text: 'Include current text selection' })
+                h('span', { text: (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.includeSelection) || 'Include current text selection' })
               ),
               h('div', { className: 'ai-chat-selection-preview' },
-                h('div', { className: 'ai-chat-selection-empty', text: 'Select text in the page to include it as context.' }),
+                h('div', { className: 'ai-chat-selection-empty', text: (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.selectionEmpty) || 'Select text in the page to include it as context.' }),
                 h('div', { className: 'ai-chat-selection-text' })
               )
             ),
             h('div', { className: 'ai-chat-messages', id: 'ai-chat-messages' }),
             h('form', { className: 'ai-chat-compose', id: 'ai-chat-form' },
-              h('textarea', { className: 'ai-chat-input', id: 'ai-chat-input', rows: '3', placeholder: 'Ask a question about this page…\n\nYou can also ask about specific content by appending:\n@chapter (e.g., "@3"), @chapter.section (e.g., "@3.1"), @chapter.section.subsection (e.g., "@3.1.2")\n@appendix (e.g., "@A"), @appendix.section (e.g., "@A.1"), @appendix.section.subsection (e.g., "@A.1.2")' }),
+              h('textarea', { className: 'ai-chat-input', id: 'ai-chat-input', rows: '3', placeholder: (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.placeholder) || 'Ask a question about this page…\n\nYou can also ask about specific content by appending:\n@chapter (e.g., "@3"), @chapter.section (e.g., "@3.1"), @chapter.section.subsection (e.g., "@3.1.2")\n@appendix (e.g., "@A"), @appendix.section (e.g., "@A.1"), @appendix.section.subsection (e.g., "@A.1.2")' }),
               h('div', { className: 'ai-chat-sendrow' },
-                h('button', { className: 'ai-chat-send', id: 'ai-chat-send', type: 'submit', text: 'Send' })
+                h('button', { className: 'ai-chat-send', id: 'ai-chat-send', type: 'submit', text: (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.send) || 'Send' })
               )
             )
           );
@@ -498,7 +595,8 @@
         function extractSubsectionTextFromDoc(doc, sectionNumber, subsectionNumber, maxLen){ try { if (!doc) return ''; var subId = 'S' + String(sectionNumber) + '.SS' + String(subsectionNumber); var el = doc.querySelector('section.ltx_subsection#' + subId); if (!el) return ''; var text = (el.innerText || el.textContent || '').replace(/\u00A0/g, ' '); text = text.replace(/\s+/g, ' ').trim(); if (!text) return ''; var MAX = typeof maxLen === 'number' ? maxLen : 4000; if (text.length > MAX) text = text.slice(0, MAX) + '\u2026'; return text; } catch (_) { return ''; } }
         function buildPayloadAsync(userText){ return new Promise(function(resolve){ try {
             var includeSel = false; var panel = document.getElementById('ai-chat-panel'); if (panel) { var cb = panel.querySelector('.ai-chat-include-selection'); includeSel = !!(cb && cb.checked && chatState.currentSelection); }
-            var msgs = []; msgs.push({ role: 'system', content: 'You are an AI assistant helping readers of the book Learning Deep Representations of Data Distributions. Answer clearly and concisely. If relevant, point to sections or headings from the current page.' }); if (includeSel) msgs.push({ role: 'user', content: 'Context from selected text on the page:\n\n' + chatState.currentSelection });
+            var systemPrompt = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.systemPrompt) || 'You are an AI assistant helping readers of the book Learning Deep Representations of Data Distributions. Answer clearly and concisely. If relevant, point to sections or headings from the current page.';
+            var msgs = []; msgs.push({ role: 'system', content: systemPrompt }); if (includeSel) msgs.push({ role: 'user', content: 'Context from selected text on the page:\n\n' + chatState.currentSelection });
             var mentions = parseSectionMentions(userText);
             if (!mentions.length) {
               msgs.push({ role: 'user', content: userText }); resolve(msgs); return;
@@ -535,8 +633,14 @@
         }
         return h('li', { className:'nav-item' }, a);
       }
-      var mobileSearch = h('div', { className: 'mobile-search-section side-section' }, h('div', { className: 'side-h', text: 'Search' }), h('div', { className: 'mobile-search-container' }, h('input', { className: 'mobile-search-input', type: 'search', placeholder: 'Search pages…', 'aria-label': 'Search' }), h('div', { className: 'mobile-search-results' })) );
-      var aside = h('aside', { className:'book-sidebar sidebar', 'data-shared-ui':'1' }, mobileSearch, h('div', { className:'side-section' }, h('div', { className:'side-h', text:'Navigation' }), h('ul', { className:'nav-list' }, (navLinks||DEFAULT_NAV_LINKS).map(linkItem))), h('div', { className:'side-section' }, h('div', { className:'side-h', text:'Table of Contents' }), h('ul', { className:'nav-list toc-list' }, (toc||DEFAULT_TOC).map(linkItem))));
+      var searchHeaderText = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.sidebar.search) || 'Search';
+      var mobileSearchPlaceholder = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.ui.searchPlaceholder) || 'Search pages…';
+      var mobileSearch = h('div', { className: 'mobile-search-section side-section' }, h('div', { className: 'side-h', text: searchHeaderText }), h('div', { className: 'mobile-search-container' }, h('input', { className: 'mobile-search-input', type: 'search', placeholder: mobileSearchPlaceholder, 'aria-label': 'Search' }), h('div', { className: 'mobile-search-results' })) );
+      var navigationText = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.sidebar.navigation) || 'Navigation';
+      var tocText = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.sidebar.tableOfContents) || 'Table of Contents';
+      var defaultNavLinks = navLinks || (window.BOOK_COMPONENTS ? getDefaultNavLinks() : DEFAULT_NAV_LINKS);
+      var defaultTOC = toc || (window.BOOK_COMPONENTS ? getDefaultTOC() : DEFAULT_TOC);
+      var aside = h('aside', { className:'book-sidebar sidebar', 'data-shared-ui':'1' }, mobileSearch, h('div', { className:'side-section' }, h('div', { className:'side-h', text: navigationText }), h('ul', { className:'nav-list' }, defaultNavLinks.map(linkItem))), h('div', { className:'side-section' }, h('div', { className:'side-h', text: tocText }), h('ul', { className:'nav-list toc-list' }, defaultTOC.map(linkItem))));
       if (container.firstChild) container.insertBefore(aside, container.firstChild); else container.appendChild(aside);
 
       // Wire up mobile sidebar search (independent from topbar search)
@@ -589,10 +693,10 @@
       var didInsert = false;
       // Landing layout
       var shell = document.querySelector('.app-shell');
-      if (shell && !shell.querySelector('.book-sidebar')) { renderSidebarInto(shell, window.NAV_LINKS || DEFAULT_NAV_LINKS, window.TOC || DEFAULT_TOC); didInsert = true; }
+      if (shell && !shell.querySelector('.book-sidebar')) { renderSidebarInto(shell, window.NAV_LINKS || (window.BOOK_COMPONENTS ? getDefaultNavLinks() : DEFAULT_NAV_LINKS), window.TOC || (window.BOOK_COMPONENTS ? getDefaultTOC() : DEFAULT_TOC)); didInsert = true; }
       // Simple pages with layout-with-sidebar
       var lw = document.querySelector('.layout-with-sidebar');
-      if (lw && !lw.querySelector('.book-sidebar')) { renderSidebarInto(lw, window.NAV_LINKS || DEFAULT_NAV_LINKS, window.TOC || DEFAULT_TOC); didInsert = true; }
+      if (lw && !lw.querySelector('.book-sidebar')) { renderSidebarInto(lw, window.NAV_LINKS || (window.BOOK_COMPONENTS ? getDefaultNavLinks() : DEFAULT_NAV_LINKS), window.TOC || (window.BOOK_COMPONENTS ? getDefaultTOC() : DEFAULT_TOC)); didInsert = true; }
       // Chapter pages: wrap main content with a sidebar layout if present
       try {
         var pageMain = document.querySelector('.ltx_page_main');
@@ -603,7 +707,7 @@
           wrapper.setAttribute('data-shared-ui', '1');
           if (pageMain.parentNode) {
             pageMain.parentNode.insertBefore(wrapper, pageMain);
-            renderSidebarInto(wrapper, window.NAV_LINKS || DEFAULT_NAV_LINKS, window.TOC || DEFAULT_TOC);
+            renderSidebarInto(wrapper, window.NAV_LINKS || (window.BOOK_COMPONENTS ? getDefaultNavLinks() : DEFAULT_NAV_LINKS), window.TOC || (window.BOOK_COMPONENTS ? getDefaultTOC() : DEFAULT_TOC));
             wrapper.appendChild(pageMain);
             didInsert = true;
           }
@@ -628,6 +732,7 @@
     window.insertTopBar = renderTopBar;
     window.insertSidebar = function(selector, nav, toc){ var node = document.querySelector(selector); if (!node) return; if (node.querySelector('.sidebar')) return; renderSidebarInto(node, nav, toc); };
     window.DEFAULT_NAV_LINKS = DEFAULT_NAV_LINKS; window.DEFAULT_TOC = DEFAULT_TOC;
+    window.getDefaultNavLinks = getDefaultNavLinks; window.getDefaultTOC = getDefaultTOC;
   })();
   // --- End shared-ui.js content ---
 

@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -85,7 +86,7 @@ class LaTeXMLConfig:
     whats_in: str = "directory"
     preload: str = (
         "[nobibtex,nobreakuntex,localrawstyles,mathlexemes,"
-        "magnify=1.2,zoomout=1.2,tokenlimit=2499999999,iflimit=3599999,"
+        "magnify=1.2,zoomout=1.2,tokenlimit=2499999999,iflimit=35999999,"
         "absorblimit=1299999,pushbacklimit=599999999]latexml.sty"
     )
     pmml: bool = True
@@ -267,9 +268,18 @@ class LaTeXMLRunner:
 class HTMLPostProcessor:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root
+        # Relative prefix from the directory of processed HTML files to the asset root (website/html)
+        self._asset_rel_prefix: str = ""
 
     # ---------- top-level driver ----------
     def post_process_all(self, output_dir: Path) -> None:
+        # Compute relative path prefix from current output_dir to the shared asset root (HTML_OUTPUT_DIR)
+        try:
+            rel = os.path.relpath(HTML_OUTPUT_DIR.resolve(), output_dir.resolve())
+            # Use empty prefix for '.'; otherwise ensure trailing '/'
+            self._asset_rel_prefix = "" if rel == "." else (rel.replace("\\", "/") + "/")
+        except Exception:
+            self._asset_rel_prefix = ""
         self._remove_unwanted_pages(output_dir)
         html_files = sorted(output_dir.glob("*.html"))
         file_by_name = {f.name: f for f in html_files}
@@ -301,9 +311,10 @@ class HTMLPostProcessor:
     # ---------- helpers: structure ----------
     def _remove_unwanted_pages(self, output_dir: Path) -> None:
         try:
-            unwanted = [output_dir / "book-main.html"]
+            unwanted = []
+            unwanted.extend(output_dir.glob("book-main*.html"))
             unwanted.extend(output_dir.glob("Ptx*.html"))
-            unwanted.extend([output_dir / "Chx2.html", output_dir / "Chx3.html"])
+            # unwanted.extend([output_dir / "Chx2.html", output_dir / "Chx3.html"])
             for f in unwanted:
                 if f.exists():
                     f.unlink()
@@ -325,23 +336,18 @@ class HTMLPostProcessor:
         """Determine if a file should include chapter-specific CSS and JS.
         
         Returns True for:
-        - A*.html (appendices)
-        - Ch*.html (chapters)
-        - Chx*.html (preface)
+        - A*.html, Ax*.html (appendices)
+        - Ch*.html, Chx*.html (chapters)
         - bib.html (bibliography)
         """
         filename_lower = html_filename.lower()
         
-        # Check for chapter files (Ch1.html, Ch2.html, etc.)
-        if re.match(r"^ch\d+\.html$", filename_lower):
+        # Check for chapter files (Ch1.html, Ch2.html, Chx1.html, Chx2.html, etc.)
+        if re.match(r"^chx?[0-9]+\.html$", filename_lower):
             return True
         
-        # Check for appendix files (A1.html, A2.html, etc.)
-        if re.match(r"^a\d+\.html$", filename_lower):
-            return True
-        
-        # Check for preface files (Chx1.html, Chx2.html, etc.)
-        if re.match(r"^chx\d+\.html$", filename_lower):
+        # Check for appendix files (A1.html, A2.html, Ax1.html, Ax2.html, etc.)
+        if re.match(r"^ax?[0-9]+\.html$", filename_lower):
             return True
         
         # Check for bibliography
@@ -358,19 +364,29 @@ class HTMLPostProcessor:
             head_tag.insert(0, soup.new_tag("meta", attrs={"name": "viewport", "content": "width=device-width, initial-scale=1"}))
         
         # Always add common CSS/JS for all files
-        if head_tag.find("link", {"href": "common.css"}) is None:
-            head_tag.append(soup.new_tag("link", rel="stylesheet", href="common.css", type="text/css"))
-        if soup.find("script", {"src": "common.js"}) is None:
-            sui = soup.new_tag("script", src="common.js")
+        common_css_href = f"{self._asset_rel_prefix}common.css" if self._asset_rel_prefix else "common.css"
+        common_components_js_src = "common_components.js"
+        common_js_src = f"{self._asset_rel_prefix}common.js" if self._asset_rel_prefix else "common.js"
+        # Avoid duplicates: check both bare and prefixed variants
+        if head_tag.find("link", {"href": common_css_href}) is None and head_tag.find("link", {"href": "common.css"}) is None:
+            head_tag.append(soup.new_tag("link", rel="stylesheet", href=common_css_href, type="text/css"))
+        if head_tag.find("script", {"src": common_components_js_src}) is None and head_tag.find("script", {"src": "common_components.js"}) is None:
+            sui = soup.new_tag("script", src=common_components_js_src)
+            sui.attrs["defer"] = "defer"
+            head_tag.append(sui)
+        if soup.find("script", {"src": common_js_src}) is None and soup.find("script", {"src": "common.js"}) is None:
+            sui = soup.new_tag("script", src=common_js_src)
             sui.attrs["defer"] = "defer"
             head_tag.append(sui)
         
         # Only add chapter-specific CSS/JS for chapter, appendix, preface, and bibliography files
         if self._should_include_chapter_styling(html_filename):
-            if head_tag.find("link", {"href": "chapter.css"}) is None:
-                head_tag.append(soup.new_tag("link", rel="stylesheet", href="chapter.css", type="text/css"))
-            if soup.find("script", {"src": "chapter.js"}) is None:
-                cjs = soup.new_tag("script", src="chapter.js")
+            chapter_css_href = f"{self._asset_rel_prefix}chapter.css" if self._asset_rel_prefix else "chapter.css"
+            chapter_js_src = f"{self._asset_rel_prefix}chapter.js" if self._asset_rel_prefix else "chapter.js"
+            if head_tag.find("link", {"href": chapter_css_href}) is None and head_tag.find("link", {"href": "chapter.css"}) is None:
+                head_tag.append(soup.new_tag("link", rel="stylesheet", href=chapter_css_href, type="text/css"))
+            if soup.find("script", {"src": chapter_js_src}) is None and soup.find("script", {"src": "chapter.js"}) is None:
+                cjs = soup.new_tag("script", src=chapter_js_src)
                 cjs.attrs["defer"] = "defer"
                 head_tag.append(cjs)
 
@@ -761,48 +777,6 @@ class HTMLPostProcessor:
         )
         return preface_file, chapter_files, appendix_files
 
-    def _compute_prev_next_for(
-        self,
-        name: str,
-        file_by_name: dict[str, Path],
-        preface_file: Optional[str],
-        chapter_files: List[str],
-        appendix_files: List[str],
-    ) -> Tuple[Optional[str], Optional[str]]:
-        lower = name.lower()
-        if lower == "bib.html":
-            return (None, None)
-
-        m_pref = re.match(r"^Chx(\d+)\.html$", name, flags=re.IGNORECASE)
-        if m_pref:
-            next_target = "Ch1.html" if "Ch1.html" in file_by_name else (appendix_files[0] if appendix_files else None)
-            return (None, next_target)
-
-        m_ch = re.match(r"^Ch(\d+)\.html$", name, flags=re.IGNORECASE)
-        if m_ch:
-            num = int(m_ch.group(1))
-            if num == 1:
-                prev_target = preface_file
-            else:
-                prev_target = f"Ch{num-1}.html" if f"Ch{num-1}.html" in file_by_name else None
-            if f"Ch{num+1}.html" in file_by_name:
-                next_target: Optional[str] = f"Ch{num+1}.html"
-            else:
-                next_target = appendix_files[0] if appendix_files else None
-            return (prev_target, next_target)
-
-        m_app = re.match(r"^A(\d+)\.html$", name, flags=re.IGNORECASE)
-        if m_app:
-            num = int(m_app.group(1))
-            if num == 1:
-                prev_target = chapter_files[-1] if chapter_files else (preface_file or None)
-            else:
-                prev_target = f"A{num-1}.html" if f"A{num-1}.html" in file_by_name else None
-            next_target = f"A{num+1}.html" if f"A{num+1}.html" in file_by_name else None
-            return (prev_target, next_target)
-
-        return (None, None)
-
     def _remove_center_header_navigation(self, soup: BeautifulSoup) -> None:
         """Remove the secondary top bar (centered header navigation) for ALL pages.
         
@@ -823,9 +797,11 @@ class HTMLPostProcessor:
 
     # ---------- cleanups ----------
     def _remove_preface_toc_if_needed(self, soup: BeautifulSoup, name: str) -> None:
-        if re.match(r"^Chx\d+\.html$", name, flags=re.IGNORECASE):
-            for toc_nav in list(soup.select("nav.ltx_TOC")):
-                cast(Tag, toc_nav).decompose()
+        for toc_nav in list(soup.select("nav.ltx_TOC")):
+            toc_tag = cast(Tag, toc_nav)
+            # Check if TOC is empty (no meaningful content)
+            if not toc_tag.get_text(strip=True):
+                toc_tag.decompose()
 
     def _clean_footer_prev_next(self, soup: BeautifulSoup) -> None:
         footer_tag = ensure_tag(soup.find("footer", class_="ltx_page_footer"))
@@ -845,11 +821,8 @@ class HTMLPostProcessor:
 
     # ---------- mini ToC ----------
     def _build_static_mini_toc(self, soup: BeautifulSoup, name: str) -> None:
-        is_preface = re.match(r"^Chx\d+\.html$", name, flags=re.IGNORECASE) is not None
-        is_chapter = re.match(r"^Ch\d+\.html$", name, flags=re.IGNORECASE) is not None
-        is_appendix = re.match(r"^A\d+\.html$", name, flags=re.IGNORECASE) is not None
-        if is_preface or not (is_chapter or is_appendix):
-            return
+        is_chapter= re.match(r"^Chx?[0-9]+\.html$", name, flags=re.IGNORECASE) is not None
+        is_appendix = re.match(r"^Ax?[0-9]+\.html$", name, flags=re.IGNORECASE) is not None
 
         container_any = soup.select_one(".ltx_appendix" if is_appendix else ".ltx_chapter")
         container = ensure_tag(container_any)
