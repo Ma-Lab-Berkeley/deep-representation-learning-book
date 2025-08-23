@@ -4,7 +4,7 @@
     // Navigation links
     nav: {
       aiTools: 'AI 工具',
-      contributors: '贡献者',
+      contributors: '编者 / 参编者',
       howToContribute: '如何贡献？'
     },
 
@@ -17,11 +17,11 @@
         1: { title: '第一章', subtitle: '引言' },
         2: { title: '第二章', subtitle: '学习线性和独立结构' },
         3: { title: '第三章', subtitle: '通过有损压缩追求低维分布' },
-        4: { title: '第四章', subtitle: '从展开优化的深度表示' },
-        5: { title: '第五章', subtitle: '一致和自一致表示' },
-        6: { title: '第六章', subtitle: '低维分布的推理' },
-        7: { title: '第七章', subtitle: '学习真实世界数据的表示' },
-        8: { title: '第八章', subtitle: '智能的未来研究' }
+        4: { title: '第四章', subtitle: '通过展开优化实现深度表示' },
+        5: { title: '第五章', subtitle: '一致性和自洽性表示' },
+        6: { title: '第六章', subtitle: '基于低维分布的推断' },
+        7: { title: '第七章', subtitle: '真实世界数据的表示学习' },
+        8: { title: '第八章', subtitle: '智能研究的未来' }
       },
       appendices: {
         A: { title: '附录A', subtitle: '优化方法' },
@@ -69,9 +69,9 @@
     // Landing page content
     landing: {
       hero: {
-        title: '学习数据分布的深度表示',
+        title: '数据分布的深度表达学习',
         authors: 'Sam Buchanan · Druv Pai · Peng Wang · Yi Ma',
-        subtitle: '一本现代化的完全开源教科书，探索深度神经网络为什么以及如何学习高维真实世界数据的紧凑且信息密集的表示。',
+        subtitle: '一本完全开源的现代教科书，探讨深度神经网络为何以及如何从高维真实世界数据中学习紧凑且信息丰富的表示。',
         buttons: {
           readHtml: '阅读本书 (HTML)',
           readPdf: '阅读本书 (PDF)',
