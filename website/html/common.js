@@ -322,14 +322,14 @@
           try {
             var p = (path || '/');
             var parts = p.split('/');
-            var nonEmptyIdxs = [];
-            for (var i = 0; i < parts.length; i++) { if (parts[i]) nonEmptyIdxs.push(i); }
-            // If there are fewer than 2 non-empty segments, return '/' (e.g., '/zh/' -> '/') or original if already root
-            if (nonEmptyIdxs.length < 2) { return '/'; }
-            // Remove the penultimate non-empty segment (language directory)
-            var idxToRemove = nonEmptyIdxs[nonEmptyIdxs.length - 2];
-            parts.splice(idxToRemove, 1);
-            var out = parts.join('/');
+            // Remove ONLY the standalone 'zh' language segment, preserving base paths
+            var outParts = [];
+            for (var i = 0; i < parts.length; i++) {
+              var seg = parts[i];
+              if (seg === 'zh') continue;
+              outParts.push(seg);
+            }
+            var out = outParts.join('/');
             out = out.replace(/\/{2,}/g, '/');
             if (out.length > 1 && out.endsWith('/')) out = out.slice(0, -1);
             if (!out) out = '/';
@@ -345,9 +345,13 @@
             var last = parts.pop(); // may be '' if p ends with '/'
             // Ensure leading slash
             var base = parts.join('/'); if (!base) base = '';
-            if (base === '' && last === '') { return '/zh/'; }
-            if (last === '') { return base + '/zh/'; }
-            return base + '/zh/' + last;
+            var out;
+            if (base === '' && last === '') { out = '/zh/'; }
+            else if (last === '') { out = base + '/zh/'; }
+            else { out = base + '/zh/' + last; }
+            out = out.replace(/\/{2,}/g, '/');
+            if (out[0] !== '/') out = '/' + out;
+            return out;
           } catch(_) { return '/zh/'; }
         }
         function buildLangUrl(target){
