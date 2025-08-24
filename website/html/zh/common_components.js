@@ -4,6 +4,7 @@
     // Navigation links
     nav: {
       aiTools: 'AI 工具',
+      aiHelpers: 'AI 助手',
       contributors: '编者 / 参编者',
       howToContribute: '如何贡献？'
     },
@@ -128,6 +129,26 @@
         chapter4: '第四章'
       },
       footer: '© {year} Sam Buchanan, Druv Pai, Peng Wang, and Yi Ma. 保留所有权利。'
+    },
+
+    // AI Helpers page content
+    aiHelpers: {
+      title: 'AI 助手',
+      intro: 'AI 助手和工具在本书的创作中发挥了重要作用。目前，我们在网站上部署了 BookQA-7B-Instruct（“与AI聊天”按钮）。更多 AI 助手即将上线~',
+      techDetails: 'BookQA Series旨在帮助读者理解一本书的内容。它可以回答与材料相关的问题，并清晰解释关键概念与理论。为构建这些模型，我们首先使用 EntiGraph 通过链接从文本中抽样的实体来生成丰富的与书籍相关的数据。随后，我们在这些数据上对 Qwen2.5-7B/32B-Instruct 进行持续的自回归预训练。我们还在训练中加入了指令跟随数据，使模型在学习书中的新知识的同时，不会遗忘基本的对话能力。',
+      sections: {
+        aiAssistants: 'AI 助手',
+        aiTools: 'AI 工具'
+      },
+      badges: {
+        aiAssistant: 'AI 助手',
+        codeGeneration: '代码生成',
+        contentReview: '内容审查',
+        translation: '翻译',
+        documentation: '文档',
+        research: '研究'
+      },
+      footer: '© {year} Sam Buchanan, Druv Pai, Peng Wang, and Yi Ma. 保留所有权利。'
     }
   };
 
@@ -135,7 +156,8 @@
   window.BOOK_COMPONENTS.buildNavLinks = function() {
     return [
       { label: this.nav.contributors, href: 'contributors.html' },
-      { label: this.nav.howToContribute, href: 'https://github.com/Ma-Lab-Berkeley/ldrdd-book#making-a-contribution', external: true }
+      { label: this.nav.howToContribute, href: 'https://github.com/Ma-Lab-Berkeley/ldrdd-book#making-a-contribution', external: true },
+      { label: this.nav.aiHelpers, href: 'ai-helpers.html' }
     ];
   };
 

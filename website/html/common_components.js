@@ -4,6 +4,7 @@
     // Navigation links
     nav: {
       aiTools: 'AI Tools',
+      aiHelpers: 'AI Helpers',
       contributors: 'Contributors',
       howToContribute: 'How to Contribute?'
     },
@@ -128,6 +129,26 @@
         chapter4: 'Chapter 4'
       },
       footer: '© {year} Sam Buchanan, Druv Pai, Peng Wang, and Yi Ma. All rights reserved.'
+    },
+
+    // AI Helpers page content
+    aiHelpers: {
+      title: 'AI Helpers',
+      intro: 'AI assistants and tools that have helped in the creation of this book. Currently, we deploy BookQA-7B-Instruct on our website ("Ask AI" button). More AI helpers are coming soon~',
+      techDetails: '',
+      sections: {
+        aiAssistants: 'AI Assistants',
+        aiTools: 'AI Tools'
+      },
+      badges: {
+        aiAssistant: 'AI Assistant',
+        codeGeneration: 'Code Generation',
+        contentReview: 'Content Review',
+        translation: 'Translation',
+        documentation: 'Documentation',
+        research: 'Research'
+      },
+      footer: '© {year} Sam Buchanan, Druv Pai, Peng Wang, and Yi Ma. All rights reserved.'
     }
   };
 
@@ -135,7 +156,8 @@
   window.BOOK_COMPONENTS.buildNavLinks = function() {
     return [
       { label: this.nav.contributors, href: 'contributors.html' },
-      { label: this.nav.howToContribute, href: 'https://github.com/Ma-Lab-Berkeley/ldrdd-book#making-a-contribution', external: true }
+      { label: this.nav.howToContribute, href: 'https://github.com/Ma-Lab-Berkeley/ldrdd-book#making-a-contribution', external: true },
+      { label: this.nav.aiHelpers, href: 'ai-helpers.html' }
     ];
   };
 
