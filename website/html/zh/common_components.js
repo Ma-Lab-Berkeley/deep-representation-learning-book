@@ -11,11 +11,11 @@
 
     // Table of Contents
     toc: {
-      preface: '前言',
+      preface: '序言',
       chapter: '第',
       appendix: '附录',
       chapters: {
-        1: { title: '第一章', subtitle: '引言' },
+        1: { title: '第一章', subtitle: '简约的概述' },
         2: { title: '第二章', subtitle: '学习线性和独立结构' },
         3: { title: '第三章', subtitle: '通过有损压缩追求低维分布' },
         4: { title: '第四章', subtitle: '通过展开优化实现深度表示' },
@@ -32,7 +32,7 @@
 
     // UI Labels
     ui: {
-      bookTitle: '学习数据分布的深度表示',
+      bookTitle: '数据分布的深度表达学习',
       langLabel: 'EN',
       brandHref: 'index.html',
       searchPlaceholder: '搜索页面…',
@@ -98,13 +98,14 @@
         acknowledgements: {
           title: '致谢',
           paragraphs: [
-            '本书主要基于过去八年中开发的研究成果。感谢加州大学伯克利分校（2018年）和香港大学（2023年）的慷慨资助，易马教授得以在过去八年中开始并专注于这个令人兴奋的新研究方向。在这些年中，与此研究方向相关的，易马教授和他在伯克利的研究团队得到了以下研究资助的支持：',
-            '没有这些研究项目的财政支持，本书就不可能完成。作者们从参与这些项目的同事和学生的研究成果中获得了巨大的启发。'
+            '本书主要基于过去八年中所得的研究成果。感谢加州大学伯克利分校（2018）和香港大学（2023）慷慨地提供启动经费，使马毅在过去八年能够投身并专注于这一令人振奋的新研究方向。在这些年里，围绕该研究方向，马毅及其在伯克利的团队获得了以下研究项目的资助：
+',
+            '如果没有这些研究项目的资金支持，本书将无法完成。作者从参与这些项目的同事和学生的研究成果中获得了巨大的启发。'
           ],
           grants: [
-            '多大学*THEORINET*深度学习基础项目，由西蒙斯基金会和美国国家科学基金会联合资助（DMS资助 #2031899）',
-            '通过最小化率缩减的*闭环数据转录*项目，由海军研究办公室资助（资助号 N00014-22-1-2102）；',
-            '针对低维结构的*深度学习原理方法*项目，由美国国家科学基金会资助（CISE资助 #2402951）。'
+            '由 Simons Foundation 和 National Science Foundation (DMS grant \#2031899）共同资助的多个大学联合开展的THEORINET project for the Foundations of Deep Learning项目;',
+            '由 Office of Naval Research (grant N00014-22-1-2102) 资助的Closed-Loop Data Transcription via Minimaxing Rate Reduction项目；',
+            '由 National Science Foundation (CISE grant \#2402951) 资助的Principled Approaches to Deep Learning for Low-dimensional Structures项目。'
           ]
         }
       },
@@ -114,10 +115,10 @@
     // Contributors page content
     contributors: {
       title: '贡献者',
-      intro: '本书的核心作者和贡献者。',
+      intro: '本书的核心作者和参编者。',
       sections: {
         coreTeam: '核心编辑团队',
-        contributors: '贡献者'
+        contributors: '参编者'
       },
       badges: {
         author: '作者',
