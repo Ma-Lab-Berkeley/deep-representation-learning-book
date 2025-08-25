@@ -114,8 +114,8 @@
 
     // Contributors page content
     contributors: {
-      title: '贡献者',
-      intro: '本书的核心作者和参编者。',
+      title: '编者 / 参编者',
+      intro: '本书的核心作者和参编者',
       sections: {
         coreTeam: '核心编辑团队',
         contributors: '参编者'
