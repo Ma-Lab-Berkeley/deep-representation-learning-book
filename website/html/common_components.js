@@ -157,7 +157,7 @@
     return [
       { label: this.nav.contributors, href: 'contributors.html' },
       { label: this.nav.howToContribute, href: 'https://github.com/Ma-Lab-Berkeley/ldrdd-book#making-a-contribution', external: true },
-      { label: this.nav.aiHelpers, href: 'ai-helpers.html' }
+      { label: this.nav.aiHelpers, href: 'ai_helpers.html' }
     ];
   };
 
