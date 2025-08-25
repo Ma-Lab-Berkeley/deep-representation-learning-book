@@ -98,8 +98,7 @@
         acknowledgements: {
           title: '致谢',
           paragraphs: [
-            '本书主要基于过去八年中所得的研究成果。感谢加州大学伯克利分校（2018）和香港大学（2023）慷慨地提供启动经费，使马毅在过去八年能够投身并专注于这一令人振奋的新研究方向。在这些年里，围绕该研究方向，马毅及其在伯克利的团队获得了以下研究项目的资助：
-',
+            '本书主要基于过去八年中所得的研究成果。感谢加州大学伯克利分校（2018）和香港大学（2023）慷慨地提供启动经费，使马毅在过去八年能够投身并专注于这一令人振奋的新研究方向。在这些年里，围绕该研究方向，马毅及其在伯克利的团队获得了以下研究项目的资助',
             '如果没有这些研究项目的资金支持，本书将无法完成。作者从参与这些项目的同事和学生的研究成果中获得了巨大的启发。'
           ],
           grants: [
@@ -135,7 +134,7 @@
     // AI Helpers page content
     aiHelpers: {
       title: 'AI 助手',
-      intro: 'AI 助手和工具在本书的创作中发挥了重要作用。目前，我们在网站上部署了 BookQA-7B-Instruct（“与AI聊天”按钮）。更多 AI 助手即将上线~',
+      intro: 'AI 助手和工具在本书的创作中发挥了重要作用。目前，我们在网站上部署了 BookQA-7B-Instruct（“与AI聊天”按钮）。更多 AI 助手即将上线.',
       techDetails: 'BookQA Series旨在帮助读者理解一本书的内容。它可以回答与材料相关的问题，并清晰解释关键概念与理论。为构建这些模型，我们首先使用 EntiGraph 通过链接从文本中抽样的实体来生成丰富的与书籍相关的数据。随后，我们在这些数据上对 Qwen2.5-7B/32B-Instruct 进行持续的自回归预训练。我们还在训练中加入了指令跟随数据，使模型在学习书中的新知识的同时，不会遗忘基本的对话能力。',
       sections: {
         aiAssistants: 'AI 助手',
@@ -158,7 +157,7 @@
     return [
       { label: this.nav.contributors, href: 'contributors.html' },
       { label: this.nav.howToContribute, href: 'https://github.com/Ma-Lab-Berkeley/ldrdd-book#making-a-contribution', external: true },
-      { label: this.nav.aiHelpers, href: 'ai-helpers.html' }
+      { label: this.nav.aiHelpers, href: 'ai_helpers.html' }
     ];
   };
 

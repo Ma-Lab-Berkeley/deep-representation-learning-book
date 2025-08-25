@@ -15,7 +15,7 @@
       chapter: 'Chapter',
       appendix: 'Appendix',
       chapters: {
-        1: { title: 'Chapter 1', subtitle: 'Introduction' },
+        1: { title: 'Chapter 1', subtitle: 'An Informal Introduction' },
         2: { title: 'Chapter 2', subtitle: 'Learning Linear and Independent Structures' },
         3: { title: 'Chapter 3', subtitle: 'Pursuing Low-Dimensional Distributions via Lossy Compression' },
         4: { title: 'Chapter 4', subtitle: 'Deep Representations from Unrolled Optimization' },
@@ -134,7 +134,7 @@
     // AI Helpers page content
     aiHelpers: {
       title: 'AI Helpers',
-      intro: 'AI assistants and tools that have helped in the creation of this book. Currently, we deploy BookQA-7B-Instruct on our website ("Ask AI" button). More AI helpers are coming soon~',
+      intro: 'AI assistants and tools that have helped in the creation of this book. Currently, we deploy BookQA-7B-Instruct on our website ("Ask AI" button). More AI helpers are coming soon.',
       techDetails: '',
       sections: {
         aiAssistants: 'AI Assistants',
