@@ -192,13 +192,15 @@
     return (
       React.createElement('main', { className: 'page' },
         React.createElement('h1', null, getText('aiHelpers.title', 'AI Helpers')),
-        React.createElement('p', { className: 'intro' }, getText('aiHelpers.intro', 'Customized chatbots that have helped in the creation of this book.')),
+        React.createElement('p', { className: 'intro' }, getText('aiHelpers.intro', 'Here we introduce AI helpers customized for this book. Currently, we deploy BookQA-7B-Instruct on our website ("Ask AI" button). More AI helpers are coming soon.')),
         React.createElement('section', { 'aria-label': 'BookQA Series' },
           React.createElement('h2', { style: { margin: '16px 0 8px', fontSize: '18px' } }, getText('aiHelpers.sections.customizedChatbots', 'BookQA Series')),
           React.createElement('div', { className: 'ai-helpers-grid' },
             AI_ASSISTANTS.map((p) => React.createElement(Card, { key: p.name, ...p }))
           ),
-          React.createElement('p', { className: 'tech-details' }, renderTextWithLinks(getText('aiHelpers.techDetails', 'BookQA Series is designed to help readers understand a book’s content. It can answer questions about the material and give clear explanations of the key concepts and theories. To build these models, we first use EntiGraph to generate a rich set of book-related data by linking sampled entities from the text. We then continually pre-train Qwen2.5-7B/32B-Instruct on this data using auto-regressive training. \
+          React.createElement('p', { className: 'tech-details' }, renderTextWithLinks(getText('aiHelpers.techDetails', 'BookQA Series is designed to help readers understand a book\'s content. \
+            It can answer questions about the material and give clear explanations of the key concepts and theories. To build these models, we first use EntiGraph to generate a rich set of book-related data by linking sampled entities from the text. \
+            We then continually pre-train Qwen2.5-7B/32B-Instruct on this data using auto-regressive training. \
             We also incorporate instruction-following data during training such that the model can learn new knowledge from the book without forgetting basic chatting skills.')))
         ),
         // React.createElement('section', { 'aria-label': 'AI Tools', className: 'ai-helpers-grid' },

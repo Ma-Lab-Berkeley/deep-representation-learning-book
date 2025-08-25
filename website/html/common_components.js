@@ -134,7 +134,7 @@
     // AI Helpers page content
     aiHelpers: {
       title: 'AI Helpers',
-      intro: 'AI assistants and tools that have helped in the creation of this book. Currently, we deploy BookQA-7B-Instruct on our website ("Ask AI" button). More AI helpers are coming soon.',
+      intro: '',
       techDetails: '',
       sections: {
         aiAssistants: 'AI Assistants',
