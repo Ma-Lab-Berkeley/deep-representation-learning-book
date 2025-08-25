@@ -192,7 +192,7 @@
     return (
       React.createElement('main', { className: 'page' },
         React.createElement('h1', null, getText('aiHelpers.title', 'AI Helpers')),
-        React.createElement('p', { className: 'intro' }, getText('aiHelpers.intro', 'Here we introduce AI helpers customized for this book. Currently, we deploy BookQA-7B-Instruct on our website ("Ask AI" button). More AI helpers are coming soon.')),
+        React.createElement('p', { className: 'intro' }, getText('aiHelpers.intro', 'To help people to study or use the book, we will develop and continue to improve customized AI assistants and tools that will help people to study the book, teach the book, or research with the book. Currently, we have developed the BookQA series that can answer questions regarding the book. We have developed two models which are open-sourced on the Hugging Face (see below). In particular, the model BookQA-7B-Instruct is hosted on our website ("Ask AI" button). More AI helpers are coming soon.')),
         React.createElement('section', { 'aria-label': 'BookQA Series' },
           React.createElement('h2', { style: { margin: '16px 0 8px', fontSize: '18px' } }, getText('aiHelpers.sections.customizedChatbots', 'BookQA Series')),
           React.createElement('div', { className: 'ai-helpers-grid' },
