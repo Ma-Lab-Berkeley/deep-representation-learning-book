@@ -15,7 +15,7 @@
       chapter: '第',
       appendix: '附录',
       chapters: {
-        1: { title: '第一章', subtitle: '简约的概述' },
+        1: { title: '第一章', subtitle: '概述' },
         2: { title: '第二章', subtitle: '学习线性和独立结构' },
         3: { title: '第三章', subtitle: '通过有损压缩追求低维分布' },
         4: { title: '第四章', subtitle: '通过展开优化实现深度表示' },
