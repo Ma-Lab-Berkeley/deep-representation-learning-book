@@ -158,6 +158,7 @@
           desc: 'PRs: <a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/14">#14</a>',
         },
         "kerui-min": { desc: "Chinese translation." },
+        "jan-cavel": { desc: "Romanian translation." },
         "kevin-murphy": {
           desc: 'Extensive feedback. Issues: <a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/3">#3</a>, <a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/4">#4</a>, <a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/5">#5</a>, <a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/8">#8</a>, <a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/10">#10</a>, <a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/11">#11</a>, <a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/12">#12</a>, <a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/13">#13</a>',
         },

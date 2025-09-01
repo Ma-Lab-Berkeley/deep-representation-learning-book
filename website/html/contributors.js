@@ -70,6 +70,12 @@
       url: "https://yaodongyu.github.io/",
       affil: "University of Maryland, College Park",
     },
+    {
+      id: "jan-cavel",
+      name: "Jan Cavel",
+      url: "https://piatra.institute/",
+      affil: "Piatra Institute",
+    },
   ];
 
   const INFRA_CONTRIBUTORS = [

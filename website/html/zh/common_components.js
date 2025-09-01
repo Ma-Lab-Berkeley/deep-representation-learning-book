@@ -136,6 +136,7 @@
           desc: 'PR：<a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/14">#14</a>',
         },
         "kerui-min": { desc: "中文翻译。" },
+        "jan-cavel": { desc: "罗马尼亚语翻译." },
         "kevin-murphy": {
           desc: '大量反馈。Issues：<a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/3">#3</a>、<a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/4">#4</a>、<a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/5">#5</a>、<a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/8">#8</a>、<a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/10">#10</a>、<a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/11">#11</a>、<a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/12">#12</a>、<a href="https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/13">#13</a>',
         },
