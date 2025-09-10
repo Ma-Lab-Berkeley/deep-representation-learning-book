@@ -83,6 +83,47 @@
       systemPrompt:
         "You are an AI assistant helping readers of the book Learning Deep Representations of Data Distributions. Answer clearly and concisely. If relevant, point to sections or headings from the current page.",
       askAITitle: "Ask AI about this page",
+      tooltips: {
+        feedback: "Provide Feedback",
+        clear: "Clear conversation",
+        save: "Save chat history",
+        close: "Close",
+      },
+      alerts: {
+        noChatHistory: "No chat history to save.",
+        saveFailed: "Failed to save chat history. Please try again.",
+      },
+      feedbackNotice: {
+        title: "Feedback Guidelines",
+        bodyMd: `
+We value your feedback on the BookQA AI assistants and would love to hear about your experience!
+
+### Disclaimer
+Your queries are anonymously logged on our local server for troubleshooting. In order to protect your privacy, please avoid sending sensitive information.
+
+### 🐛 Bug Reports
+If you encounter any issues with the AI helpers, please report them on our GitHub repository:
+
+- [Report a Bug](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/issues)
+- Include the question you asked and the AI's response
+- Describe the expected vs. actual behavior
+
+### 💡 Feature Requests
+Have ideas for improving the AI helpers? We'd love to hear them:
+
+- [Raise a new issue to discuss](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/issues)
+- Suggest new features or capabilities
+- Share use cases that aren't well supported
+
+### 📚 General Feedback
+For broader feedback about the book or this website:
+
+- [Contributing Guide](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book#making-a-contribution)
+- Email the authors (contact information in the book)
+
+**Thank you for helping us improve the BookQA AI assistants!**
+        `,
+      },
     },
 
     // Language options

@@ -900,6 +900,11 @@
           var feedbackText =
             (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.feedback) ||
             "Feedback";
+          var tooltips =
+            (window.BOOK_COMPONENTS &&
+              window.BOOK_COMPONENTS.chat &&
+              window.BOOK_COMPONENTS.chat.tooltips) ||
+            null;
           var saveText =
             (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat.save) ||
             "Save";
@@ -923,30 +928,48 @@
               h(
                 "div",
                 { className: "ai-chat-actions" },
-                h("button", {
-                  className: "ai-chat-feedback",
-                  type: "button",
-                  title: "Provide Feedback",
-                  text: feedbackText,
-                }),
-                h("button", {
-                  className: "ai-chat-clear",
-                  type: "button",
-                  title: "Clear conversation",
-                  text: clearText,
-                }),
-                h("button", {
-                  className: "ai-chat-save",
-                  type: "button",
-                  title: "Save chat history",
-                  text: saveText,
-                }),
-                h("button", {
-                  className: "ai-chat-close",
-                  type: "button",
-                  title: "Close",
-                  text: closeText,
-                })
+                h(
+                  "button",
+                  {
+                    className: "ai-chat-feedback",
+                    type: "button",
+                    title:
+                      (tooltips && tooltips.feedback) || "Provide Feedback",
+                  },
+                  h("span", { className: "btn-icon", html: "📝" }),
+                  h("span", { className: "btn-label", text: feedbackText })
+                ),
+                h(
+                  "button",
+                  {
+                    className: "ai-chat-clear",
+                    type: "button",
+                    title:
+                      (tooltips && tooltips.clear) || "Clear conversation",
+                  },
+                  h("span", { className: "btn-icon", html: "🧹" }),
+                  h("span", { className: "btn-label", text: clearText })
+                ),
+                h(
+                  "button",
+                  {
+                    className: "ai-chat-save",
+                    type: "button",
+                    title: (tooltips && tooltips.save) || "Save chat history",
+                  },
+                  h("span", { className: "btn-icon", html: "💾" }),
+                  h("span", { className: "btn-label", text: saveText })
+                ),
+                h(
+                  "button",
+                  {
+                    className: "ai-chat-close",
+                    type: "button",
+                    title: (tooltips && tooltips.close) || "Close",
+                  },
+                  h("span", { className: "btn-icon", html: "✕" }),
+                  h("span", { className: "btn-label", text: closeText })
+                )
               )
             ),
             h(
@@ -1751,9 +1774,12 @@
           try {
             // Get messages from chatState
             var messages = chatState.messages || [];
-            
+
+            var chatCfg = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat) || {};
+            var alerts = chatCfg.alerts || {};
+
             if (messages.length === 0) {
-              alert("No chat history to save.");
+              alert(alerts.noChatHistory || "No chat history to save.");
               return;
             }
             
@@ -1796,7 +1822,9 @@
             
           } catch (error) {
             console.error("Error saving chat history:", error);
-            alert("Failed to save chat history. Please try again.");
+            var chatCfg = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat) || {};
+            var alerts = chatCfg.alerts || {};
+            alert(alerts.saveFailed || "Failed to save chat history. Please try again.");
           }
         }
 
@@ -2403,87 +2431,73 @@
 
   // --- Begin feedback notice functionality ---
   window.showFeedbackNotice = function() {
-    // Helper function to create elements with properties
-    function createElement(tag, props) {
-      var el = document.createElement(tag);
-      if (props) {
-        if (props.id) el.id = props.id;
-        if (props.className) el.className = props.className;
-        if (props.text) el.textContent = props.text;
-        if (props.html) el.innerHTML = props.html;
-        if (props.title) el.title = props.title;
-        if (props.onclick) el.onclick = props.onclick;
-      }
-      return el;
-    }
-
-    // Remove existing feedback notice if any
     var existing = document.getElementById("feedback-notice");
-    if (existing) {
-      existing.remove();
+    if (existing) existing.remove();
+
+    var chatCfg = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat) || {};
+    var fn = (chatCfg && chatCfg.feedbackNotice) || {};
+    var tips = (chatCfg && chatCfg.tooltips) || {};
+
+    var titleText = fn.title || "Feedback Guidelines";
+    var md = fn.bodyMd || "Please visit our GitHub repository for feedback.";
+
+    function el(tag, props) {
+      var node = document.createElement(tag);
+      if (props) {
+        if (props.id) node.id = props.id;
+        if (props.className) node.className = props.className;
+        if (props.text != null) node.textContent = props.text;
+        if (props.html != null) node.innerHTML = props.html;
+        if (props.title) node.title = props.title;
+        if (props.onclick) node.onclick = props.onclick;
+        // set any data-* or arbitrary attributes
+        Object.keys(props).forEach(function(k){
+          if (k === "id" || k === "className" || k === "text" || k === "html" || k === "title" || k === "onclick") return;
+          try { node.setAttribute(k, props[k]); } catch (_) {}
+        });
+      }
+      for (var i = 2; i < arguments.length; i++) {
+        var c = arguments[i];
+        if (!c) continue;
+        if (Array.isArray(c)) {
+          for (var j = 0; j < c.length; j++) if (c[j]) node.appendChild(c[j]);
+        } else {
+          node.appendChild(c);
+        }
+      }
+      return node;
     }
 
-    // Load HTML content from disclaimer.html
-    fetch('disclaimer.html')
-      .then(function(response) {
-        if (!response.ok) {
-          throw new Error('Failed to load disclaimer content');
-        }
-        return response.text();
-      })
-      .then(function(htmlContent) {
-        // Create feedback notice
-        var notice = createElement("div", { id: "feedback-notice", className: "feedback-notice" });
-        var content = createElement("div", { className: "feedback-notice-content" });
-        var header = createElement("div", { className: "feedback-notice-header" });
-        var title = createElement("h2", { className: "feedback-notice-title", text: "Feedback Guidelines" });
-        var closeBtn = createElement("button", {
-          className: "feedback-notice-close",
-          title: "Close",
-          html: "&times;",
-          onclick: function() { notice.remove(); }
-        });
-        
-        header.appendChild(title);
-        header.appendChild(closeBtn);
-        
-        var body = createElement("div", { className: "feedback-notice-body" });
-        body.innerHTML = htmlContent;
-        
-        content.appendChild(header);
-        content.appendChild(body);
-        notice.appendChild(content);
-        
-        // Add to DOM
-        document.body.appendChild(notice);
-      })
-      .catch(function(error) {
-        console.error('Error loading disclaimer content:', error);
-        // Fallback to basic content
-        var notice = createElement("div", { id: "feedback-notice", className: "feedback-notice" });
-        var content = createElement("div", { className: "feedback-notice-content" });
-        var header = createElement("div", { className: "feedback-notice-header" });
-        var title = createElement("h2", { className: "feedback-notice-title", text: "Feedback Guidelines" });
-        var closeBtn = createElement("button", {
-          className: "feedback-notice-close",
-          title: "Close",
-          html: "&times;",
-          onclick: function() { notice.remove(); }
-        });
-        
-        header.appendChild(title);
-        header.appendChild(closeBtn);
-        
-        var body = createElement("div", { className: "feedback-notice-body" });
-        body.innerHTML = '<p>Error loading feedback guidelines. Please visit our GitHub repository for more information.</p>';
-        
-        content.appendChild(header);
-        content.appendChild(body);
-        notice.appendChild(content);
-        
-        // Add to DOM
-        document.body.appendChild(notice);
-      });
+    var mdWrapper = el("div", { className: "md-block-text", "data-md": md, "data-md-mode": "block" });
+
+    var notice = el(
+      "div",
+      { id: "feedback-notice", className: "feedback-notice" },
+      el(
+        "div",
+        { className: "feedback-notice-content" },
+        el(
+          "div",
+          { className: "feedback-notice-header" },
+          el("h2", { className: "feedback-notice-title", text: titleText }),
+          el("button", {
+            className: "feedback-notice-close",
+            title: tips.close || "Close",
+            html: "&times;",
+            onclick: function(){
+              var n = document.getElementById("feedback-notice");
+              if (n) n.remove();
+            }
+          })
+        ),
+        el("div", { className: "feedback-notice-body" }, mdWrapper)
+      )
+    );
+
+    document.body.appendChild(notice);
+    if (window.__reprocess_markdown_wrappers) {
+      try { window.__reprocess_markdown_wrappers(); } catch (_) {}
+    }
   };
   // --- End feedback notice functionality ---
 })();
