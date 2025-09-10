@@ -5,162 +5,6 @@
     return template.replace("{year}", year);
   }
 
-  // // Helper function to render text with links and formatting
-  // function renderTextWithLinks(text) {
-  //   // Replace BookQA Series with bold text
-  //   let parts = text.split("BookQA Series");
-  //   if (parts.length > 1) {
-  //     const elements = [];
-  //     for (let i = 0; i < parts.length; i++) {
-  //       if (i > 0) {
-  //         elements.push(
-  //           React.createElement(
-  //             "strong",
-  //             {
-  //               style: { fontWeight: "700" },
-  //             },
-  //             "BookQA Series"
-  //           )
-  //         );
-  //       }
-  //       if (parts[i]) {
-  //         elements.push(parts[i]);
-  //       }
-  //     }
-  //     text = elements;
-  //   }
-
-  //   // Replace EntiGraph with a link
-  //   if (Array.isArray(text)) {
-  //     // If text is already an array of elements, process each element
-  //     const processedElements = [];
-  //     for (let element of text) {
-  //       if (typeof element === "string") {
-  //         const entiParts = element.split("EntiGraph");
-  //         if (entiParts.length > 1) {
-  //           for (let j = 0; j < entiParts.length; j++) {
-  //             if (j > 0) {
-  //               processedElements.push(
-  //                 React.createElement(
-  //                   "a",
-  //                   {
-  //                     href: "https://arxiv.org/pdf/2409.07431",
-  //                     target: "_blank",
-  //                     rel: "noopener noreferrer",
-  //                     style: { color: "var(--accent)", textDecoration: "none" },
-  //                   },
-  //                   "EntiGraph"
-  //                 )
-  //               );
-  //             }
-  //             if (entiParts[j]) {
-  //               processedElements.push(entiParts[j]);
-  //             }
-  //           }
-  //         } else {
-  //           processedElements.push(element);
-  //         }
-  //       } else {
-  //         processedElements.push(element);
-  //       }
-  //     }
-  //     text = processedElements;
-  //   } else {
-  //     // If text is a string, process it directly
-  //     const entiParts = text.split("EntiGraph");
-  //     if (entiParts.length > 1) {
-  //       const elements = [];
-  //       for (let i = 0; i < entiParts.length; i++) {
-  //         if (i > 0) {
-  //           elements.push(
-  //             React.createElement(
-  //               "a",
-  //               {
-  //                 href: "https://arxiv.org/pdf/2409.07431",
-  //                 target: "_blank",
-  //                 rel: "noopener noreferrer",
-  //                 style: { color: "var(--accent)", textDecoration: "none" },
-  //               },
-  //               "EntiGraph"
-  //             )
-  //           );
-  //         }
-  //         if (entiParts[i]) {
-  //           elements.push(entiParts[i]);
-  //         }
-  //       }
-  //       text = elements;
-  //     }
-  //   }
-
-  //   // Replace Qwen2.5-7B/32B-Instruct with a link
-  //   if (Array.isArray(text)) {
-  //     // If text is already an array of elements, process each element
-  //     const processedElements = [];
-  //     for (let element of text) {
-  //       if (typeof element === "string") {
-  //         const qwenParts = element.split("Qwen2.5-7B/32B-Instruct");
-  //         if (qwenParts.length > 1) {
-  //           for (let j = 0; j < qwenParts.length; j++) {
-  //             if (j > 0) {
-  //               processedElements.push(
-  //                 React.createElement(
-  //                   "a",
-  //                   {
-  //                     href: "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct",
-  //                     target: "_blank",
-  //                     rel: "noopener noreferrer",
-  //                     style: { color: "var(--accent)", textDecoration: "none" },
-  //                   },
-  //                   "Qwen2.5-7B/32B-Instruct"
-  //                 )
-  //               );
-  //             }
-  //             if (qwenParts[j]) {
-  //               processedElements.push(qwenParts[j]);
-  //             }
-  //           }
-  //         } else {
-  //           processedElements.push(element);
-  //         }
-  //       } else {
-  //         processedElements.push(element);
-  //       }
-  //     }
-  //     return processedElements;
-  //   } else {
-  //     // If text is a string, process it directly
-  //     const qwenParts = text.split("Qwen2.5-7B/32B-Instruct");
-  //     if (qwenParts.length === 1) {
-  //       return text;
-  //     }
-
-  //     const elements = [];
-  //     for (let i = 0; i < qwenParts.length; i++) {
-  //       if (i > 0) {
-  //         elements.push(
-  //           React.createElement(
-  //             "a",
-  //             {
-  //               href: "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct",
-  //               target: "_blank",
-  //               rel: "noopener noreferrer",
-  //               style: { color: "var(--accent)", textDecoration: "none" },
-  //             },
-  //             "Qwen2.5-7B/32B-Instruct"
-  //           )
-  //         );
-  //       }
-  //       if (qwenParts[i]) {
-  //         elements.push(qwenParts[i]);
-  //       }
-  //     }
-  //     return elements;
-  //   }
-  // }
-
-  // (Badges removed)
-
   const AI_ASSISTANTS = [
     {
       name: "BookQA-7B-Instruct",
@@ -229,13 +73,13 @@
         var intro =
           (window.get_text && window.get_text("aiHelpers.intro")) || "";
         return (
-          (window.get_text_block &&
-            window.get_text_block(intro, "intro")) || null
+          (window.get_text_block && window.get_text_block(intro, "intro")) ||
+          null
         );
       })(),
-        React.createElement(
-          "section",
-          { "aria-label": "BookQA Series" },
+      React.createElement(
+        "section",
+        { "aria-label": "BookQA Series" },
         React.createElement(
           "h2",
           { style: { margin: "16px 0 8px", fontSize: "18px" } },
@@ -250,14 +94,10 @@
             React.createElement(Card, { key: p.name, ...p })
           )
         ),
-        ((window.get_text_block &&
+        (window.get_text_block &&
           window.get_text_block("aiHelpers.techDetails", "tech-details")) ||
-          null)
+          null
       ),
-      // React.createElement('section', { 'aria-label': 'AI Tools', className: 'ai-helpers-grid' },
-      //   React.createElement('h2', { style: { margin: '16px 0 8px', fontSize: '18px' } }, (window.get_text && window.get_text('aiHelpers.sections.aiTools')) || ''),
-      //   AI_TOOLS.map((p) => React.createElement(Card, { key: p.name, ...p }))
-      // ),
       React.createElement(
         "div",
         { className: "foot" },
@@ -280,6 +120,4 @@
   ReactDOM.createRoot(document.getElementById("root")).render(
     React.createElement(App)
   );
-  // if (window.insertTopBar) { try { window.insertTopBar(Object.assign({}, window.TOPBAR_OPTIONS || {}, { forceReplace: true })); } catch(e) {} }
-  // if (window.insertSidebar) { try { window.insertSidebar('.layout-with-sidebar', window.NAV_LINKS, window.TOC); } catch(e) {} }
 })();

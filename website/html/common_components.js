@@ -204,7 +204,9 @@ This book would have not been possible without the financial support for these r
           desc: "PRs: [#14](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/14)",
         },
         "kerui-min": { desc: "Chinese translation." },
-        "jan-cavel": { desc: "Romanian translation. PRs: [#16](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/16)" },
+        "jan-cavel": {
+          desc: "Romanian translation. PRs: [#16](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/16)",
+        },
         "kevin-murphy": {
           desc: "Extensive feedback. Issues: [#3](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/3), [#4](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/4), [#5](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/5), [#8](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/10), [#10](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/10), [#11](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/11), [#12](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/12), [#13](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/13)",
         },
@@ -241,8 +243,7 @@ The following are (unofficial) community translations of the book.
     aiHelpers: {
       title: "AI Helpers",
       intro: "We provide simple AI assistants tailored to this book.",
-      techDetails:
-        `
+      techDetails: `
 The BookQA series of models is designed to help readers understand the book's content. It can answer questions about the material and give clear explanations of the key concepts and theories. To build these models, we first use [EntiGraph](https://arxiv.org/pdf/2409.07431) to generate a rich set of book-related data by linking sampled entities from the text. We then continually pre-train [Qwen2.5-7B/32B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) on this data using auto-regressive training. We also incorporate instruction-following data during training such that the model can learn new knowledge from the book without forgetting basic chatting skills. The BookQA 7B model currently powers the "Ask AI" button in the top bar of this website.
       `,
       sections: {
@@ -326,5 +327,4 @@ The BookQA series of models is designed to help readers understand the book's co
 
   window.BOOK_COMPONENTS.coverImagePath = "assets/book-cover.png";
   window.BOOK_COMPONENTS.bookPdfPath = "assets/book-main.pdf";
-
 })();

@@ -179,12 +179,14 @@
         "peng-wang": { desc: "作者，中文翻译。" },
         "yi-ma": { desc: "资深作者。" },
         "stephen-butterfill": {
-          desc: 'PRs：[#14](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/14)',
+          desc: "PRs：[#14](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/14)",
         },
         "kerui-min": { desc: "中文翻译。" },
-        "jan-cavel": { desc: "罗马尼亚语翻译. PRs：[#16](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/16)" },
+        "jan-cavel": {
+          desc: "罗马尼亚语翻译. PRs：[#16](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/16)",
+        },
         "kevin-murphy": {
-          desc: '大量反馈。Issues：[#3](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/3)、[#4](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/4)、[#5](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/5)、[#8](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/8)、[#10](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/10)、[#11](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/11)、[#12](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/12)、[#13](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/13)',
+          desc: "大量反馈。Issues：[#3](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/3)、[#4](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/4)、[#5](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/5)、[#8](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/8)、[#10](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/10)、[#11](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/11)、[#12](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/12)、[#13](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/13)",
         },
         "yaodong-yu": { desc: "为第四章提供初始文本。" },
         "tianzhe-chu": { desc: "AI 工具。" },
@@ -303,5 +305,4 @@
 
   window.BOOK_COMPONENTS.coverImagePath = "../assets/book-cover.png";
   window.BOOK_COMPONENTS.bookPdfPath = "../assets/book-main_zh.pdf";
-
 })();

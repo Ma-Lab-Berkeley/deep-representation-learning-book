@@ -944,8 +944,7 @@
                   {
                     className: "ai-chat-clear",
                     type: "button",
-                    title:
-                      (tooltips && tooltips.clear) || "Clear conversation",
+                    title: (tooltips && tooltips.clear) || "Clear conversation",
                   },
                   h("span", { className: "btn-icon", html: "🧹" }),
                   h("span", { className: "btn-label", text: clearText })
@@ -1277,15 +1276,15 @@
           if (!panel) return;
           var list = panel.querySelector("#ai-chat-messages");
           if (!list) return;
-          
+
           // Store message in chatState for persistence
           chatState.messages = chatState.messages || [];
           chatState.messages.push({
             role: role,
             content: content,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           });
-          
+
           var item = document.createElement("div");
           item.className =
             "ai-chat-msg " + (role === "user" ? "from-user" : "from-assistant");
@@ -1775,14 +1774,15 @@
             // Get messages from chatState
             var messages = chatState.messages || [];
 
-            var chatCfg = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat) || {};
+            var chatCfg =
+              (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat) || {};
             var alerts = chatCfg.alerts || {};
 
             if (messages.length === 0) {
               alert(alerts.noChatHistory || "No chat history to save.");
               return;
             }
-            
+
             // Create the chat history object
             var chatHistory = {
               title: "AI Chat History",
@@ -1791,40 +1791,44 @@
               messages: messages,
               metadata: {
                 userAgent: navigator.userAgent,
-                totalMessages: messages.length
-              }
+                totalMessages: messages.length,
+              },
             };
-            
+
             // Convert to JSON
             var jsonData = JSON.stringify(chatHistory, null, 2);
-            
+
             // Create and trigger download
             var blob = new Blob([jsonData], { type: "application/json" });
             var url = URL.createObjectURL(blob);
             var link = document.createElement("a");
             link.href = url;
-            
+
             // Generate filename with timestamp
             var now = new Date();
-            var dateStr = now.getFullYear() + 
-              String(now.getMonth() + 1).padStart(2, '0') + 
-              String(now.getDate()).padStart(2, '0') + 
-              "_" + 
-              String(now.getHours()).padStart(2, '0') + 
-              String(now.getMinutes()).padStart(2, '0');
-            
+            var dateStr =
+              now.getFullYear() +
+              String(now.getMonth() + 1).padStart(2, "0") +
+              String(now.getDate()).padStart(2, "0") +
+              "_" +
+              String(now.getHours()).padStart(2, "0") +
+              String(now.getMinutes()).padStart(2, "0");
+
             link.download = "ai_chat_history_" + dateStr + ".json";
             link.style.display = "none";
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            
           } catch (error) {
             console.error("Error saving chat history:", error);
-            var chatCfg = (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat) || {};
+            var chatCfg =
+              (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.chat) || {};
             var alerts = chatCfg.alerts || {};
-            alert(alerts.saveFailed || "Failed to save chat history. Please try again.");
+            alert(
+              alerts.saveFailed ||
+                "Failed to save chat history. Please try again."
+            );
           }
         }
 
@@ -2268,7 +2272,13 @@
     function basicEscapeHtml(s) {
       try {
         return (s || "").replace(/[&<>"']/g, function (c) {
-          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+          return {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          }[c];
         });
       } catch (_) {
         return s || "";
@@ -2284,7 +2294,10 @@
         // Italic
         html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
         // Links
-        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1<\/a>');
+        html = html.replace(
+          /\[([^\]]+)\]\(([^)]+)\)/g,
+          '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+        );
         if (!inline) {
           // Preserve single newlines as <br> minimally; leave paragraphs to caller
           html = html.replace(/\n/g, "<br/>");
@@ -2298,8 +2311,10 @@
     function convertMarkdown(md, inline) {
       try {
         if (window.marked) {
-          if (inline && window.marked.parseInline) return window.marked.parseInline(md || "");
-          if (!inline && window.marked.parse) return window.marked.parse(md || "");
+          if (inline && window.marked.parseInline)
+            return window.marked.parseInline(md || "");
+          if (!inline && window.marked.parse)
+            return window.marked.parse(md || "");
         }
       } catch (_) {}
       // Fallback minimal converter until marked loads
@@ -2430,7 +2445,7 @@
   // --- End markdown helpers ---
 
   // --- Begin feedback notice functionality ---
-  window.showFeedbackNotice = function() {
+  window.showFeedbackNotice = function () {
     var existing = document.getElementById("feedback-notice");
     if (existing) existing.remove();
 
@@ -2451,9 +2466,19 @@
         if (props.title) node.title = props.title;
         if (props.onclick) node.onclick = props.onclick;
         // set any data-* or arbitrary attributes
-        Object.keys(props).forEach(function(k){
-          if (k === "id" || k === "className" || k === "text" || k === "html" || k === "title" || k === "onclick") return;
-          try { node.setAttribute(k, props[k]); } catch (_) {}
+        Object.keys(props).forEach(function (k) {
+          if (
+            k === "id" ||
+            k === "className" ||
+            k === "text" ||
+            k === "html" ||
+            k === "title" ||
+            k === "onclick"
+          )
+            return;
+          try {
+            node.setAttribute(k, props[k]);
+          } catch (_) {}
         });
       }
       for (var i = 2; i < arguments.length; i++) {
@@ -2468,7 +2493,11 @@
       return node;
     }
 
-    var mdWrapper = el("div", { className: "md-block-text", "data-md": md, "data-md-mode": "block" });
+    var mdWrapper = el("div", {
+      className: "md-block-text",
+      "data-md": md,
+      "data-md-mode": "block",
+    });
 
     var notice = el(
       "div",
@@ -2484,10 +2513,10 @@
             className: "feedback-notice-close",
             title: tips.close || "Close",
             html: "&times;",
-            onclick: function(){
+            onclick: function () {
               var n = document.getElementById("feedback-notice");
               if (n) n.remove();
-            }
+            },
           })
         ),
         el("div", { className: "feedback-notice-body" }, mdWrapper)
@@ -2496,7 +2525,9 @@
 
     document.body.appendChild(notice);
     if (window.__reprocess_markdown_wrappers) {
-      try { window.__reprocess_markdown_wrappers(); } catch (_) {}
+      try {
+        window.__reprocess_markdown_wrappers();
+      } catch (_) {}
     }
   };
   // --- End feedback notice functionality ---

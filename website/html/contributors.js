@@ -120,7 +120,7 @@
       description
         ? (window.get_text_block &&
             window.get_text_block(description, "desc")) ||
-          null
+            null
         : null
     );
   }
@@ -187,7 +187,9 @@
           "h2",
           { style: { margin: "16px 0 8px", fontSize: "18px" } },
           (window.get_text_inline &&
-            window.get_text_inline("contributors.sections.infraContributors")) ||
+            window.get_text_inline(
+              "contributors.sections.infraContributors"
+            )) ||
             ""
         ),
         INFRA_CONTRIBUTORS.map((p) =>

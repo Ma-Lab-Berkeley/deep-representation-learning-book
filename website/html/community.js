@@ -33,8 +33,8 @@
         var intro =
           (window.get_text && window.get_text("community.intro")) || "";
         return (
-          (window.get_text_block &&
-            window.get_text_block(intro, "intro")) || null
+          (window.get_text_block && window.get_text_block(intro, "intro")) ||
+          null
         );
       })(),
       React.createElement(Section, { idKey: "translations" }),
