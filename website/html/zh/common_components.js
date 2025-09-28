@@ -202,13 +202,25 @@
       sections: {
         tutorials: "教程",
         translations: "社区翻译",
+        courses: "课程",
       },
       content: {
+        courses: `
+以下是与本书相关或使用了本书材料的高校课程：
+
+ - 香港大学，DATA8014，2025年秋季
+   - 讲座幻灯片：[1](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec1.pdf)、[2](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec2.pdf)、[3](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec3.pdf)
+ - 澳门大学，CISC7402，2025年秋季
+
+如果您希望将您的课程列在此处，请到 GitHub 提交 issue，并附上课程名称、学校、学期、链接及简短描述。
+        `,
         tutorials: `
 下面是一些与本书内容高度相关的教程或长篇讲座：
 - [（即将推出）ICCV 2025 教程：从高维数据学习低维模型](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/)
-- [（即将推出）IAISS 2025 教程：从高维数据学习低维模型](https://2025.iaiss.cc/)
+- [IAISS 2025 教程：从高维数据学习低维模型](https://2025.iaiss.cc/)
+  - 讲座幻灯片：[1](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec1.pdf)、[2](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec2.pdf)、[3](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec3.pdf)、[4](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec4.pdf)、[5](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec5.pdf)、[6](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec6.pdf)、[7](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec7.pdf)、[8](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec8.pdf)、[9](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec9.pdf)
 - [CVPR 2024 教程：从高维数据学习低维模型](https://low-dim-models-tutorials.github.io/cvpr2024-tutorial/)
+  - 讲座幻灯片：[Dropbox](https://www.dropbox.com/scl/fo/7m57krmeordlohel4qxye/AKho1GYbOe0AbBlKNzm28Vk?rlkey=le2yuel4ipq50xhzxmyxxczxi&e=4&st=s8ndn2ix&dl=0)
         `,
         translations: `
 以下是（非官方）社区翻译版本：
