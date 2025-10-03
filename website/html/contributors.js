@@ -76,16 +76,16 @@
       affil: "Google DeepMind",
     },
     {
-      id: "yaodong-yu",
-      name: "Yaodong Yu",
-      url: "https://yaodongyu.github.io/",
-      affil: "University of Maryland, College Park",
-    },
-    {
       id: "jeroen-van-goey",
       name: "Jeroen Van Goey",
       url: "https://www.linkedin.com/in/jeroenvangoey/",
       affil: "InstaDeep",
+    },
+    {
+      id: "yaodong-yu",
+      name: "Yaodong Yu",
+      url: "https://yaodongyu.github.io/",
+      affil: "University of Maryland, College Park",
     },
   ];
 
