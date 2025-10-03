@@ -125,7 +125,7 @@ def strip_whitespace(text: str) -> str:
 
 
 def check_latexml_available() -> bool:
-    """Quickly check whether `latexmlc` is invokable on the system."""
+    """Quickly check whether `latexmlc` is invocable on the system."""
     try:
         # Keep noisy output off the console; we only care if it runs
         subprocess.run(["latexmlc", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
