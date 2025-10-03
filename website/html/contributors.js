@@ -81,6 +81,12 @@
       url: "https://yaodongyu.github.io/",
       affil: "University of Maryland, College Park",
     },
+    {
+      id: "jeroen-van-goey",
+      name: "Jeroen Van Goey",
+      url: "https://www.linkedin.com/in/jeroenvangoey/",
+      affil: "InstaDeep",
+    },
   ];
 
   const INFRA_CONTRIBUTORS = [

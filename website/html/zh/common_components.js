@@ -191,6 +191,7 @@
         "yaodong-yu": { desc: "为第四章提供初始文本。" },
         "tianzhe-chu": { desc: "AI 工具。" },
         "ziyang-wu": { desc: "网站开发。" },
+        "jeroen-van-goey": { desc: "PRs：[#29](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/29)"},
       },
     },
 

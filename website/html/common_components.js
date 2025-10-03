@@ -213,6 +213,7 @@ This book would have not been possible without the financial support for these r
         "yaodong-yu": { desc: "Provided initial text for Chapter 4." },
         "tianzhe-chu": { desc: "AI tooling." },
         "ziyang-wu": { desc: "Website development." },
+        "jeroen-van-goey": { desc: "PRs: [#29](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/29)"},
       },
     },
 
