@@ -213,6 +213,7 @@ This book would have not been possible without the financial support for these r
         "yaodong-yu": { desc: "Provided initial text for Chapter 4." },
         "tianzhe-chu": { desc: "AI tooling." },
         "ziyang-wu": { desc: "Website development." },
+        "jeroen-van-goey": { desc: "PRs: [#29](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/29)"},
       },
     },
 
@@ -224,13 +225,24 @@ This book would have not been possible without the financial support for these r
       sections: {
         tutorials: "Tutorials",
         translations: "Community Translations",
+        courses: "Courses",
       },
       content: {
+        courses: `
+The following are university courses related to or using material from the book.
+
+- The University of Hong Kong, DATA8014, Fall 2025
+  - Lecture slides: [1](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec01.pdf), [2](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec02.pdf), [3](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec03.pdf), [4](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec04.pdf), [5](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec05.pdf)
+- University of Macau, CISC7402, Fall 2025
+        `,
         tutorials: `
 The following are some tutorials, or long-form lectures, about content which is highly relevant to the book.
 - [(Forthcoming) ICCV 2025 Tutorial on Learning Low-Dimensional Models from High-Dimensional Data](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/)
-- [(Forthcoming) IAISS 2025 Tutorial on Learning Low-Dimensional Models from High-Dimensional Data](https://2025.iaiss.cc/)
+- [IAISS 2025 Tutorial on Learning Low-Dimensional Models from High-Dimensional Data](https://2025.iaiss.cc/)
+  - Lecture slides: [1](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec01.pdf), [2](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec02.pdf), [3](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec03.pdf), [4](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec04.pdf), [5](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec05.pdf), [6](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec06.pdf), [7](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec07.pdf), [8](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec08.pdf), [9](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec09.pdf), [10](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec10.pdf), [11](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec11.pdf), [12](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec12.pdf)
 - [CVPR 2024 Tutorial on Learning Low-Dimensional Models from High-Dimensional Data](https://low-dim-models-tutorials.github.io/cvpr2024-tutorial/)
+  - Lecture slides: [Dropbox](https://www.dropbox.com/scl/fo/7m57krmeordlohel4qxye/AKho1GYbOe0AbBlKNzm28Vk?rlkey=le2yuel4ipq50xhzxmyxxczxi&e=4&st=s8ndn2ix&dl=0)
+
         `,
         translations: `
 The following are (unofficial) community translations of the book.

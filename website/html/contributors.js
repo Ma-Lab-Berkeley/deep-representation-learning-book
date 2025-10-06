@@ -76,6 +76,12 @@
       affil: "Google DeepMind",
     },
     {
+      id: "jeroen-van-goey",
+      name: "Jeroen Van Goey",
+      url: "https://www.linkedin.com/in/jeroenvangoey/",
+      affil: "InstaDeep",
+    },
+    {
       id: "yaodong-yu",
       name: "Yaodong Yu",
       url: "https://yaodongyu.github.io/",
