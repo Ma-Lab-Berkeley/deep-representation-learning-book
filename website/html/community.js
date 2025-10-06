@@ -38,6 +38,7 @@
         );
       })(),
       React.createElement(Section, { idKey: "translations" }),
+      React.createElement(Section, { idKey: "courses" }),
       React.createElement(Section, { idKey: "tutorials" }),
       React.createElement(
         "div",
