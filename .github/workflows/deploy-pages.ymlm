@@ -1,0 +1,179 @@
+name: Build and deploy book site to GitHub Pages
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    env:
+      TEXLIVE_APT_VERSION: "2023.20240207-1"
+      LATEXMK_APT_VERSION: "1:4.83-1"
+      BIBER_APT_VERSION: "2.19-2"
+      IMAGEMAGICK_APT_VERSION: "8:6.9.12.98+dfsg1-5.2build2"
+      LATEXML_APT_VERSION: "0.8.8-1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv (Python)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          cache-dependency-glob: "pyproject.toml,uv.lock"
+
+      - name: Restore APT cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-cache/archives
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/deploy-pages.yml') }}
+          restore-keys: |
+            apt-${{ runner.os }}-
+
+      - name: Install TeX Live 2023, latexmk, biber, ImageMagick, LaTeXML (apt, cached)
+        run: |
+          mkdir -p "${RUNNER_TEMP}/apt-cache/archives/partial"
+          sudo apt-get update -o dir::cache::archives="${RUNNER_TEMP}/apt-cache/archives"
+          sudo apt-get install -y -o dir::cache::archives="${RUNNER_TEMP}/apt-cache/archives" \
+                       texlive-full=${{ env.TEXLIVE_APT_VERSION }} \
+                       latexmk=${{ env.LATEXMK_APT_VERSION }} \
+                       biber=${{ env.BIBER_APT_VERSION }} \
+                       imagemagick=${{ env.IMAGEMAGICK_APT_VERSION }} \
+                       latexml=${{ env.LATEXML_APT_VERSION }}
+
+      - name: Build PDFs and HTML in parallel
+        run: |
+          # Disable exit-on-error; we handle errors manually below
+          set +e
+          # Define functions for English and Chinese build sequences
+          build_english() {
+            echo "Starting English PDF build..."
+            latexmk -pdf -interaction=nonstopmode -shell-escape -f book-main.tex || true
+            if [ -f book-main.pdf ]; then
+              EN_PDF_EXIT=0
+            else
+              EN_PDF_EXIT=1
+            fi
+            
+            if [ $EN_PDF_EXIT -eq 0 ]; then
+              echo "English PDF build successful, starting HTML conversion..."
+              (cd website/latex_to_html && uv run --no-project --with beautifulsoup4 latex_to_html_converter.py ../../book-main.tex ../html)
+              EN_HTML_EXIT=$?
+
+              echo "English HTML conversion successful, moving PDF to assets..."
+              mv book-main.pdf website/html/assets/book-main.pdf
+            else
+              echo "English PDF build failed, skipping HTML conversion"
+              EN_HTML_EXIT=1
+            fi
+            
+            echo "English build complete: PDF=$EN_PDF_EXIT, HTML=$EN_HTML_EXIT"
+            return $((EN_PDF_EXIT + EN_HTML_EXIT))
+          }
+          
+          build_chinese() {
+            echo "Starting Chinese PDF build..."
+            latexmk -pdf -interaction=nonstopmode -shell-escape -f book-main_zh.tex || true
+            if [ -f book-main_zh.pdf ]; then
+              ZH_PDF_EXIT=0
+            else
+              ZH_PDF_EXIT=1
+            fi
+            
+            if [ $ZH_PDF_EXIT -eq 0 ]; then
+              echo "Chinese PDF build successful, starting HTML conversion..."
+              (cd website/latex_to_html && uv run --no-project --with beautifulsoup4 latex_to_html_converter.py ../../book-main_zh.tex ../html/zh)
+              ZH_HTML_EXIT=$?
+
+              echo "Chinese HTML conversion successful, moving PDF to assets..."
+              mv book-main_zh.pdf website/html/assets/book-main_zh.pdf
+            else
+              echo "Chinese PDF build failed, skipping HTML conversion"
+              ZH_HTML_EXIT=1
+            fi
+            
+            echo "Chinese build complete: PDF=$ZH_PDF_EXIT, HTML=$ZH_HTML_EXIT"
+            return $((ZH_PDF_EXIT + ZH_HTML_EXIT))
+          }
+
+          build_romanian() {
+            echo "Starting Romanian PDF build..."
+            latexmk -lualatex -pdf -interaction=nonstopmode -shell-escape -f book-main_ro.tex || true
+            if [ -f book-main_ro.pdf ]; then
+              RO_PDF_EXIT=0
+            else
+              RO_PDF_EXIT=1
+            fi
+          
+            if [ $RO_PDF_EXIT -eq 0 ]; then
+              echo "Romanian PDF build successful, moving PDF to assets..."
+              mv book-main_ro.pdf website/html/assets/book-main_ro.pdf
+            else
+              echo "Romanian PDF build failed"
+            fi
+            
+            echo "Romanian build complete: PDF=$RO_PDF_EXIT"
+            return $((RO_PDF_EXIT))
+          }
+            
+          
+          # Start build sequences in parallel
+          build_english &
+          EN_PID=$!
+          
+          build_chinese &
+          ZH_PID=$!
+
+          build_romanian &
+          RO_PID=$!
+          
+          # Wait for English build
+          echo "Waiting for English build sequence..."
+          wait $EN_PID
+          EN_TOTAL_EXIT=$?
+          
+          # Wait for Chinese build
+          echo "Waiting for Chinese build sequence..."
+          wait $ZH_PID
+          ZH_TOTAL_EXIT=$?
+
+          # Wait for Romanian build
+          echo "Waiting for Romanian build sequence..."
+          wait $RO_PID
+          RO_TOTAL_EXIT=$?
+          
+          echo "Final build results:"
+          echo "  English: $([ $EN_TOTAL_EXIT -eq 0 ] && echo 'SUCCESS' || echo 'FAILED')"
+          echo "  Chinese: $([ $ZH_TOTAL_EXIT -eq 0 ] && echo 'SUCCESS' || echo 'FAILED')"
+          echo "  Romanian: $([ $RO_TOTAL_EXIT -eq 0 ] && echo 'SUCCESS' || echo 'FAILED')"
+              
+          # Fail the step if any build failed
+          if [ $EN_TOTAL_EXIT -ne 0 ] || [ $ZH_TOTAL_EXIT -ne 0 ] || [ $RO_TOTAL_EXIT -ne 0 ]; then
+            echo "One or more builds failed"
+            exit 1
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/html
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
