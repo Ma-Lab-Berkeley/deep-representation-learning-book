@@ -1018,6 +1018,16 @@
               h(
                 "div",
                 { className: "ai-chat-sendrow" },
+                h(
+                  "button",
+                  {
+                    className: "ai-chat-model-selector",
+                    type: "button",
+                    title: "Select AI Model",
+                  },
+                  h("span", { className: "btn-icon", html: "🤖" }),
+                  h("span", { className: "btn-label", text: "Model" })
+                ),
                 h("button", {
                   className: "ai-chat-send",
                   id: "ai-chat-send",
@@ -1031,6 +1041,31 @@
             )
           );
           document.body.appendChild(panel);
+
+          // Add model selector dropdown
+          var modelDropdown = h(
+            "div",
+            {
+              id: "ai-model-dropdown",
+              className: "ai-model-dropdown",
+              style: "display: none;",
+            },
+            h(
+              "div",
+              { className: "ai-model-option", "data-model": "original" },
+              h("span", { className: "model-icon", html: "" }),
+              h("span", { className: "model-name", text: "BookQA-7B" }),
+              h("span", { className: "model-desc", text: "" })
+            ),
+            h(
+              "div",
+              { className: "ai-model-option", "data-model": "proxy" },
+              h("span", { className: "model-icon", html: "" }),
+              h("span", { className: "model-name", text: "BookQA-7B + RAG" }),
+              h("span", { className: "model-desc", text: "" })
+            )
+          );
+          document.body.appendChild(modelDropdown);
 
           // Behavior
           var closeBtn = panel.querySelector(".ai-chat-close");
@@ -1073,9 +1108,124 @@
                   form.dispatchEvent(new Event("submit", { cancelable: true }));
               }
             });
+
+          // Model selector behavior
+          var modelBtn = panel.querySelector(".ai-chat-model-selector");
+          var modelDropdown = document.getElementById("ai-model-dropdown");
+          if (modelBtn && modelDropdown) {
+            // Initialize current model state
+            chatState.currentModel = getCurrentModel();
+            updateModelSelectorUI();
+
+            modelBtn.addEventListener("click", function (e) {
+              e.preventDefault();
+              e.stopPropagation();
+              var isOpen = modelDropdown.style.display !== "none";
+              if (isOpen) {
+                modelDropdown.style.display = "none";
+              } else {
+                positionModelDropdown();
+                modelDropdown.style.display = "block";
+              }
+            });
+
+            // Handle model selection
+            var modelOptions = modelDropdown.querySelectorAll(".ai-model-option");
+            for (var i = 0; i < modelOptions.length; i++) {
+              (function (option) {
+                option.addEventListener("click", function () {
+                  var model = option.getAttribute("data-model");
+                  if (model) {
+                    setCurrentModel(model);
+                    updateModelSelectorUI();
+                    modelDropdown.style.display = "none";
+                  }
+                });
+              })(modelOptions[i]);
+            }
+
+            // Close dropdown when clicking outside
+            document.addEventListener("click", function (e) {
+              if (!modelBtn.contains(e.target) && !modelDropdown.contains(e.target)) {
+                modelDropdown.style.display = "none";
+              }
+            });
+          }
         }
 
-        var chatState = { messages: [], currentSelection: "", sending: false };
+        var chatState = { messages: [], currentSelection: "", sending: false, currentModel: null };
+
+        // Model management functions
+        function getCurrentModel() {
+          try {
+            // Check localStorage first
+            var stored = localStorage.getItem("ai-chat-model");
+            if (stored === "original" || stored === "proxy") {
+              return stored;
+            }
+          } catch (_) {}
+          
+          // Fallback to configuration-based detection
+          return shouldUseProxy() ? "proxy" : "original";
+        }
+
+        function setCurrentModel(model) {
+          try {
+            chatState.currentModel = model;
+            localStorage.setItem("ai-chat-model", model);
+          } catch (_) {
+            chatState.currentModel = model;
+          }
+        }
+
+        function positionModelDropdown() {
+          try {
+            var modelBtn = document.querySelector(".ai-chat-model-selector");
+            var dropdown = document.getElementById("ai-model-dropdown");
+            if (!modelBtn || !dropdown) return;
+
+            var rect = modelBtn.getBoundingClientRect();
+            dropdown.style.position = "fixed";
+            dropdown.style.bottom = (window.innerHeight - rect.top + 4) + "px";
+            dropdown.style.left = rect.left + "px";
+            dropdown.style.zIndex = "1300";
+          } catch (_) {}
+        }
+
+        function updateModelSelectorUI() {
+          try {
+            var modelBtn = document.querySelector(".ai-chat-model-selector");
+            var dropdown = document.getElementById("ai-model-dropdown");
+            if (!modelBtn || !dropdown) return;
+
+            var currentModel = chatState.currentModel || getCurrentModel();
+            
+            // Update button appearance
+            var btnLabel = modelBtn.querySelector(".btn-label");
+            var btnIcon = modelBtn.querySelector(".btn-icon");
+            if (currentModel === "proxy") {
+              if (btnLabel) btnLabel.textContent = "BookQA-7B+RAG";
+              if (btnIcon) btnIcon.innerHTML = "";
+              modelBtn.title = "";
+            } else {
+              if (btnLabel) btnLabel.textContent = "BookQA-7B";
+              if (btnIcon) btnIcon.innerHTML = "";
+              modelBtn.title = "";
+            }
+
+            // Update dropdown selection
+            var options = dropdown.querySelectorAll(".ai-model-option");
+            for (var i = 0; i < options.length; i++) {
+              var option = options[i];
+              var model = option.getAttribute("data-model");
+              if (model === currentModel) {
+                option.classList.add("selected");
+              } else {
+                option.classList.remove("selected");
+              }
+            }
+          } catch (_) {}
+        }
 
         // Open/close panel when chat button is clicked
         try {
@@ -1345,23 +1495,58 @@
           if (cfg && cfg.endpoint) return cfg;
           return null;
         }
+
+        function shouldUseProxy() {
+          // Check if user has manually selected a model
+          if (chatState && chatState.currentModel) {
+            return chatState.currentModel === "proxy";
+          }
+          
+          // Check localStorage for user preference
+          try {
+            var stored = localStorage.getItem("ai-chat-model");
+            if (stored === "proxy") return true;
+            if (stored === "original") return false;
+          } catch (_) {}
+          
+          // Use proxy if CHAT_API_PROXY is explicitly configured
+          if (window.CHAT_API_PROXY) return true;
+          
+          // Use proxy if USE_PROXY_ASSISTANT is set to true
+          if (window.USE_PROXY_ASSISTANT === true) return true;
+          
+          // Use proxy if no regular CHAT_API is configured (fallback to proxy)
+          var cfg = getApiConfig();
+          return !cfg;
+        }
         function requestAssistant(messages) {
           var cfg = getApiConfig();
           if (!cfg) {
             return Promise.resolve({
               content:
-                "Mock response: AI chat is not configured. Set window.CHAT_API = { endpoint, apiKey, model } to connect to your backend (OpenAI-style).",
+                "Mock response: AI chat is not configured. Set window.CHAT_API = { endpoint } to connect to your backend.",
             });
           }
+          
+          // Convert messages to a single query string for the proxy API
+          var query = "";
+          for (var i = 0; i < messages.length; i++) {
+            var msg = messages[i];
+            if (msg.role === "user") {
+              query += (query ? "\n\n" : "") + msg.content;
+            } else if (msg.role === "system") {
+              // Include system messages as context
+              query = msg.content + "\n\n" + query;
+            }
+          }
+          
           var endpoint = cfg.endpoint;
           var body = {
-            model: cfg.model || "bookqa-7b",
-            messages: messages,
-            temperature: 0.2,
-            stream: false,
+            query: query,
+            mode: cfg.mode || "hybrid"
           };
           var headers = { "Content-Type": "application/json" };
-          if (cfg.apiKey) headers["Authorization"] = "Bearer " + cfg.apiKey;
+          
           return fetch(endpoint, {
             method: "POST",
             headers: headers,
@@ -1371,20 +1556,99 @@
               return r.json();
             })
             .then(function (j) {
-              var txt =
-                (j &&
-                  j.choices &&
-                  j.choices[0] &&
-                  j.choices[0].message &&
-                  j.choices[0].message.content) ||
-                (j && j.message && j.message.content) ||
-                (typeof j === "string" ? j : JSON.stringify(j));
+              // Handle the proxy response format
+              var txt = "";
+              if (typeof j === "string") {
+                txt = j;
+              } else if (j && j.response) {
+                txt = j.response;
+              } else if (j && j.answer) {
+                txt = j.answer;
+              } else if (j && j.result) {
+                txt = j.result;
+              } else {
+                txt = JSON.stringify(j);
+              }
               return { content: txt || "No content in response." };
             })
             .catch(function (e) {
               return {
                 content:
                   "Error contacting chat API: " +
+                  (e && e.message ? e.message : String(e)),
+              };
+            });
+        }
+
+        // New proxy-compatible request assistant function
+        // This function works with the Cloudflare Worker proxy at:
+        // https://deep-representation-learning-book-proxy.tianzhechu2.workers.dev
+        // 
+        // Usage:
+        // 1. Set window.USE_PROXY_ASSISTANT = true; to use proxy by default
+        // 2. Or configure window.CHAT_API_PROXY = { endpoint: "custom-url", mode: "hybrid" };
+        // 3. Or leave both unset to auto-fallback to proxy when no CHAT_API is configured
+        function requestAssistantProxy(messages) {
+          // Default configuration for the proxy service
+          var proxyEndpoint = "https://deep-representation-learning-book-proxy.tianzhechu2.workers.dev/query";
+          
+          // Check if custom proxy config is provided
+          var cfg = window.CHAT_API_PROXY;
+          if (cfg && cfg.endpoint) {
+            proxyEndpoint = cfg.endpoint;
+          }
+          
+          // Convert messages to a single query string for the proxy API
+          var query = "";
+          for (var i = 0; i < messages.length; i++) {
+            var msg = messages[i];
+            if (msg.role === "user") {
+              query += (query ? "\n\n" : "") + msg.content;
+            } else if (msg.role === "system") {
+              // Include system messages as context
+              query = msg.content + "\n\n" + query;
+            }
+          }
+          
+          var body = {
+            query: query,
+            mode: (cfg && cfg.mode) || "hybrid"
+          };
+          var headers = { "Content-Type": "application/json" };
+          
+          return fetch(proxyEndpoint, {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(body),
+          })
+            .then(function (r) {
+              if (!r.ok) {
+                throw new Error("HTTP " + r.status + ": " + r.statusText);
+              }
+              return r.json();
+            })
+            .then(function (j) {
+              // Handle the proxy response format
+              var txt = "";
+              if (typeof j === "string") {
+                txt = j;
+              } else if (j && j.response) {
+                txt = j.response;
+              } else if (j && j.answer) {
+                txt = j.answer;
+              } else if (j && j.result) {
+                txt = j.result;
+              } else if (j && j.content) {
+                txt = j.content;
+              } else {
+                txt = JSON.stringify(j);
+              }
+              return { content: txt || "No content in response." };
+            })
+            .catch(function (e) {
+              return {
+                content:
+                  "Error contacting proxy API: " +
                   (e && e.message ? e.message : String(e)),
               };
             });
@@ -1756,7 +2020,13 @@
           var typingEl = appendTypingIndicator();
           buildPayloadAsync(text)
             .then(function (payload) {
-              return requestAssistant(payload);
+              // Choose which assistant function to use based on user selection
+              var currentModel = chatState.currentModel || getCurrentModel();
+              if (currentModel === "proxy") {
+                return requestAssistantProxy(payload);
+              } else {
+                return requestAssistant(payload);
+              }
             })
             .then(function (res) {
               removeTypingIndicator(typingEl);
