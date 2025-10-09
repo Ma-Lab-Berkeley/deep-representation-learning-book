@@ -1815,12 +1815,12 @@
           if (!btn) return;
           
           if (chatState.useRAG) {
-            btn.innerHTML = "🧠"; // Brain emoji for RAG
+            btn.innerHTML = "🧠 BookQA-7B+RAG"; // Brain emoji for RAG
             btn.title = "Using RAG model - Click to switch to Original model";
             btn.style.backgroundColor = "#4CAF50"; // Green background
             btn.style.color = "white";
           } else {
-            btn.innerHTML = "🤖"; // Robot emoji for Original
+            btn.innerHTML = "🤖 BookQA-7B"; // Robot emoji for Original
             btn.title = "Using Original model - Click to switch to RAG model";
             btn.style.backgroundColor = "#2196F3"; // Blue background
             btn.style.color = "white";
