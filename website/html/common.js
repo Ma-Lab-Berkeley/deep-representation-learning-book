@@ -1022,8 +1022,8 @@
                     className: "ai-chat-model-switch",
                     id: "ai-chat-model-switch",
                     type: "button",
-                    title: "Switch between Original and RAG models",
-                    html: "🔄",
+                    title: BOOK_COMPONENTS.chat.modelSwitch.initialTitle,
+                    html: BOOK_COMPONENTS.chat.modelSwitch.initialIcon,
                   }),
                   h("button", {
                     className: "ai-chat-send",
@@ -1814,17 +1814,14 @@
           var btn = document.getElementById("ai-chat-model-switch");
           if (!btn) return;
           
-          if (chatState.useRAG) {
-            btn.innerHTML = "🧠 BookQA-7B+RAG"; // Brain emoji for RAG
-            btn.title = "Using RAG model - Click to switch to Original model";
-            btn.style.backgroundColor = "#4CAF50"; // Green background
-            btn.style.color = "white";
-          } else {
-            btn.innerHTML = "🤖 BookQA-7B"; // Robot emoji for Original
-            btn.title = "Using Original model - Click to switch to RAG model";
-            btn.style.backgroundColor = "#2196F3"; // Blue background
-            btn.style.color = "white";
-          }
+          var config = chatState.useRAG 
+            ? BOOK_COMPONENTS.chat.modelSwitch.rag 
+            : BOOK_COMPONENTS.chat.modelSwitch.original;
+          
+          btn.innerHTML = config.text;
+          btn.title = config.title;
+          btn.style.backgroundColor = config.backgroundColor;
+          btn.style.color = config.color;
         }
 
         function sendChatMessage() {

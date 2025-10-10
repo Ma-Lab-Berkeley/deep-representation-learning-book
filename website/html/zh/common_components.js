@@ -67,6 +67,22 @@
       systemPrompt:
         "您是帮助《学习数据分布的深度表示》一书读者的AI助手。请清晰简洁地回答。如果相关，请指向当前页面的章节或标题。",
       askAITitle: "询问AI关于此页面",
+      modelSwitch: {
+        initialTitle: "在原始模型和RAG模型之间切换",
+        initialIcon: "🔄",
+        rag: {
+          text: "🧠 BookQA-7B+RAG",
+          title: "正在使用RAG模型 - 点击切换到原始模型",
+          backgroundColor: "#4CAF50",
+          color: "white"
+        },
+        original: {
+          text: "🤖 BookQA-7B",
+          title: "正在使用原始模型 - 点击切换到RAG模型",
+          backgroundColor: "#2196F3",
+          color: "white"
+        }
+      },
       tooltips: {
         feedback: "提供反馈",
         clear: "清除会话",

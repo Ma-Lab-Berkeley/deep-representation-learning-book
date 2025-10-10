@@ -83,6 +83,22 @@
       systemPrompt:
         "You are an AI assistant helping readers of the book Learning Deep Representations of Data Distributions. Answer clearly and concisely. If relevant, point to sections or headings from the current page.",
       askAITitle: "Ask AI about this page",
+      modelSwitch: {
+        initialTitle: "Switch between Original and RAG models",
+        initialIcon: "🔄",
+        rag: {
+          text: "🧠 BookQA-7B+RAG",
+          title: "Using RAG model - Click to switch to Original model",
+          backgroundColor: "#4CAF50",
+          color: "white"
+        },
+        original: {
+          text: "🤖 BookQA-7B",
+          title: "Using Original model - Click to switch to RAG model",
+          backgroundColor: "#2196F3",
+          color: "white"
+        }
+      },
       tooltips: {
         feedback: "Provide Feedback",
         clear: "Clear conversation",
