@@ -1018,13 +1018,17 @@
                 h(
                   "div",
                   { className: "ai-chat-sendrow" },
-                  h("button", {
-                    className: "ai-chat-model-switch",
-                    id: "ai-chat-model-switch",
-                    type: "button",
-                    title: BOOK_COMPONENTS.chat.modelSwitch.initialTitle,
-                    html: BOOK_COMPONENTS.chat.modelSwitch.initialIcon,
-                  }),
+                  h("select", {
+                    className: "ai-chat-model-select",
+                    id: "ai-chat-model-select",
+                    title: BOOK_COMPONENTS.chat.modelPicker.title
+                  }, BOOK_COMPONENTS.chat.modelPicker.options.map(function(option) {
+                    return h("option", {
+                      value: option.id,
+                      text: option.text,
+                      selected: (option.id === "original" && !chatState.useRAG) || (option.id === "rag" && chatState.useRAG)
+                    });
+                  })),
                   h("button", {
                     className: "ai-chat-send",
                     id: "ai-chat-send",
@@ -1065,11 +1069,11 @@
             saveBtn.addEventListener("click", function () {
               saveChatHistory();
             });
-          var modelSwitchBtn = panel.querySelector(".ai-chat-model-switch");
-          if (modelSwitchBtn)
-            modelSwitchBtn.addEventListener("click", function () {
-              chatState.useRAG = !chatState.useRAG;
-              updateModelSwitchButton();
+          var modelSelect = panel.querySelector(".ai-chat-model-select");
+          if (modelSelect)
+            modelSelect.addEventListener("change", function () {
+              chatState.useRAG = this.value === "rag";
+              updateModelPicker();
             });
           var form = panel.querySelector("#ai-chat-form");
           if (form)
@@ -1111,8 +1115,8 @@
                   if (ta) ta.focus();
                 } catch (_) {}
                 setTimeout(checkChatOverflow, 80);
-                // Initialize model switch button state
-                setTimeout(updateModelSwitchButton, 100);
+                // Initialize model picker state
+                setTimeout(updateModelPicker, 100);
               }
             });
           }
@@ -1343,10 +1347,10 @@
         function setSending(isSending) {
           var btn = document.getElementById("ai-chat-send");
           var input = document.getElementById("ai-chat-input");
-          var modelSwitchBtn = document.getElementById("ai-chat-model-switch");
+          var modelSelect = document.getElementById("ai-chat-model-select");
           if (btn) btn.disabled = !!isSending;
           if (input) input.disabled = !!isSending;
-          if (modelSwitchBtn) modelSwitchBtn.disabled = !!isSending;
+          if (modelSelect) modelSelect.disabled = !!isSending;
           setTimeout(checkChatOverflow, 60);
         }
 
@@ -1810,18 +1814,12 @@
             }
           });
         }
-        function updateModelSwitchButton() {
-          var btn = document.getElementById("ai-chat-model-switch");
-          if (!btn) return;
+        function updateModelPicker() {
+          var select = document.getElementById("ai-chat-model-select");
+          if (!select) return;
           
-          var config = chatState.useRAG 
-            ? BOOK_COMPONENTS.chat.modelSwitch.rag 
-            : BOOK_COMPONENTS.chat.modelSwitch.original;
-          
-          btn.innerHTML = config.text;
-          btn.title = config.title;
-          btn.style.backgroundColor = config.backgroundColor;
-          btn.style.color = config.color;
+          var selectedValue = chatState.useRAG ? "rag" : "original";
+          select.value = selectedValue;
         }
 
         function sendChatMessage() {
