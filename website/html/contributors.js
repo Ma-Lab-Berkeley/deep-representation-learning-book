@@ -20,7 +20,7 @@
       id: "sam-buchanan",
       name: "Sam Buchanan",
       url: "https://sdbuchanan.com/",
-      affil: "Toyota Technological Institute at Chicago",
+      affil: "University of California, Berkeley",
     },
     {
       id: "druv-pai",
