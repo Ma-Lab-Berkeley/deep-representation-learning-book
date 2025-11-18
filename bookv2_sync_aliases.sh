@@ -41,7 +41,7 @@ bookv2_setup() {
     echo "Note: Make sure you're on the correct branch (git checkout v2-preview)"
 }
 
-# 2. Sync GitHub → Overleaf (pull from GitHub, push to Overleaf)
+# 2. Sync GitHub → Overleaf (pull from GitHub, push to Overleaf master)
 bookv2_gh_to_ol() {
     echo "Fetching from GitHub..."
     git fetch github || {
@@ -58,8 +58,9 @@ bookv2_gh_to_ol() {
         return 1
     }
 
-    echo "Pushing to Overleaf..."
-    git push origin HEAD || {
+    echo "Pushing to Overleaf master..."
+    # Overleaf only accepts pushes to master branch
+    git push origin HEAD:master || {
         echo "✗ ERROR: Failed to push to Overleaf"
         return 1
     }
@@ -67,7 +68,7 @@ bookv2_gh_to_ol() {
     echo "✓ Successfully synced GitHub → Overleaf"
 }
 
-# 3. Sync Overleaf → GitHub (pull from Overleaf, push to GitHub)
+# 3. Sync Overleaf → GitHub (pull from Overleaf master, push to GitHub v2-preview)
 bookv2_ol_to_gh() {
     echo "Fetching from Overleaf..."
     git fetch origin || {
@@ -75,10 +76,8 @@ bookv2_ol_to_gh() {
         return 1
     }
 
-    echo "Merging from Overleaf..."
-    # Note: This assumes your Overleaf branch matches your local branch name
-    # If Overleaf uses 'master' and you're on 'v2-preview', change to: origin/master
-    git merge origin/HEAD || {
+    echo "Merging from Overleaf master..."
+    git merge origin/master || {
         echo "✗✗✗ PANIC: MERGE CONFLICT! ✗✗✗"
         echo "Fix conflicts manually, then run:"
         echo "  git merge --continue  # after fixing"
@@ -86,7 +85,7 @@ bookv2_ol_to_gh() {
         return 1
     }
 
-    echo "Pushing to GitHub..."
+    echo "Pushing to GitHub v2-preview..."
     git push github HEAD:v2-preview || {
         echo "✗ ERROR: Failed to push to GitHub"
         return 1
