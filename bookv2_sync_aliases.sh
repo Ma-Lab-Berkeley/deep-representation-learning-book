@@ -17,7 +17,7 @@
 # 1. Initial setup: Clone from Overleaf and add GitHub remote
 bookv2_setup() {
     echo "Cloning from Overleaf..."
-    git clone https://git@git.overleaf.com/691bd155731668031f326b2c book-v2 || {
+    git clone https://git@git.overleaf.com/6497b7a012c443686a0e87a3 book-v2 || {
         echo "✗ ERROR: Failed to clone repository"
         return 1
     }
