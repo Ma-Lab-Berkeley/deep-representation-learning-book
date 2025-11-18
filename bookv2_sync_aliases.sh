@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Book v2 Sync Functions
 # Add these to your ~/.bashrc or ~/.zshrc by running:
 #   cat bookv2_sync_aliases.sh >> ~/.bashrc  # or ~/.zshrc
@@ -43,6 +41,10 @@ bookv2_setup() {
 
 # 2. Sync GitHub → Overleaf (pull from GitHub, push to Overleaf master)
 bookv2_gh_to_ol() {
+    echo "Committing any local changes..."
+    git add .
+    git commit -m "command line sync github<->overleaf" || true
+
     echo "Fetching from GitHub..."
     git fetch github || {
         echo "✗ ERROR: Failed to fetch from GitHub"
@@ -70,6 +72,10 @@ bookv2_gh_to_ol() {
 
 # 3. Sync Overleaf → GitHub (pull from Overleaf master, push to GitHub v2-preview)
 bookv2_ol_to_gh() {
+    echo "Committing any local changes..."
+    git add .
+    git commit -m "command line sync github<->overleaf" || true
+
     echo "Fetching from Overleaf..."
     git fetch origin || {
         echo "✗ ERROR: Failed to fetch from Overleaf"
