@@ -35,8 +35,13 @@ bookv2_setup() {
         return 1
     }
 
-    echo "✓ Setup complete! Already in book-v2 directory."
-    echo "Note: Make sure you're on the correct branch (git checkout v2-preview)"
+    echo "Checking out v2-preview branch..."
+    git checkout -b v2-preview github/v2-preview || {
+        echo "✗ ERROR: Failed to checkout v2-preview"
+        return 1
+    }
+
+    echo "✓ Setup complete! On v2-preview branch in book-v2 directory."
 }
 
 # 2. Sync GitHub → Overleaf (pull from GitHub, push to Overleaf master)
