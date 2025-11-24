@@ -902,25 +902,17 @@ Let us investigate this iteration in slightly more detail. First, let us note th
 \begin{align}
     \vz_{i}^{\ell + 1/2}
     &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p}{N \epsilon^{2}}\operatorname{MSSA}(\vZ_{1:i}^{\ell} \mid \vU_{[K]}^{\ell})_{i} \\ 
-    &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p^{2}}{N^{2} \epsilon^{4}}\sum_{k =  1}^{K}\vU_{k}\vU_{k}^{\top}\vZ_{1:i}\softmax((\vU_{k}^{\top}\vZ_{1:i})^{\top}(\vU_{k}^{\top}\vZ_{1:i}))\ve_{i} \\
     &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p^{2}}{N^{2} \epsilon^{4}}\sum_{k =  1}^{K}\vU_{k}\vU_{k}^{\top}\vZ_{1:i}\softmax((\vU_{k}^{\top}\vZ_{1:i})^{\top}(\vU_{k}^{\top}\vz_{i})) \\
     &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p^{2}}{N^{2} \epsilon^{4}}\sum_{k =  1}^{K}\vU_{k}\vU_{k}^{\top}[\vZ_{1:i-1}, \vz_{i}]\softmax((\vU_{k}^{\top}[\vZ_{1:i-1}, \vz_{i}])^{\top}(\vU_{k}^{\top}\vz_{i})) \\
     &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p^{2}}{N^{2} \epsilon^{4}}\sum_{k =  1}^{K}\vU_{k}[\vU_{k}^{\top}\vZ_{1:i-1}, \vU_{k}^{\top}\vz_{i}]\softmax(([\vU_{k}^{\top}\vZ_{1:i-1}, \vU_{k}^{\top}\vz_{i}])^{\top}(\vU_{k}^{\top}\vz_{i})).
 \end{align} 
-This step now becomes \textit{highly efficient} if we cache \(\vU_{k}^{\top}\vZ_{1:i-1}\) from previous steps, and add a single column to it each time we compute this operator. Namely, we greatly reduce the number of large matrix-matrix products and replace them by cache loads and matrix-vector products, overall much cheaper in terms of time complexity. This caching is the reason why causal generative models such as LLMs can efficiently sample 1000s of tokens per second, even if each training step takes a few seconds by itself. The cache for the subspace projections of the features is also known as the so-called ``KV cache''.
+This step now becomes \textit{highly efficient} if we cache \(\vU_{k}^{\top}\vZ_{1:i-1}\) from previous steps, and add a single column to it each time we compute the projection \(\vU_{k}^{\top}\vz_{i}\). Namely, we greatly reduce the number of large matrix-matrix products and replace them by cache loads and matrix-vector products, which is overall much cheaper in terms of time complexity. This caching is the reason why causal generative models such as LLMs can efficiently sample 1000s of tokens per second, even if each training step takes a few seconds by itself. The cache for the subspace projections of the features is also known as the so-called ``KV cache''.
 
-Finally, let us consider the case where we are to \textit{train} a causal CRATE model, and want to find the mostt efficient way to do this given a full input sequence \(\vX = [\vx_{1}, \dots, \vx_{N}]\) simultaneously. The ISTA step is parallelizable to become the regular ISTA step from the non-causal CRATE, i.e.,
+Finally, let us consider the case where we are to \textit{train} a causal CRATE model, and want to find the most efficient way to do this given a full input sequence \(\vX = [\vx_{1}, \dots, \vx_{N}]\) simultaneously. The ISTA step is parallelizable to become the regular ISTA step from the non-causal CRATE, i.e.,
 \begin{equation}
     \operatorname{ISTA}(\vZ \mid \vD) \doteq [\ISTA(\vz_{1} \mid \vD), \dots, \ISTA(\vz_{N} \mid \vD)],
 \end{equation}
-therefore implying that the ISTA step remains the same as the non-causal CRATE. The MSSA step is more interesting, since it changes in a meaningful way. To see how it changes, note that each MSSA operator has an interesting structure which merits some attention:
-\begin{align}
-    \operatorname{MSSA}(\vz_{1:i} \mid \vU_{[K]})_{i} 
-    &= \frac{p}{N\epsilon^{2}}\sum_{k =  1}^{K}\vU_{k}\vU_{k}^{\top}\vZ_{1:i}\softmax((\vU_{k}^{\top}\vZ_{1:i})^{\top}(\vU_{k}^{\top}\vZ_{1:i}))\ve_{i} \\
-    &= \frac{p}{N\epsilon^{2}}\sum_{k =  1}^{K}\vU_{k}\vU_{k}^{\top}\vZ_{1:i}\softmax((\vU_{k}^{\top}\vZ_{1:N})^{\top}(\vU_{k}^{\top}\vz_{i})) \\ 
-    &= \frac{p}{N\epsilon^{2}}\mat{\vU_{1}, \dots, \vU_{K}}\mat{\softmax((\vU_{1}^{\top}\vZ_{1:i})^{\top}(\vU_{1}^{\top}\vz_{i})) \\ \vdots \\ \softmax((\vU_{K}^{\top}\vZ_{1:i})^{\top}(\vU_{K}^{\top}\vz_{i}))}
-\end{align}
-Namely, if we define the \textit{causal MSSA operator} as the block matrix:
+therefore implying that the ISTA step remains the same as the non-causal CRATE. The MSSA step is more interesting, since it changes in a meaningful way. To see how it changes, note that each MSSA operator has an interesting structure which merits some attention. Namely, if we define the \textit{causal MSSA operator} as the block matrix:
 \begin{equation}
     \operatorname{CausalMSSA}(\vZ \mid \vU_{[K]}) \doteq [\operatorname{MSSA}(\vZ_{1:1} \mid \vU_{[K]})_{1}, \dots, \operatorname{MSSA}(\vZ_{1:N} \mid \vU_{[K]})_{N}],
 \end{equation}
