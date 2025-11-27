@@ -133,8 +133,30 @@ bookv2_sync() {
     echo "═══════════════════════════════════════"
 }
 
-# Quick reference:
-# bookv2_setup      - Initial setup (run once)
-# bookv2_gh_to_ol   - Sync GitHub → Overleaf
-# bookv2_ol_to_gh   - Sync Overleaf → GitHub
-# bookv2_sync       - Full bidirectional sync
+bookv2_sync_rev() {
+    echo "═══════════════════════════════════════"
+    echo "Starting bidirectional sync..."
+    echo "═══════════════════════════════════════"
+
+    echo ""
+    echo "Step 1/2: GitHub → Overleaf"
+    echo "───────────────────────────────────────"
+    bookv2_gh_to_ol || {
+        echo "✗✗✗ Sync failed at step 2 ✗✗✗"
+        return 1
+    }
+
+    echo ""
+    echo "Step 2/2: Overleaf → GitHub"
+    echo "───────────────────────────────────────"
+    bookv2_ol_to_gh || {
+        echo "✗✗✗ Sync failed at step 1 ✗✗✗"
+        return 1
+    }
+
+
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "✓✓✓ Full sync complete! ✓✓✓"
+    echo "═══════════════════════════════════════"
+}
