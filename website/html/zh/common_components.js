@@ -5,7 +5,7 @@
     nav: {
       aiTools: "AI 工具",
       aiHelpers: "AI 助手",
-      community: "社区",
+      community: "课程、讲座与社区贡献",
       contributors: "编者 / 参编者",
       howToContribute: "如何贡献？",
     },
@@ -218,7 +218,7 @@
 
     // Community page content
     community: {
-      title: "社区",
+      title: "课程、讲座与社区贡献",
       intro: "社区资源（建设中）。",
       pending: "敬请期待。",
       sections: {
