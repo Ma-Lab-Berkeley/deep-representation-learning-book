@@ -3,14 +3,9 @@
 
 \begin{document}
 
-\chapter{Pursuing Low-Dimensionality via Lossy Compression}
-\label{ch:compression}\label{ch:general-distribution}
+\chapter{Pursuing Low-Dimensional Distribution via Denoising}
+\label{ch:general-distribution}\label{ch:denoising}\label{ch:compression}
 
-\begin{quote}
-	\hfill    ``{\em We compress to learn, and we learn to compress}.''\\
-	$~$ \hfill --- High-dimensional Data Analysis, Wright and Ma, 2022
-\end{quote}
-\vspace{5mm}
 
 In \Cref{ch:linear-independent}, we have shown how to learn simple classes of distributions whose supports are assumed to be either a single or a mixture of low-dimensional subspaces or low-rank Gaussians. For further simplicity, the different (hidden) linear or Gaussian modes are assumed to be orthogonal or independent\footnote{Or can be easily reduced to such idealistic cases.}, as illustrated in \Cref{fig:subspaces}. As we have shown, for such special distributions, one can derive rather simple and effective learning algorithms with correctness and efficiency guarantees. The geometric and statistical interpretation of operations in the associated algorithms is also very clear.
 
@@ -370,9 +365,46 @@ The last thing we discuss here is that many times, we will \textit{not be able t
 \end{equation}
 The solution to this optimization problem, implemented via gradient descent or a similar algorithm, will give us a \(\bar{\vx}_{\theta^{\ast}}(t, \cdot)\) which is a good approximation to \(\bar{\vx}^{\ast}(t, \cdot)\) (at least if the training works) and which we will use as our denoiser.
 
-What is a good architecture for this neural network \(\bar{\vx}_{\theta^{\ast}}(t, \cdot)\)? To answer this question, we will examine the ubiquitous case of a \textit{Gaussian mixture model},  whose denoiser we computed in \Cref{example:denoising_gaussian_mixture}. This model is relevant because it can approximate many types of distributions: in particular, given a distribution for \(\vx\), there is a Gaussian mixture model that can approximate it arbitrarily well. So optimizing among the class of denoisers for Gaussian mixture models can give us something close to the optimal denoiser for the real data distribution. 
+What is a good architecture for this neural network \(\bar{\vx}_{\theta^{\ast}}(t, \cdot)\)? To answer this question, we will examine the ubiquitous case of a \textit{Gaussian mixture model},  whose denoiser we computed in \Cref{example:denoising_gaussian_mixture}. This model is relevant because it can approximate many types of distributions: in particular, given a distribution for \(\vx\), there is a Gaussian mixture model that can approximate it arbitrarily well. So optimizing among the class of denoisers for Gaussian mixture models can give us something close to the optimal denoiser for the real data distribution. {\color{blue} In the following, we start with the simpler setting of a single Gaussian model to build intuition, and then generalize the results to the Gaussian mixture model.
+% {\color{red} (i) First single Gaussian, then a mixture of Gaussians! 
+% (ii) Refer to Chapter 2, pursue low-dimensional subspaces! Also refer to later Chapters! 
+% (iii) First derive the equivalence and then discuss the connections!}
 
-In our case, we assume that \(\vx\) is low-dimensional, which loosely translates into the requirement that \(\vx\) is \textit{approximately} distributed according to a \textit{mixture of low-rank Gaussians}. Formally, we write 
+\paragraph{A single low-dimensional Gaussian model.} Suppose that we consider $K=1$ in \eqref{eq:MoG1}, i.e., $$\vx \sim   \dNorm(\vzero, \vU\vU^{\top})$$, where \(\vU \in \O(D, P) \subseteq \R^{D \times P}\) is an orthogonal matrix. According to \eqref{eq:gmm_lowrank_denoiser}, the  Bayes optimal denoiser is 
+\begin{align}
+    \bar{\vx}^{\ast}(t, \vx_{t}) = \frac{1}{1 + t^{2}} \vU\vU^\top\vx_t. 
+\end{align}
+To learn this Bayes optimal denoiser, we can accordingly parameterize the denoising neural network $\bar{\vx}_{\theta}(t,\vx_t)$ as follows: 
+\begin{align}
+    \bar{\vx}_{\theta}(t,\vx_t) = \frac{1}{1 + t^{2}} \vV\vV^\top\vx_t,
+\end{align}
+where $\theta = \{\vV\}$ and $\vV \in \O(D, P)$ are learnable parameters. Substituting this into the training loss \eqref{eq:denoising_loss} yields 
+\begin{equation}\label{eq:training loss PCA}
+	  \min_{\vV \in \O(D, P)}\Ex_{\vx, \vx_{t}}\left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top\vx_t\right\|_{2}^{2} = \Ex_{\vx, \vg}\left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top(\vx + t\vg)\right\|_{2}^{2},
+\end{equation}
+where the equality is due to \eqref{eq:additive_gaussian_noise_model}. Conditioned on $\vx$, we compute 
+\begin{align}
+    & \Ex_{\vg}\left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top(\vx + t\vg)\right\|_{2}^{2} \\
+    = & \left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx\right\|_{2}^{2} - \frac{t}{1+t^2}\Ex_{\vg} \left\langle \vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx,  \vV\vV^\top\vg \right\rangle \notag \\
+    & + \frac{t^2}{(1+t^2)^2} \Ex_{\vg}\left\| \vV\vV^\top \vg \right\|_2^2 \\
+    = & \left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx\right\|_{2}^{2} + \frac{t^2P}{(1+t^2)^2} 
+\end{align}
+where the second equality follows from \(\vg \sim \dNorm(\vzero, \vI)\) and $ \Ex_{\vg}\left\| \vV\vV^\top \vg \right\|_2^2 = \Ex_{\vg}\left\|\vV^\top \vg \right\|_2^2 = P$ due to $\vV \in \O(D, P)$. Therefore, Problem \eqref{eq:training loss PCA} is equivalent to 
+\begin{align}
+    \min_{\vV \in \O(D, P)}\Ex_{\vx} \left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx\right\|_{2}^{2} = \Ex_{\vx} \|\vx\|_2^2 + \left( \frac{1}{(1+t^2)^2} - \frac{2}{1+t^2} \right) \Ex_{\vx}\|\vV^\top \vx\|_2^2.
+\end{align}
+This is further equivalent to 
+\begin{align}
+    \max_{\vV \in \O(D, P)} \Ex_{\vx}\|\vV^\top \vx\|_2^2,
+\end{align}
+which is essentially Problem \eqref{eq:PPCA}. 
+
+This derivation shows that when the data distribution lies on a single low-dimensional subspace, learning the optimal denoiser under the optimal parameterization reduces exactly to solving a probabilistic PCA problem (see \Cref{subsec:probabilistic PCA} for more details about probabilistic PCA). This connection is natural: PCA is one of the classical tools for denoising low-dimensional linear data, as it projects noisy observations onto the principal subspace that best captures the signal. % This connection also highlights that the structure of the Bayes denoiser implicitly encourages the network to learn principal components. 
+
+
+
+\paragraph{A Gaussian mixture model.} % In our case, we assume that \(\vx\) is low-dimensional, which loosely translates into the requirement that \(\vx\) is \textit{approximately} distributed according to a \textit{mixture of low-rank Gaussians}. 
+We now extend the above analysis from the single Gaussian case to a Gaussian mixture model with $K\ge 2$ components. Formally, we write 
 \begin{equation}\label{eq:MoG1}
 	\vx \sim \frac{1}{K}\sum_{k = 1}^{K}\dNorm(\vzero, \vU_{k}\vU_{k}^{\top})
 \end{equation}
@@ -414,36 +446,36 @@ Putting these together, we have
 	\bar{\vx}^{\ast}(t, \vx_{t}) = \frac{1}{1 + t^{2}}\sum_{k = 1}^{K}\frac{\exp\rp{\frac{1}{2t^{2}(1 + t^{2})}\norm{\vU_{k}^{\top}\vx_{t}}_{2}^{2}}}{\sum_{i = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1 + t^{2})}\norm{\vU_{i}^{\top}\vx_{t}}_{2}^{2}}}\vU_{k}\vU_{k}^{\top}\vx_{t},
 \end{equation}
 i.e., a projection of \(\vx_{t}\) onto each of \(K\) subspaces, weighted by a soft-max operation of a quadratic function of \(\vx_{t}\). This functional form is similar to an \textit{attention mechanism} in a transformer architecture! As we will see in \Cref{ch:representation}, this is no coincidence at all; the deep link between denoising and lossy compression (to be covered in \Cref{sec:lossy_compression}) makes transformer denoisers so effective in practice. And so overall, our Gaussian mixture model theory motivates the use of transformer-like neural networks for denoising.
-
-\begin{remark}
-{\bf Connections between denoising a distribution and probabilistic PCA.} Here, we would like to connect denoising a low-dimensional distribution to probabilistic PCA (see \Cref{subsec:probabilistic PCA} for more details about probabilistic PCA). Suppose that we consider $K=1$ in \eqref{eq:MoG1}, i.e., $\vx \sim   \dNorm(\vzero, \vU\vU^{\top})$, where \(\vU \in \O(D, P) \subseteq \R^{D \times P}\) is an orthogonal matrix. According to \eqref{eq:gmm_lowrank_denoiser}, the  Bayes optimal denoiser is 
-\begin{align}
-    \bar{\vx}^{\ast}(t, \vx_{t}) = \frac{1}{1 + t^{2}} \vU\vU^\top\vx_t. 
-\end{align}
-To learn this Bayes optimal denoiser, we can accordingly parameterize the denoising operator $\bar{\vx}(t,\vx_t)$ as follows: 
-\begin{align}
-    \bar{\vx}(t,\vx_t) = \frac{1}{1 + t^{2}} \vV\vV^\top\vx_t,
-\end{align}
-where $\vV \in \O(D, P)$ are learnable parameters. Substituting this into the training loss \eqref{eq:denoising_loss} yields 
-\begin{equation}\label{eq:training loss PCA}
-	  \min_{\vV \in \O(D, P)}\Ex_{\vx, \vx_{t}}\left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top\vx_t\right\|_{2}^{2} = \Ex_{\vx, \vg}\left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top(\vx + t\vg)\right\|_{2}^{2},
-\end{equation}
-where the equality is due to \eqref{eq:additive_gaussian_noise_model}. Conditioned on $\vx$, we compute 
-\begin{align}
-    & \Ex_{\vg}\left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top(\vx + t\vg)\right\|_{2}^{2} \\
-    = & \left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx\right\|_{2}^{2} - \frac{t}{1+t^2}\Ex_{\vg} \left\langle \vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx,  \vV\vV^\top\vg \right\rangle + \frac{t^2}{(1+t^2)^2} \Ex_{\vg}\left\| \vV\vV^\top \vg \right\|_2^2 \\
-    = & \left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx\right\|_{2}^{2} + \frac{t^2P}{(1+t^2)^2} 
-\end{align}
-where the second equality follows from \(\vg \sim \dNorm(\vzero, \vI)\) and $ \Ex_{\vg}\left\| \vV\vV^\top \vg \right\|_2^2 = \Ex_{\vg}\left\|\vV^\top \vg \right\|_2^2 = P$ due to $\vV \in \O(D, P)$. Therefore, Problem \eqref{eq:training loss PCA} in equivalent to 
-\begin{align}
-    \min_{\vV \in \O(D, P)}\Ex_{\vx} \left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx\right\|_{2}^{2} = \Ex_{\vx} \|\vx\|_2^2 + \left( \frac{1}{(1+t^2)^2} - \frac{2}{1+t^2} \right) \Ex_{\vx}\|\vV^\top \vx\|_2^2.
-\end{align}
-This is further equivalent to 
-\begin{align}
-    \max_{\vV \in \O(D, P)} \Ex_{\vx}\|\vV^\top \vx\|_2^2,
-\end{align}
-which is essentially Problem \eqref{eq:PPCA}. 
-\end{remark}
+} 
+% \begin{remark}
+% {\bf Connections between denoising a distribution and probabilistic PCA.} Here, we would like to connect denoising a low-dimensional distribution to probabilistic PCA (see \Cref{subsec:probabilistic PCA} for more details about probabilistic PCA). Suppose that we consider $K=1$ in \eqref{eq:MoG1}, i.e., $\vx \sim   \dNorm(\vzero, \vU\vU^{\top})$, where \(\vU \in \O(D, P) \subseteq \R^{D \times P}\) is an orthogonal matrix. According to \eqref{eq:gmm_lowrank_denoiser}, the  Bayes optimal denoiser is 
+% \begin{align}
+%     \bar{\vx}^{\ast}(t, \vx_{t}) = \frac{1}{1 + t^{2}} \vU\vU^\top\vx_t. 
+% \end{align}
+% To learn this Bayes optimal denoiser, we can accordingly parameterize the denoising operator $\bar{\vx}(t,\vx_t)$ as follows: 
+% \begin{align}
+%     \bar{\vx}(t,\vx_t) = \frac{1}{1 + t^{2}} \vV\vV^\top\vx_t,
+% \end{align}
+% where $\vV \in \O(D, P)$ are learnable parameters. Substituting this into the training loss \eqref{eq:denoising_loss} yields 
+% \begin{equation}\label{eq:training loss PCA}
+% 	  \min_{\vV \in \O(D, P)}\Ex_{\vx, \vx_{t}}\left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top\vx_t\right\|_{2}^{2} = \Ex_{\vx, \vg}\left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top(\vx + t\vg)\right\|_{2}^{2},
+% \end{equation}
+% where the equality is due to \eqref{eq:additive_gaussian_noise_model}. Conditioned on $\vx$, we compute 
+% \begin{align}
+%     & \Ex_{\vg}\left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top(\vx + t\vg)\right\|_{2}^{2} \\
+%     = & \left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx\right\|_{2}^{2} - \frac{t}{1+t^2}\Ex_{\vg} \left\langle \vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx,  \vV\vV^\top\vg \right\rangle + \frac{t^2}{(1+t^2)^2} \Ex_{\vg}\left\| \vV\vV^\top \vg \right\|_2^2 \\
+%     = & \left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx\right\|_{2}^{2} + \frac{t^2P}{(1+t^2)^2} 
+% \end{align}
+% where the second equality follows from \(\vg \sim \dNorm(\vzero, \vI)\) and $ \Ex_{\vg}\left\| \vV\vV^\top \vg \right\|_2^2 = \Ex_{\vg}\left\|\vV^\top \vg \right\|_2^2 = P$ due to $\vV \in \O(D, P)$. Therefore, Problem \eqref{eq:training loss PCA} in equivalent to 
+% \begin{align}
+%     \min_{\vV \in \O(D, P)}\Ex_{\vx} \left\|\vx - \frac{1}{1 + t^{2}} \vV\vV^\top \vx\right\|_{2}^{2} = \Ex_{\vx} \|\vx\|_2^2 + \left( \frac{1}{(1+t^2)^2} - \frac{2}{1+t^2} \right) \Ex_{\vx}\|\vV^\top \vx\|_2^2.
+% \end{align}
+% This is further equivalent to 
+% \begin{align}
+%     \max_{\vV \in \O(D, P)} \Ex_{\vx}\|\vV^\top \vx\|_2^2,
+% \end{align}
+% which is essentially Problem \eqref{eq:PPCA}. 
+% \end{remark}
 
 Overall, the learned denoiser forms an (implicit parametric) encoding scheme of the given data, since it can be used to denoise/project onto the data distribution. Training a denoiser is equivalent to finding a better coding scheme, and this partially fulfills one of the desiderata (the \textit{second}) at the end of \Cref{sub:min_entropy}. In the sequel, we will discuss how to fulfill the other (the \textit{first}).
 
@@ -504,13 +536,17 @@ The denoising iteration \eqref{eq:denoising_iteration} becomes
 \begin{equation}\label{eq:gen_denoising_iteration}
 	\hat{\vx}_{t_{\ell - 1}} = \frac{\sigma_{t_{\ell - 1}}}{\sigma_{t_{\ell}}}\hat{\vx}_{t_{\ell}} + \bp{\alpha_{t_{\ell - 1}} - \frac{\sigma_{t_{\ell - 1}}}{\sigma_{t_{\ell}}}\alpha_{t_{\ell}}}\bar{\vx}^{\ast}(t_{\ell}, \hat{\vx}_{t_{\ell}}).
 \end{equation}
-Finally, the Gaussian mixture model denoiser \eqref{eq:gmm_bayes_optimal_denoiser} becomes 
+
+\begin{example}[A Mixture of Gaussians] For a Gaussian mixture model, its denoiser \eqref{eq:gmm_bayes_optimal_denoiser} becomes 
 \begin{equation}\label{eq:gen_gmm_bayes_optimal_denoiser}
 	\bar{\vx}^{\ast}(t, \vx_{t}) = \sum_{k = 1}^{K}\frac{\pi_{k}\phi(\vx_{t}
 	; \alpha_{t}\vmu_{k}, \alpha_{t}^{2}\vSigma_{k}
 	+ \sigma_{t}^{2}\vI)}{\sum_{i = 1}^{K}\pi_{i}\phi(\vx_{t} ; \alpha_{t}\vmu_{i}, \alpha_{t}^{2}\vSigma_{i} + \sigma_{t}^{2}\vI)}\cdot\bp{\vmu_{k} + \alpha_{t}\vSigma_{k}(\alpha_{t}^{2}\vSigma_{k} + \sigma_{t}^{2}\vI)^{-1}(\vx_{t} - \alpha_{t}\vmu_{k})}.
 \end{equation}
-\Cref{fig:vp_gmm_denoising} demonstrates iterations of the sampling procedure. Note that the denoising iteration \eqref{eq:gen_denoising_iteration} gives a sampling algorithm called the DDIM (``Denoising Diffusion Implicit Model'') sampler \cite{song2020denoising}, and is one of the most popular sampling algorithms used today in diffusion models. We summarize it here in \Cref{alg:iterative_denoising}.
+\Cref{fig:vp_gmm_denoising} demonstrates iterations of the sampling procedure. 
+\end{example}
+
+Note that the denoising iteration \eqref{eq:gen_denoising_iteration} gives a sampling algorithm called the DDIM (``Denoising Diffusion Implicit Model'') sampler \cite{song2020denoising}, and is one of the most popular sampling algorithms used today in diffusion models. We summarize it here in \Cref{alg:iterative_denoising}.
 
 \begin{figure}
 	\centering 
@@ -639,114 +675,26 @@ Note that if \(L \to \infty\) and we correctly learn the Bayes optimal denoiser 
 
 
 
+\section{Memorization and Generalization}
+\yima{Qing and Druv, a new section about memorization and generalization probably should go here. It should elucidate the role of quantization error (small noise) introduced by the network capacity... denoising to death means memorizing individual samples, hence leads to the topic of next chapter. }
 
 
 
+\section{Summary and Notes}
 
+\section{Exercises and Extensions}
 
 
 
 
+\chapter{Representation Learning via Lossy Compression}
+\label{ch:lossy-compression}\label{ch:representation-learning}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+\begin{quote}
+	\hfill    ``{\em We compress to learn, and we learn to compress}.''\\
+	$~$ \hfill --- High-dimensional Data Analysis, Wright and Ma, 2022
+\end{quote}
+\vspace{5mm}
 
 
 
@@ -1469,7 +1417,7 @@ The second property requires that for samples that belong to different classes o
     Linear discriminant analysis (LDA)~\cite{HastieTiFr09} is a supervised dimensionality reduction technique that aims to find a linear projection of data that maximizes class separability. Specifically, given labeled data, LDA seeks a linear transformation that projects high-dimensional inputs onto a lower-dimensional space where the classes are maximally separated. Note that PCA is an unsupervised method that projects data onto directions of maximum variance without considering class labels. While PCA focuses purely on preserving global variance structure, LDA explicitly exploits label information to enhance discriminative power; see the comparison in \Cref{fig:LDA}. 
     \begin{figure}
 	\centering
-	\includegraphics[width=0.7\linewidth]{\toplevelprefix/chapters/chapter3/figs/LDA.png}\vspace{-0.1in}
+	\includegraphics[width=0.75\linewidth]{\toplevelprefix/chapters/chapter3/figs/LDA.png}\vspace{-0.1in}
 	\caption{Comparison between PCA and LDA. Figures adpoted from \url{https://sebastianraschka.com/Articles/2014_python_lda.html}.}
 	\label{fig:LDA}
 \end{figure}
@@ -1479,11 +1427,11 @@ The second property requires that for samples that belong to different classes o
 
 
 \begin{remark}[Contrastive Learning] 
-One may notice that the conventional {\em contrastive learning} \citep{hadsell2006dimensionality,oord2018representation,he2019momentum} aims to achieve similar goals for feature representation as the first two properties stipulate. For data that belong to $k$ different classes, a randomly chosen pair $(\x^i, \x^j)$ is of high probability belonging to difference classes if $k$ is large.\footnote{For example, when $k \ge 100$, a random pair is of probability 99\% belonging to different classes.} Hence it is desirable that the representation $\z^i = f(\x^i, \bm \theta)$ of a sample $\x^i$ should be highly incoherent to those $\z^j$ of other samples $\x^j$ whereas coherent to feature of its transformed version $\tau(\x^i)$, denoted as $\z(\tau(\x^i))$ for $\tau$ in certain augmentation set $\mathcal T$ in consideration. Hence it was proposed heuristically that, to promote  discriminativeness of the learned representation, one may seek to minimize the so-called {\em contrastive loss}: \begin{equation}
-\min_{\bm \theta} - \log \frac{\exp(\langle \z^i, \z(\tau(\x^i))\rangle)}{\sum_{j\not= i} \exp(\langle \z^i, \z^j\rangle)},
+One may notice that the conventional {\em contrastive learning} \citep{hadsell2006dimensionality,oord2018representation,he2019momentum} aims to achieve similar goals for feature representation as the first two properties stipulate. For data that belong to $k$ different classes, a randomly chosen pair $(\x_i, \x_j)$ is of high probability belonging to difference classes if $k$ is large.\footnote{For example, when $k \ge 100$, a random pair is of probability 99\% belonging to different classes.} Hence it is desirable that the representation $\z_i = f(\x_i, \bm \theta)$ of a sample $\x_i$ should be highly incoherent to those $\z_j$ of other samples $\x_j$ whereas coherent to feature of its transformed version $\tau(\x_i)$, denoted as $\z(\tau(\x_i))$ for $\tau$ in certain augmentation set $\mathcal T$ in consideration. Hence it was proposed heuristically that, to promote  discriminativeness of the learned representation, one may seek to minimize the so-called {\em contrastive loss}: \begin{equation}
+\min_{\bm \theta} - \log \frac{\exp(\langle \z_i, \z(\tau(\x_i))\rangle)}{\sum_{j\not= i} \exp(\langle \z_i, \z_j\rangle)},
 \label{eqn:contrastive-loss}
 \end{equation}
-which is small whenever the inner product $\langle \z^i, \z(\tau(\x^i))\rangle$ is large and $\langle \z^i, \z^j\rangle$ is small for $i \not= j$. Such contrastive loss, and many of its variants, has been widely used in popular (self-supervised) feature learning methods such as the DINO-type features \cite{caron2021unsupervisedlearningvisualfeatures,DINOv2} for visual data. As we will see, based on the lossy coding framework studied in the previous section, we will be able to arrive at a principled objective function that promotes the two properties and at the same time significantly simplifies the practice such as learning the DINO-type features (as we will feature in great details in Chapter \ref{ch:applications}).  
+which is small whenever the inner product $\langle \z_i, \z(\tau(\x_i))\rangle$ is large and $\langle \z_i, \z_j\rangle$ is small for $i \not= j$. Such contrastive loss, and many of its variants, has been widely used in popular (self-supervised) feature learning methods such as the DINO-type features \cite{caron2021unsupervisedlearningvisualfeatures,DINOv2} for visual data. As we will see, based on the lossy coding framework studied in the previous section, we will be able to arrive at a principled objective function that promotes the two properties and at the same time significantly simplifies the practice such as learning the DINO-type features (as we will feature in great details in Chapter \ref{ch:applications}).  
 \end{remark}
 
 The third property is also important because we want the learned features to reveal all possible causes of why one class is different from all other classes. For example, to tell ``apple'' from ``orange'', we care not only about color but also shape and the leaves. Ideally, the dimension of each subspace $\{\mathcal{S}_k\}$ should be equal to that of the corresponding submanifold $\mathcal{M}_k$. This property will be important if we would like the map $f(\x,\theta)$ to be {\em invertible} for tasks such as image generation. For example, if we draw different sample points from the feature subspace for ``apple'', we should be able to decode them, via an inverse map $g(\z, \eta)$, to generate diverse images of apples. Such a pair of mutually inverse mappings $f$ and $g$ makes an autoencoding which we will study in great details in Chapter \ref{ch:autoencoding}. Notice that feature represenations learned from minimizing the cross entropy \eqref{chap4-eqn:cross-entropy} normally do not have this property, as they suffer the so-called {\em neural   collapsing} phenomenon discussed earlier (see Remark \ref{remark:neural-collapse}).
@@ -1633,47 +1581,7 @@ This theorem indicates that the MCR$^2$ principle promotes embedding of data int
 
 
 
-\begin{example}[Classification of Images on CIFAR-10]
-	We here present how the MCR$^2$ objective helps learn better representations than the cross entropy \eqref{chap4-eqn:cross-entropy} for image classification. Here we adopt the popular neural network architecture, the ResNet-18~\cite{he2016deep}, to model the feature mapping $\z = f(\x,\theta)$. We optimize the neural network parameters $\theta$ to maximize the coding rate reduction. We evaluate the performance with the CIFAR10 image classification dataset~\cite{krizhevsky2009learning}.
 
-	\begin{figure}[t]
-		\begin{subfigure}[t]{0.42\textwidth}
-			\centering
-			\includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/loss_log.pdf}
-			\caption{Evolution of $R_\epsilon$, $R^c_\epsilon$, $\Delta R_\epsilon$ during the training process.}
-			\label{fig:train-test-loss-pca-1}
-		\end{subfigure}
-		\hfill
-		\begin{subfigure}[t]{0.42\textwidth}
-			\centering
-			\includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/pca_mainline.pdf}
-			\caption{PCA: {\small (\textbf{red}) overall data; (\textbf{blue}) individual classes}.}
-			\label{fig:train-test-loss-pca-3}
-		\end{subfigure}
-		\caption{\small Evolution of the rates of MCR$^2$ in the training process, the principal components of learned features.}
-		\label{fig:train-test-loss-pca}
-	\end{figure}
-
-
-	\begin{figure*}[b]
-		\begin{center}
-
-			\includegraphics[width=0.42\textwidth]{\toplevelprefix/chapters/chapter3/figs/heatmap_mcr2.pdf}
-			\hspace{0.25cm}
-			\includegraphics[width=0.42\textwidth]{\toplevelprefix/chapters/chapter3/figs/heatmap_ce.png}
-			\caption{\small Cosine similarity between learned features by using the MCR$^2$ objective  (\textbf{left}) and CE loss (\textbf{right}).}
-			\label{fig:heatmap-plot}
-		\end{center}
-		\vskip -0.1in
-	\end{figure*}
-
-	\Cref{fig:train-test-loss-pca-1} illustrates how the two rates and their difference (for both training and test data) evolve over epochs of training: After an initial phase, $R_\epsilon$ gradually increases while $R^c_\epsilon$ decreases, indicating that features $\bm Z$ are expanding as a whole while each class $\bm Z_k$ is being compressed.
-	\Cref{fig:train-test-loss-pca-3} shows the distribution of singular values per $\Z_k$. \Cref{fig:heatmap-plot} shows the cosine similarities between the learned features sorted by class. We compare the similarities of the learned features by using the cross-entropy \eqref{chap4-eqn:cross-entropy} and the MCR$^2$ objective \eqref{eqn:maximal-rate-reduction}. From the plots, one can clearly see that the representations learned by using MCR$^2$ loss are much more diverse than the ones learned by using cross-entropy loss. More details of this experiment can be found in \cite{chan2021redunet}.
-	\label{eg:Rate-Reduction-CIFAR10}
-\end{example}
-
-
-However, there has been an apparent lack of justification of the network architectures used in the above experiments. It is yet unclear why the network adopted here (the ResNet-18) is suitable for representing the map $f(\x, \theta)$, let alone for interpreting the layer operators and parameters $\theta$ learned inside. In the next chapter, {\em we will show how to derive network architectures and components entirely as a ``white box'' from the desired objective (say the rate reduction)}.
 
 
 
@@ -1721,7 +1629,51 @@ According to \cite{sun2015nonconvex,lee2016gradient}, \Cref{thm:mcr-global-opt,t
 Interested readers are referred to \cite{wang2024global} for proofs. 
 
 
+\section{Learning Representations for Imagery Data}
+\subsection{Supervised Learning with Class Information}
 
+We here present how the MCR$^2$ objective helps learn better representations than the cross entropy \eqref{chap4-eqn:cross-entropy} for image classification. Here we adopt the popular neural network architecture, the ResNet-18~\cite{he2016deep}, to model the feature mapping $\z = f(\x,\theta)$. We optimize the neural network parameters $\theta$ to maximize the coding rate reduction. We evaluate the performance with the CIFAR10 image classification dataset~\cite{krizhevsky2009learning}.
+
+	\begin{figure}[t]
+		\begin{subfigure}[t]{0.42\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/loss_log.pdf}
+			\caption{Evolution of $R_\epsilon$, $R^c_\epsilon$, $\Delta R_\epsilon$ during the training process.}
+			\label{fig:train-test-loss-pca-1}
+		\end{subfigure}
+		\hfill
+		\begin{subfigure}[t]{0.42\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/pca_mainline.pdf}
+			\caption{PCA: {\small (\textbf{red}) overall data; (\textbf{blue}) individual classes}.}
+			\label{fig:train-test-loss-pca-3}
+		\end{subfigure}
+		\caption{\small Evolution of the rates of MCR$^2$ in the training process, the principal components of learned features.}
+		\label{fig:train-test-loss-pca}
+	\end{figure}
+
+
+	\begin{figure*}[b]
+		\begin{center}
+
+			\includegraphics[width=0.42\textwidth]{\toplevelprefix/chapters/chapter3/figs/heatmap_mcr2.pdf}
+			\hspace{0.25cm}
+			\includegraphics[width=0.42\textwidth]{\toplevelprefix/chapters/chapter3/figs/heatmap_ce.png}
+			\caption{\small Cosine similarity between learned features by using the MCR$^2$ objective  (\textbf{left}) and CE loss (\textbf{right}).}
+			\label{fig:heatmap-plot}
+		\end{center}
+		\vskip -0.1in
+	\end{figure*}
+
+	\Cref{fig:train-test-loss-pca-1} illustrates how the two rates and their difference (for both training and test data) evolve over epochs of training: After an initial phase, $R_\epsilon$ gradually increases while $R^c_\epsilon$ decreases, indicating that features $\bm Z$ are expanding as a whole while each class $\bm Z_k$ is being compressed.
+	\Cref{fig:train-test-loss-pca-3} shows the distribution of singular values per $\Z_k$. \Cref{fig:heatmap-plot} shows the cosine similarities between the learned features sorted by class. We compare the similarities of the learned features by using the cross-entropy \eqref{chap4-eqn:cross-entropy} and the MCR$^2$ objective \eqref{eqn:maximal-rate-reduction}. From the plots, one can clearly see that the representations learned by using MCR$^2$ loss are much more diverse than the ones learned by using cross-entropy loss. More details of this experiment can be found in \cite{chan2021redunet}.
+	\label{eg:Rate-Reduction-CIFAR10}
+
+
+However, there has been an apparent lack of justification of the network architectures used in the above experiments. It is yet unclear why the network adopted here (the ResNet-18) is suitable for representing the map $f(\x, \theta)$, let alone for interpreting the layer operators and parameters $\theta$ learned inside. In the next chapter, {\em we will show how to derive network architectures and components entirely as a ``white box'' from the desired objective (say the rate reduction)}.
+
+\subsection{Unsupervised Learning via Contracting and Contrasting}
+\yima{Ziyang, probably introdue the objective of SimDINO here? and featuring some experimental justificaiton and leave the implementation details to Chapter 7 (or the new Chapter 8).}
 
 \section{Summary and Notes}
 
@@ -1733,9 +1685,6 @@ Many of these works use a different stochastic process than the simple linear co
 
 On top of the theoretical work \citep{li2024d} covered in \Cref{sec:denoising-intro}, and the lineage of work that it builds on, which studies the \textit{sampling} efficiency of diffusion models when the data has low-dimensional structure, there is a large body of work which studies the \textit{training} efficiency of diffusion models when the data has low-dimensional structure. Specifically, \citet{chen2023score} and \citep{wang2024diffusion} characterized the approximation and estimation error of denoisers when the data belongs to a mixture of low-rank Gaussians, showing that the number of training samples required to accurately learn the distribution scales with the intrinsic dimension of the data rather than the ambient distribution. There is considerable \textit{methodological} work which attempts to utilize the low-dimensional structure of the data in order to do various things with diffusion models. We highlight three here: image editing \citep{chen2024exploring}, watermarking \citep{li2024shallow}, and unlearning \citep{chen2025dual}, though as always this is an inexhaustive list.
  
-
-
-
 
 
 
