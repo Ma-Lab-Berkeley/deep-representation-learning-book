@@ -448,7 +448,12 @@ which is essentially Problem \eqref{eq:PPCA}.
 Overall, the learned denoiser forms an (implicit parametric) encoding scheme of the given data, since it can be used to denoise/project onto the data distribution. Training a denoiser is equivalent to finding a better coding scheme, and this partially fulfills one of the desiderata (the \textit{second}) at the end of \Cref{sub:min_entropy}. In the sequel, we will discuss how to fulfill the other (the \textit{first}).
 
 
-\subsection{Learning and Sampling a Distribution via Iterative Denoising}\label{sub:sampling_denoising}
+
+
+
+
+
+\subsection{Sampling a Distribution via Iterative Denoising}\label{sub:sampling_denoising}
 
 Remember that at the end of \Cref{sub:min_entropy}, we discussed a pair of desiderata for pursuing a distribution with low-dimensional structure. The first such desideratum is to start with a normal distribution, say with high entropy, and gradually reduce its entropy until it reaches the distribution of the data. We will call this procedure \textit{sampling} since we are generating new samples. It is now time for us to discuss how to do this with the toolkit we have built up.
 
@@ -1314,7 +1319,7 @@ Note that this algorithm is tractable as the total number of (pairwise) comparis
 
 \begin{example}[Image Segmentation]\label{eg:image-segmentation} The above measure of coding length and the associated clustering algorithm assume the data distribution is a mixture of (low-dimensional) Gaussians. Although this seems somewhat idealistic, the measure and algorithm can already be very useful and even powerful in scenarios when the model is (approximately) valid.
 
-	For example, a natural image typically consists of multiple regions with nearly homogeneous textures. If we take many small windows from each region, they should resemble samples drawn from a (low-dimensional) Gaussian, as illustrated in \Cref{fig:image-patch}. \Cref{fig:image-segmentation} shows the results of image segmentation based on applying the above clustering algorithm to the image patches directly. More technical details regarding customizing the algorithm to the image segmentation problem can be found in \cite{Mobahi-IJCV2011}.
+For example, a natural image typically consists of multiple regions with nearly homogeneous textures. If we take many small windows from each region, they should resemble samples drawn from a (low-dimensional) Gaussian, as illustrated in \Cref{fig:image-patch}. \Cref{fig:image-segmentation} shows the results of image segmentation based on applying the above clustering algorithm to the image patches directly. More technical details regarding customizing the algorithm to the image segmentation problem can be found in \cite{Mobahi-IJCV2011}.
 \end{example}
 
 
@@ -1332,7 +1337,7 @@ Note that this algorithm is tractable as the total number of (pairwise) comparis
 	\label{fig:image-segmentation}
 \end{figure}
 
-\section{Maximizing Information Gain}
+\section{Transformation via Maximizing Information Gain}
 \label{sec:chap4-representation-learning-problem}
 
 
@@ -1428,8 +1433,9 @@ where $\beta >0$.
 Given one can overcome some caveats associated with this framework \cite{kolchinsky2018caveats-ICLR2018}, such as how to accurately evaluate mutual information with finite samples of degenerate distributions, this framework can be helpful in explaining certain behaviors of deep networks. 
 For example, recent work \cite{papyan2020prevalence} indeed shows that the representations learned via the cross-entropy loss \eqref{chap4-eqn:cross-entropy} exhibit a \emph{neural collapse} phenomenon. 
 That is, features of each class are mapped to a one-dimensional vector whereas all other information of the class is suppressed, as illustrated in \Cref{chap4-fig:neural-collapse}.
-\begin{remark}
-    Neural collapse refers to a phenomenon observed in deep neural networks trained for classification, where the learned feature representations and classifier weights exhibit highly symmetric and structured behavior during the terminal phase of training \cite{papyan2020prevalence,zhu2021geometric}. Specifically, within each class, features collapse to their class mean, and across classes, these means become maximally separated, forming a simplex equiangular configuration. The linear classifier aligns with the class mean up to rescaling. Additionally, the last-layer classifier converges to choosing whichever class has the nearest train class mean. Neural collapse reveals deep connections between optimization dynamics, generalization, and geometric structures arising in supervised learning.  
+\begin{remark}[Neural Collapse]
+    Neural collapse refers to a phenomenon observed in deep neural networks trained for classification, where the learned feature representations and classifier weights exhibit highly symmetric and structured behavior during the terminal phase of training \cite{papyan2020prevalence,zhu2021geometric}. Specifically, within each class, features collapse to their class mean, and across classes, these means become maximally separated, forming a simplex equiangular configuration. The linear classifier aligns with the class mean up to rescaling. Additionally, the last-layer classifier converges to choosing whichever class has the nearest train class mean. Neural collapse reveals deep connections between optimization dynamics, generalization, and geometric structures arising in supervised learning. 
+    \label{remark:neural-collapse}
 \end{remark}
 
 From the above example of classification, we see that the so-learned representation gives a very simple encoder that essentially maps each class of data to only one code word: the one-hot vector representing each class. From the lossy compression perspective, such an encoder is too lossy to preserve information in the data distribution. Other information, such as that useful for tasks such as image generation, is severely lost in such a supervised learning process. To remedy this situation, we want to learn a different encoding scheme such that the resulting feature representation can capture much richer information about the data distribution, not limited to that useful for classification alone.
@@ -1450,24 +1456,37 @@ Whether the given data $\X$ of a mixed distribution $\mathcal{D}$ can be effecti
 Not only do we need to identify the low-dimensional distribution, but we also want to represent the distribution in a form that best facilitates subsequent tasks such as classification, clustering, and conditioned generation (as we will see in the future). To do so, we require our learned feature representations to have the following properties:
 \begin{enumerate}
 	\item {\em Within-Class Compressible:} Features of samples from the same class should be strongly {\em correlated} in the sense that they belong to a low-dimensional linear subspace.
-	\item {\em Between-Class Discriminative:} Features of samples from different classes should be highly {\em uncorrelated} and belong to different low-dimensional linear subspaces.
+	\item {\em Between-Class Discriminative:} Features of samples from different classes should be highly {\em uncorrelated} and belong to different incoherent low-dimensional linear subspaces.
 	\item {\em Maximally Diverse Representation:} Dimension (or variance) of the features of each class should be {\em as large as possible} as long as they are incoherent to the other classes.
 \end{enumerate}
-We refer to such a representation the {\em linear discriminative representation} (LDR). Notice that the first property aligns well with the objective of the classic {\em principal component analysis} (PCA) that we have discussed in \Cref{sub:pca}. The second property resembles that of the classic {\em  linear discriminant analysis} (LDA)~\cite{HastieTiFr09}. Figure \ref{fig:informative-representation} illustrates these properties with a simple example when the data distribution is actually a mixture of two subspaces. Through compression (denoising or clustering), we first identify that the true data distribution is a mixture of two low-dimensional subspaces (middle) instead of a generic Gaussian distribution (left). We then would like to transform the distribution so that the two subspaces eventually become mutually incoherent/independent (right). 
+We refer to such a representation the {\em linear discriminative representation} (LDR). 
 
-\begin{remark}
+Notice that the first property aligns well with the objective of the classic {\em principal component analysis} (PCA) that we have discussed in \Cref{sub:pca}. It essentially says that features of samples that belong to the same class \footnote{including augmented instances of the same samples} should become or be made highly correlated. In other words, feature representation should be {\em contractive} for samples that are similar. 
+
+The second property requires that for samples that belong to different classes or are believed to be dissimilar, their features should be made (geometrically) incoherent or (statistically) independent.   Figure \ref{fig:informative-representation} illustrates these properties with a simple example when the data distribution is actually a mixture of two subspaces. Through compression (denoising or clustering), we first identify that the true data distribution is a mixture of two low-dimensional subspaces (middle) instead of a generic Gaussian distribution (left). We then would like to transform the distribution so that the two subspaces eventually become mutually incoherent/independent (right). 
+
+\begin{remark}[Linear Discriminative Analysis] One may notice that the second criterion resembles that of the classic {\em  linear discriminant analysis} (LDA)~\cite{HastieTiFr09}.
     Linear discriminant analysis (LDA)~\cite{HastieTiFr09} is a supervised dimensionality reduction technique that aims to find a linear projection of data that maximizes class separability. Specifically, given labeled data, LDA seeks a linear transformation that projects high-dimensional inputs onto a lower-dimensional space where the classes are maximally separated. Note that PCA is an unsupervised method that projects data onto directions of maximum variance without considering class labels. While PCA focuses purely on preserving global variance structure, LDA explicitly exploits label information to enhance discriminative power; see the comparison in \Cref{fig:LDA}. 
-\end{remark}
-
-\begin{figure}
+    \begin{figure}
 	\centering
 	\includegraphics[width=0.7\linewidth]{\toplevelprefix/chapters/chapter3/figs/LDA.png}\vspace{-0.1in}
 	\caption{Comparison between PCA and LDA. Figures adpoted from \url{https://sebastianraschka.com/Articles/2014_python_lda.html}.}
 	\label{fig:LDA}
 \end{figure}
+    But LDA only performs a linear projection of the original data. As we will see LDR can be more general: it seeks a, probably nonlinear, transformation  to make the resulting representation linear and incoherent.
+\end{remark}
 
 
-The third property is also important because we want the learned features to reveal all possible causes of why one class is different from all other classes. For example, to tell ``apple'' from ``orange'', we care not only about color but also shape and the leaves. Ideally, the dimension of each subspace $\{\mathcal{S}_k\}$ should be equal to that of the corresponding submanifold $\mathcal{M}_k$. This property will be important if we would like the map $f(\x,\theta)$ to be {\em invertible} for tasks such as image generation. For example, if we draw different sample points from the feature subspace for ``apple'', we should be able to decode them to generate diverse images of apples. The feature learned from minimizing the cross entropy \eqref{chap4-eqn:cross-entropy} clearly does not have this property.
+
+\begin{remark}[Contrastive Learning] 
+One may notice that the conventional {\em contrastive learning} \citep{hadsell2006dimensionality,oord2018representation,he2019momentum} aims to achieve similar goals for feature representation as the first two properties stipulate. For data that belong to $k$ different classes, a randomly chosen pair $(\x^i, \x^j)$ is of high probability belonging to difference classes if $k$ is large.\footnote{For example, when $k \ge 100$, a random pair is of probability 99\% belonging to different classes.} Hence it is desirable that the representation $\z^i = f(\x^i, \bm \theta)$ of a sample $\x^i$ should be highly incoherent to those $\z^j$ of other samples $\x^j$ whereas coherent to feature of its transformed version $\tau(\x^i)$, denoted as $\z(\tau(\x^i))$ for $\tau$ in certain augmentation set $\mathcal T$ in consideration. Hence it was proposed heuristically that, to promote  discriminativeness of the learned representation, one may seek to minimize the so-called {\em contrastive loss}: \begin{equation}
+\min_{\bm \theta} - \log \frac{\exp(\langle \z^i, \z(\tau(\x^i))\rangle)}{\sum_{j\not= i} \exp(\langle \z^i, \z^j\rangle)},
+\label{eqn:contrastive-loss}
+\end{equation}
+which is small whenever the inner product $\langle \z^i, \z(\tau(\x^i))\rangle$ is large and $\langle \z^i, \z^j\rangle$ is small for $i \not= j$. Such contrastive loss, and many of its variants, has been widely used in popular (self-supervised) feature learning methods such as the DINO-type features \cite{caron2021unsupervisedlearningvisualfeatures,DINOv2} for visual data. As we will see, based on the lossy coding framework studied in the previous section, we will be able to arrive at a principled objective function that promotes the two properties and at the same time significantly simplifies the practice such as learning the DINO-type features (as we will feature in great details in Chapter \ref{ch:applications}).  
+\end{remark}
+
+The third property is also important because we want the learned features to reveal all possible causes of why one class is different from all other classes. For example, to tell ``apple'' from ``orange'', we care not only about color but also shape and the leaves. Ideally, the dimension of each subspace $\{\mathcal{S}_k\}$ should be equal to that of the corresponding submanifold $\mathcal{M}_k$. This property will be important if we would like the map $f(\x,\theta)$ to be {\em invertible} for tasks such as image generation. For example, if we draw different sample points from the feature subspace for ``apple'', we should be able to decode them, via an inverse map $g(\z, \eta)$, to generate diverse images of apples. Such a pair of mutually inverse mappings $f$ and $g$ makes an autoencoding which we will study in great details in Chapter \ref{ch:autoencoding}. Notice that feature represenations learned from minimizing the cross entropy \eqref{chap4-eqn:cross-entropy} normally do not have this property, as they suffer the so-called {\em neural   collapsing} phenomenon discussed earlier (see Remark \ref{remark:neural-collapse}).
 
 
 In general, although the intrinsic structures of each class/cluster may be low-dimensional, they are by no means simply linear (or Gaussian) in their original representation $\x$ and they need to be made linear first, through some nonlinear transformation.\footnote{We will discuss how this can be done explicitly in \Cref{ch:autoencoding}.} Therefore, overall, we use the nonlinear transformation $f(\x,\theta)$ to seek a representation of the data such that the subspaces that represent all the classes are maximally incoherent linear subspaces. To be more precise, we want to learn a mapping {$\z = f(\x,\theta)$} that maps each of the submanifolds $\mathcal{M}_k \subset \Re^D$ (\Cref{chap4-fig:mcr-diagram} left) to a {\em linear} subspace $\mathcal{S}_k \subset \Re^d$ (\Cref{chap4-fig:mcr-diagram} right). To some extent, the resulting multiple subspaces $\{\mathcal{S}_k\}$ can be viewed as discriminative {\em generalized principal components} \cite{GPCA} or, if orthogonal, {\em independent components} \cite{hyvarinen2000independent} of the resulting features $\z$ for the original data $\bm x$.
