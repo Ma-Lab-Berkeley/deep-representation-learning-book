@@ -1181,6 +1181,144 @@ For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100
 \section{Conditioned 3D Object Generation}
 \yima{image-conditioned CUPID and text-conditioned Michelangelo etc. (Shenghua and Yi)}
 
+% refactor
+\newcommand{\pose}{\boldsymbol{\theta}}
+\newcommand{\object}{\mathcal{O}}
+\newcommand{\Image}{\mathbf{I}}
+\newcommand{\image}{\vI}
+% \newcommand{\mask}{\mathbf{M}^{\textrm{occ}}}
+\newcommand{\render}{\mathbf{\mathcal{P}}}
+\newcommand{\latent}{\mathbf{z}}
+\newcommand{\timestep}{t}
+\newcommand{\latentt}{\mathbf{z}_{\timestep}}
+\newcommand{\latentzero}{\mathbf{z}_{0}}
+\newcommand{\noise}{\boldsymbol{\epsilon}}
+\newcommand{\velocity}{\mathbf{v}}
+\newcommand{\parameter}{\phi}
+\newcommand{\encoder}{\varphi}
+\newcommand{\point}{\mathbf{x}}
+\newcommand{\pixcoord}{\mathbf{u}}
+\newcommand{\feat}{\mathbf{f}}
+\newcommand{\sflow}{\mathbf{\mathcal{G}_{S}}}
+\newcommand{\lflow}{\mathbf{\mathcal{G}_{L}}}
+\newcommand{\transpose}{\operatorname{T}}
+\newcommand{\Grid}{\mG}
+\newcommand{\sgrid}{\mS}
+\newcommand{\numpts}{L}
+% \newcommand{\res}{N}
+\newcommand{\sres}{D}
+\newcommand{\vaeencoder}{\psi}
+\newcommand{\trellis}{{\textsc{TRELLIS}}\xspace}
+% \newcommand{\dino}{\textsc{DINO}\xspace}
+\newcommand{\interp}{\operatorname{BilinearInterp}}
+\newcommand{\slatenc}{\operatorname{SlatEncoder}}
+\newcommand{\twotothree}{$2$D $\to$ $3$D\xspace}
+\newcommand{\threetotwo}{$2$D $\to$ $3$D\xspace}
+\newcommand{\low}{\mathrm{l}}
+\newcommand{\high}{\mathrm{h}}
+
+
+Having explored methods for learning representations from 2D imagery, such as contrastive learning and masked autoencoding, we now turn to a significantly more challenging and ill-posed problem: inferring a complete 3D object structure from a single 2D image. This task lies at the heart of computer vision, aiming to reverse the physics of image formation. An image $\image$ is the result of a rendering process,
+\[
+\image = \render(\object, \pose),
+\]
+where $\object$ represents the 3D object in a canonical, view-agnostic frame and $\pose$ denotes the camera viewpoint. Given only $\image$, the task of disentangling the object's intrinsic properties (e.g., shape, texture) from the extrinsic camera pose is fundamentally ambiguous.
+
+Previous approaches have typically addressed this ambiguity by simplifying the problem. On one hand, 3D generative models focus on producing a high-quality canonical object $\object$ but often disregard the camera pose $\pose$, leading to reconstructions that are plausible but not faithfully pasted to the input view. On the other hand, traditional 3D reconstruction methods often operate in a view-centric frame, effectively fixing the camera pose and thus limiting their ability to generate or ``in-paint'' occluded regions.
+
+In this section, we introduce a unified probabilistic framework, which we call \textbf{Cupid}, that bridges this gap by jointly modeling the distribution over both the 3D object and the camera pose. The central idea is that an ideal system should be able to simultaneously generate a complete 3D model and reason about the precise camera viewpoint that produced the given 2D observation. In the way, the genereated 3D object can be \textit{pasted} into the original image. This approach recasts single-view 3D reconstruction as a conditional sampling problem, aiming to achieve both the geometric fidelity of reconstruction and the rich priors of a generative model.
+
+
+\subsection{Task and Objective}
+\label{sub:cupid_objective}
+
+We formulate generative 3D reconstruction as the task of estimating the joint posterior distribution
+\[
+p(\object, \pose \mid \image)
+\]
+under the constraint that the observation $\image$ is a rendering of the object $\object$ from pose $\pose$. To model this conditional distribution, we employ a flow-based generative model. Specifically, we first map the 3D object and camera pose into a unified volumetric latent representation
+\[
+\latent = \encoder(\object, \pose).
+\]
+We then use a Rectified Flow model to learn the conditional generation of this latent variable. The model defines a linear interpolation between a sample from the data distribution, $\latentzero$, and a sample from a noise distribution, $\noise$, over a normalized time interval $\timestep \in [0,1]$:
+\begin{equation}
+\latentt = (1 - \timestep) \latentzero + \timestep \noise.
+\end{equation}
+The generative process involves reversing this trajectory by learning a time-dependent velocity field
+\[
+\velocity(\latentt, \image, \timestep) = \nabla_{\timestep} \latentt
+\]
+that transports noisy samples towards the data manifold, conditioned on the input image $\image$. We parameterize this velocity field with a neural network $\velocity_{\parameter}$ and train it using the Conditional Flow Matching (CFM) objective~\cite{bib}:
+\begin{equation}
+\mathcal{L}_{\mathrm{CFM}}(\parameter) \doteq \mathbb{E}_{\timestep, \latentzero, \noise} \left\| \velocity_{\parameter}(\latentt, \image, \timestep) - (\noise - \latentzero) \right\|_{2}^{2}.
+\end{equation}
+By sampling from this learned model, we can generate a latent code $\latent$ which can then be decoded into the final 3D object and camera pose.
+
+
+\subsection{Architecture}
+\label{sub:3d_reconstruction_architecture}
+
+The \textbf{Cupid} architecture is designed as a cascaded, two-stage flow model that progressively refines the 3D reconstruction~\citep{bib}. The first stage generates a coarse geometry and camera pose, which the second stage uses to generate high-fidelity geometry and appearance. A key innovation lies in the representation of the camera pose and its integration into the generative process. The overall pipeline is depicted in \Cref{fig:cupid_architecture}.
+
+
+\paragraph{Object and Pose Representation.}
+
+To be processed by the network, the 3D object $\object$ is tensorized into a voxel-based representation
+\[
+\object \triangleq \{\point_i, \feat_i\}_{i=1}^{\numpts},
+\]
+where $\point_i \in \mathbb{R}^3$ is the coordinate of an active voxel and $\feat_i$ is a feature vector encoding local geometry and appearance, compressed from multi-view features using a 3D VAE.
+
+The camera pose $\pose$, represented by its projection matrix $\mathbf{P} = \mathbf{K}[\mathbf{R}|\mathbf{t}]$, is reparameterized in a novel way to facilitate joint generation. Instead of a compact vector, we represent the pose as a dense field of 3D-to-2D correspondences, which we term an \textit{in-cube pixel distribution}:
+\[
+\pose \triangleq \{\point_i, \pixcoord_i\}_{i=1}^{\numpts},
+\]
+where $\pixcoord_i = (u_i, v_i) \in [0,1]^2$ are the normalized 2D pixel coordinates corresponding to the 3D voxel center $\point_i$. These correspondences are obtained via perspective projection:
+\[
+\pixcoord_i = \pi(\mathbf{P}, \point_i).
+\]
+This set of correspondences can be visualized as a 3D UV cube, where the $(u,v)$ values act like view-dependent colors on a 3D grid.
+
+Given a generated set of correspondences, the global camera matrix $\mathbf{P}^{*}$ is recovered by solving a Perspective-n-Point (PnP) problem using a least-squares solver:
+\begin{equation}
+\mathbf{P}^{*} = \argmin_{\mathbf{P}} \sum_{i=1}^{\numpts} \big\|\pi(\mathbf{P},\point_i) - \pixcoord_i\big\|^2.
+\label{eq:pnp_solve}
+\end{equation}
+This formulation elegantly transforms the joint object-pose generation problem into one of generating a 3D object with associated view-dependent ``colors'' (the UV coordinates).
+
+\paragraph{Stage 1: Occupancy and Pose Generation.}
+
+The first stage, driven by a flow model we denote $\sflow$, takes the input image $\image$ and generates two low-resolution grids:
+\begin{itemize}
+\item An \textbf{occupancy cube} $\mathbf{G}_o \in \{0,1\}^{r \times r \times r \times 1}$, which indicates the set of active voxels that constitute the coarse shape of the object.
+\item A \textbf{UV cube} $\mathbf{G}_{uv} \in [0,1]^{r \times r \times r \times 2}$, which stores the normalized pixel coordinates $(u,v)$ for each voxel, effectively encoding the camera pose.
+\end{itemize}
+From these two cubes, we extract the set of active voxels and their corresponding pixel coordinates $\{(\point_i, \pixcoord_i)\}_{i=1}^{\numpts}$ and solve for the camera pose $\mathbf{P}^{*}$ using \Cref{eq:pnp_solve}.
+
+\paragraph{Stage 2: Pose-Aligned Geometry and Appearance Generation.}
+
+The second stage, driven by a flow model $\lflow$, generates the detailed geometry and appearance features $\{\feat_i\}_{i=1}^{\numpts}$ for the active voxels identified in Stage 1. A critical aspect of this stage is \textbf{pose-aligned conditioning}, which injects pixel-local information from the input image to ensure the final reconstruction is faithful to the observation.
+
+Using the camera pose $\mathbf{P}^{*}$ recovered from the first stage, we project each active voxel center $\point_i$ back onto the input image plane to find its corresponding pixel coordinate $\pixcoord_i$. We then sample features from the input image at this location. Specifically, we extract two types of features:
+\begin{enumerate}
+\item \textbf{High-level semantic features} $\feat_i^\dino = \interp(\pixcoord_i, \dino(\image))$, sampled from a pre-trained DINOv2 feature map.
+\item \textbf{Low-level visual features} $\feat_i^\low$, sampled from the output of a lightweight convolutional head, which capture fine details like color and texture that may be lost in the DINOv2 representation.
+\end{enumerate}
+These pixel-aligned features, $\feat_i^\high$ and $\feat_i^\low$, are then concatenated with the current noisy voxel feature $\feat_i^{t}$ at timestep $t$ and fused into the flow transformer via a linear layer. This mechanism ensures that the generative process is strongly guided by the visual evidence in the input image, preventing the color drift and shape inconsistencies common in purely generative models.
+
+
+\subsection{Evaluation}
+\label{sub:cupid_evaluation}
+
+To comprehensively assess the performance, we evaluate three distinct aspects:
+\begin{enumerate}
+\item \textbf{Monocular Geometry Accuracy:} Measures alignment of the visible portion with ground-truth. Metrics: Chamfer Distance (CD), F-score, Mask IoU.
+\item \textbf{Input View Consistency:} Re-render the generated object from the predicted pose and compare to the input. Metrics: PSNR, SSIM, LPIPS.
+\item \textbf{Full 3D Evaluation:} Quality of the complete 3D object (including occluded parts), evaluated qualitatively and with CLIP similarity on novel views.
+\end{enumerate}
+Evaluations are conducted on Toys4K (synthetic) and Google Scanned Objects (GSO, real-world).
+
+
 \section{Conditioned Human Body Motion Generation}
 \yima{EgoAllo (Brent, Annie and Chen), move the stuff from Chapter 6 to here and elaborate on the methods and implementation more.}
 
