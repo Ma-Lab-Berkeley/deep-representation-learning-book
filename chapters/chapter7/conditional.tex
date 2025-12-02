@@ -47,18 +47,28 @@ The popular natural image completion and natural language prediction are two typ
 \end{example}
 
 
+
 \paragraph{Statistical interpretation via Bayes' rule.} Generally speaking, to accomplish such tasks well, we need to get ahold of the conditional distribution $p(\x\mid \y)$. If we had this, then we would be able to find the maximal likelihood estimate (prediction): 
 \begin{equation}
   \hat{\x} = \argmax_{\x} p(\x\mid \y);
 \end{equation}
-compute the conditional expectation estimate: 
+or compute the conditional expectation estimate: 
 \begin{equation}
   \hat{\x} = \mathbb{E}[\x \mid \y] = \int \x p(\x\mid \y)\odif{\vx};
 \end{equation}
-and sample from the conditional distribution:  
+or sample from the conditional distribution:  
 \begin{equation}
   \hat{\x} \sim p(\x \mid \y).
 \end{equation}
+
+Notice that if the conditional distribution $p(\x\mid \y)$ has a low-dimensional support that is nonlinear, these three different estimates can be rather different, as illustrated in Figure \ref{fig:MAP}. Conceptually, the maximum a posteriori (MAP) estimate is the most desired one -- it is the  sample on the distribution of the highly probability to produce the observation $\y$, but is typically the most expensive to compute. 
+
+\begin{figure}
+  \centering 
+  \includegraphics[width=0.55\textwidth]{\toplevelprefix/chapters/chapter7/figs/MAP.pdf}
+  \caption{Comparison of three different surrogates for an estimate of $\x$ given $\y$.}
+  \label{fig:MAP}
+\end{figure}
 
 Notice that from Bayes' rule, we have
 \begin{equation}
@@ -102,35 +112,40 @@ This is equivalent to the following program:
 \begin{equation}\label{eq:lagrange_multiplier_continuation}
 \max_{\x} \left[\log \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big) + \log \exp\Big( - \frac{\mu}{2} \big\|F(\x) - \vlambda/\mu\big\|_2^2\Big)\right],
 \end{equation} 
-where $\vc \doteq {\vlambda}/{\mu}$ can be viewed as a ``mean''  for the constraint function. As $\mu$ becomes large when enforcing the constraint via continuation\footnote{In the same spirit of continuation in \Cref{ch:denoising} where we obtained better approximations of our distribution by sending \(\eps \to 0\), here we send \(\mu \to \infty\). Larger values of \(\mu\) will constrain \(F\) to take smaller and smaller values at the optimum, meaning that the optimum lies within a smaller and smaller neighborhood of the support \(\cS_{\vx}\). Interestingly, the theory of Lagrange multipliers hints that, under certain benign conditions on \(F\) and other terms in the objective, we only need to make \(\mu\) large enough in order to ensure \(F(\vx) = \vzero\) at the optimum, meaning that at \textit{finite} penalty we get \textit{perfect} approximation of the support. In general, we should have the intuition that \(\mu\) plays the same role as  \(\epsilon^{-1}\).}, $\|\vc\|_2$ becomes increasingly small.
+where $\vc \doteq {\vlambda}/{\mu}$ can be viewed as a ``mean''  for the constraint function. As $\mu$ becomes large when enforcing the constraint via continuation\footnote{In the same spirit of continuation in \Cref{ch:denoising} where we obtained better approximations of our distribution by sending \(\eps \to 0\), here we send \(\mu \to \infty\). Larger values of \(\mu\) will constrain \(F\) to take smaller and smaller values at the optimum, meaning that the optimum lies within a smaller and smaller neighborhood of the support \(\cS_{\vx}\). Interestingly, the theory of Lagrange multipliers hints that, under certain benign conditions on \(F\) and other terms in the objective, we only need to make \(\mu\) large enough in order to ensure \(F(\vx) = \vzero\) at the optimum, meaning that at \textit{finite} penalty we get \textit{perfect} approximation of the support. In general, we should have the intuition that \(\mu\) plays the same role as  \(\eps^{-1}\).}, $\|\vc\|_2$ becomes increasingly small. The above program may be interpreted in two different ways. 
 
-The above program may be interpreted in two different ways. Firstly, one may view the first term as the conditional probability of $\y$ given $\x$, and the second term as a probability density for $\x$:
+Firstly, one may view the first term as the conditional probability of $\y$ given $\x$, and the second term as a probability density for $\x$:
 \begin{equation}
   p(\y\mid \x) \propto \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big), \quad 
     p(\x) \propto \exp\Big( - \frac{\mu}{2}\|F(\x) - \vc\|_2^2\Big).
 \end{equation} 
 Hence, solving the constrained optimization for the inverse problem is equivalent to conducting Bayes inference with the above probability densities. Hence solving the above program \eqref{eq:lagrange_multiplier_continuation} via gradient ascent is equivalent to the above maximal likelihood estimate \eqref{eqn:loglikelihoo-gradient-ascent}, 
 in which the gradient  takes the form:
-\begin{equation}
-   \nabla_{\x} \log p(\y \mid \x) + \nabla_{\x} \log p(\x)   =  \pdv{h}{\vx}(\vx)\big(\y - h(\x)\big) + \mu \pdv{F}{\vx}(\vx)\big(\vc - F(\x)\big),
-\end{equation}
-where $\pdv{h}{\vx}(\vx)$ and $\pdv{F}{\vx}(\vx)$ are the Jacobians of $h(\x)$ and $F(\x)$, respectively.
+\begin{eqnarray}
+   && \nabla_{\x} \log p(\y \mid \x) + \nabla_{\x} \log p(\x)  \\
+   &=&  \big\|h(\x) - \y\big\| \pdv{h}{\vx}(\vx) + \mu \big\| F(\x) - \vc \big\| \pdv{F}{\vx}(\vx), \label{eqn:EngMin-gradient}
+\end{eqnarray}
+where $\pdv{h}{\vx}(\vx)$ and $\pdv{F}{\vx}(\vx)$ are the Jacobian of $h(\x)$ and $F(\x)$, respectively. Hence the  process can be viewed as a ``denoising'' process, studied in  \Cref{ch:denoising}, that gradually enforces the data to be closer to the distribution support. Notice that the above derivation suggests that the ``step size'' of the score $\nabla_{\x} \log p(\x)$ of the denoising process is $\mu \big\| F(\x) - \vlambda/\mu\big\|$ which for any fixed $\mu$ is nearly proportional to the distance of the point $\x$ to the support.
 
-Secondly, notice that the above program \eqref{eq:lagrange_multiplier_continuation} is equivalent to:
+Secondly, notice that solving the above program \eqref{eq:lagrange_multiplier_continuation} with $\mu$ increasing is equivalent to:
 \begin{equation}
-\min_{\x} \frac{1}{2}\|h(\x) - \y\|_2^2 + \frac{\mu}{2} \big\|F(\x) - \vlambda/\mu\big\|_2^2,
+\x_\star = \arg\min_{\x} \frac{1}{2}\|h(\x) - \y\|_2^2 + \frac{\mu}{2} \big\|F(\x) - \vlambda/\mu\big\|_2^2 \quad \mbox{as} \quad \mu \uparrow \infty.
 \label{eqn:energy-minimization}
 \end{equation} 
+Due to the conspicuous quadratic form of the two terms in the above equation, they can also be interpreted as certain ``energy'' functions. Such a formulation is often referred to as ``Energy Minimization'' in the machine learning literature, advocated by people like Yann LeCun \cite{LeCun-2006}. Here the energy of a point $\x$ is a quadratic function of its distance to the support of the desired distribution. Notice that in \Cref{ch:denoising} and \Cref{ch:lossy-compression}, we have argued that the notion of entropy is to measure the ``volume'' or uncertainty of the data distribution whereas here the energy depends on the ``distance'' of $\x$ to the support of the distribution. As we minimizes the above energy functions, the entropy (or uncertainty) of the feasible solutions reduces until it reaches (a feasible solution of) the optimal MAP estimate, as illustrated in Figure \ref{fig:EngMin}.
 
-\begin{remark}[Energy versus Entropy]
-Due to the conspicuous quadratic form of the two terms in the above equation, they can also be interpreted as certain ``energy'' functions. Such a formulation is often referred to as ``Energy Minimization'' in the machine learning literature, advocated by people like Yann LeCun \cite{LeCun-2006}. Here the energy of a point $\x$ is measured by its distance to the support of the distribution. Notice that in \Cref{ch:denoising} and \Cref{ch:lossy-compression}, we have argued that the notion of entropy is to measure the ``volume'' or uncertainty of the data distribution. The above continuation process can be viewed as a ``denoising'' process, studied in  \Cref{ch:denoising}, that gradually enforces the data to be closer to the distribution support. As we minimizes the energy, the entropy (or uncertainty) of the data distribution reduces. 
-\end{remark}
-
-
+\begin{figure}
+  \centering 
+  \includegraphics[width=0.6\textwidth]{\toplevelprefix/chapters/chapter7/figs/EngMin.pdf}
+  \caption{Illustration of the continuation process of enforcing the constraints $F(\x) = 0$ and $\y = h(\x)$.}
+  \label{fig:EngMin}
+\end{figure}
 
 
 \paragraph{Several representative practical settings for inference.} 
-In practice, however, initial information about the distributions of $\x$ and the relationship between $\x$ and $\y$ can be given in many different ways and forms. In general, they can mostly be categorized into four cases, which are, conceptually, increasingly more challenging:
+Notice that the above discussion and derivation are based on the assumption that we have perfect knowledge about the function $F(\x)$ and the observation model $h(\x)$. In practice, however, they may not be  available at all. Hence to make the above conceptual solution truly computable, we need to deal with various situations in which information about the distributions of $\x$ and the relationship between $\x$ and $\y$ are given or accessible in different ways and forms.
+
+In general, they can mostly be categorized into four cases, which are, conceptually, increasingly more challenging:
 \begin{itemize}
 \item {\em Case 1:} Both a model for the distribution of $\x$ and the observation model $\y = h(\x)$ $(+ \boldsymbol{w})$ are known, even with an analytical form. This is typically the case for many classic signal processing problems, such as signal denoising, the sparse vector recovery problem we saw in \Cref{ch:classic} and the low-rank matrix recovery problem to be introduced below.
 \item {\em Case 2:} We do not have a model for the distribution but only samples $\X = \{\x_1, \ldots, \x_N\}$ of $\x$, and the observation model $\y = h(\x)$ $ (+ \boldsymbol{w})$ is known.\footnote{In the literature, this setting is sometimes referred to as the {\em empirical Bayesian inference}.} A model for the distribution $p(\x)$ of $\x$ needs to be learned, and subsequently the conditional distribution $p(\x\mid \y)$. Natural image completion or natural language completion (e.g., BERT and GPT) are typical examples of this class of problems.
