@@ -1,5 +1,6 @@
 \providecommand{\toplevelprefix}{../..}  %
 \documentclass[../../book-main.tex]{subfiles}
+\usepackage[table]{xcolor}
 
 \begin{document}
 
@@ -1173,7 +1174,166 @@ For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100
 
 
 \section{Representation Auto-Encoding via Diffusion and Denoising}
-\yima{Conceptual connections and necessity... Practical implementations details... (Robin and Peter)}
+% \yima{Conceptual connections and necessity... Practical implementations details... (Robin and Peter)}
+
+% rae stuff
+\definecolor{deemph}{gray}{0.6}
+\newcommand{\gc}[1]{\textcolor{deemph}{#1}}
+\newcommand{\tablestyle}[2]{\setlength{\tabcolsep}{#1}\renewcommand{\arraystretch}{#2}\centering\scriptsize}
+% \newcommand{\round}[1]{\num[round-mode=places, round-precision=2]{#1}}
+
+Once we have learned a good representation of the data, it is often desirable to be able to generate new samples from the learned representation distribution. In this section, we discuss how to achieve this by connecting the learning and sampling processes of the representation distribution, two aspects covered extensively in earlier chapters. By fitting them into the same framework, we show how to generate high-quality samples from the learned representation distribution effectively and efficiently.
+
+\subsection{Consistent Auto-Encoding of Learned Representations}
+
+As discussed in \Cref{ch:representation-learning}, learning structured representations of the data is crucial for many downstream tasks. In visual representation learning, this is often achieved by self-supervised learning methods such as DINO \cite{caron2021emerging} and SimDINO. In \Cref{ch:consistent}, we posit that a good representation of data should be effectively decoded back into the original data space. This requires a consistent auto-encoding framework that can accurately reconstruct the original data from its learned representation. It is then natural to ask: is the representation learned by methods like DINO consistent and can it be effectively decoded in an auto-encoding framework?
+
+To find out, we can train a \textit{representation auto-encoder} (RAE) that consists of an pretrained representation encoder (e.g. DINO) and a trainable decoder. The encoder $f$ maps an input sample $\x$ to its learned representation $\z = f(\x)$, while the decoder $g$ maps the representation back to the original data space $\x'=g(\z)$. As detailed in \Cref{ch:consistent}, one simple objective is to impose sample-wise consistency by training the decoder to minimize the reconstruction loss between the original data $\x$ and the reconstructed data $\x'$. We outline the details as follows.
+
+\paragraph{The encoder.} We use a pretrained representation encoder $f \colon \cX \to \cZ$ that maps an input data sample $\x \in \cX$ to its learned representation $\z = f(\x) \in \cZ$. The encoder is kept frozen during training. Here, we assume a ViT-based encoder, as introduced in \Cref{sub:contrastive_learning_architecture}.
+\paragraph{The decoder.} For architectural simplicity, we use a trainable ViT-based decoder $g \colon \cZ \to \cX$ that maps the learned representation $\z$ back to the original data space, producing the reconstructed data $\x' = g(\z)$.
+
+\paragraph{Data.} We assume access to a dataset $\cD = \{\x_i\}_{i=1}^N$ of samples from the original data distribution $\cX$. Each sample is an image of the form $\x \in \R^{3 \times H \times W}$, where $H$ and $W$ are the height and width, respectively. The encoder $f$ is set to a patch size of $p_e$ and feature dimension of $d$. Consequently, for each input image $\x$, we would obtain $N = HW/p_e^2$ tokens of dimension $d$. The decoder $g$ with patch size $p_d$ then maps these visual tokens back to reconstruct $\x' \in \R^{3 \times H\frac{p_d}{p_e} \times W\frac{p_d}{p_e}}$ in the original pixel space. By default, we set $p_d = p_e$ to ensure that the reconstructed image has the same resolution as the original image.
+
+\paragraph{Objective and Evaluation Metrics.} To train RAE, our goal is to train a decoder $g$ such that the reconstructed data $\x' = g(f(\x))$ is as close as possible to the original data $\x$. This can be achieved by minimizing a sample-wise consistency loss over the dataset $\cD$. An empirically effective choice of the loss function is a weighted combination of L1, LPIPS \cite{zhang2018unreasonable} \footnote{This is a perceptual loss based on computing distances between features across different layers of a pretrained network. It empirically captures human perceptual similarity better than pixel-wise losses. Refer to the original paper for details.}, and adversarial losses as in GAN \cite{goodfellow2014generative}. Formally, the training objective can be expressed as:
+
+\begin{equation}
+    \min_{\theta} \cL_{\mathrm{RAE}}(\theta) = \Ex_{\x \sim \cD} \left[ \norm{\x' - \x}_1 + \lambda_1 \mathrm{LPIPS}(\x', \x) + \lambda_2 \cL_{\mathrm{GAN}}(\x', \x) \right],
+\end{equation}
+where $\theta$ are the parameters of the decoder $g$, and $\lambda_1, \lambda_2$ are hyperparameters that balance the contributions of each loss term.
+
+For evaluation, we measure the reconstruction quality by computing the FID score \cite{heusel2017gans} on the reconstructed images from the ImageNet-1k validation set, denoted as rFID. A lower rFID indicates better reconstruction quality.
+
+\paragraph{Empirical Results.}
+
+We can compare RAEs trained on different pretrained encoders, including DINOv2, MAE, and SigLIP2. As a baseline, we also consider a vanilla variational autoencoder (VAE) trained directly on the image pixels without any pretrained encoder. One popular choice is SD-VAE. RAE decoders are trained on the ImageNet-1K training set and evaluated on the ImageNet-1K validation set. The results are summarized in \Cref{tab:rae_recon_results}. From \Cref{tab:decoder_scaling_no_noise}, we can see that RAEs with pretrained encoders outperform SD-VAE in reconstruction quality. Furthermore, larger decoder sizes lead to improved reconstruction quality, as shown in \Cref{tab:decoder_scaling_no_noise}, while remaining more efficient than VAEs. \Cref{tab:encoder_scaling_dinov2} shows that the reconstruction quality is stable across different sizes of the DINO encoders. Finally, \Cref{tab:linear_probing} demonstrates that RAEs also retain high-quality representations, achieving much higher linear probing accuracy compared to VAEs.
+
+\begin{table*}[t]
+\centering
+{\captionsetup[subfloat]{labelfont=scriptsize}
+\begin{tabular}{@{}cc@{}}
+\subfloat[
+\scriptsize \textbf{Encoder choice.} All encoders outperform SD-VAE.
+\label{tab:recon_deterministic}
+]
+{\begin{minipage}[t]{0.45\linewidth}{
+    \vspace{0pt}
+    \begin{center}
+    \tablestyle{4pt}{1.1}
+        \begin{tabular}{lc}
+        \toprule
+        Model & rFID \\
+        \midrule
+        \rowcolor{gray!20}
+        DINOv2-B & 0.49 \\
+        \rowcolor{white}
+        SigLIP2-B & 0.53 \\
+        MAE-B & 0.16 \\
+        \midrule
+        SD-VAE & \gc{0.62} \\
+        \bottomrule
+        \end{tabular}
+    \end{center}
+}\end{minipage}
+}
+&
+\subfloat[
+\scriptsize \textbf{Larger decoders} improve rFID while remaining much more efficient than VAEs.
+\label{tab:decoder_scaling_no_noise}
+]
+{\begin{minipage}[t]{0.45\linewidth}{
+    \vspace{0pt}
+    \begin{center}
+    \tablestyle{4pt}{1.1}
+    \begin{tabular}{lcc} 
+        \toprule
+        Decoder & rFID & GFLOPs \\
+        \midrule
+        ViT-B & 0.58 & 22.2 \\
+        ViT-L & 0.50 & 78.1 \\
+        \rowcolor{gray!20}
+        ViT-XL & 0.49 & 106.7 \\
+        \midrule
+        \rowcolor{white}
+        SD-VAE & \gc{0.62} & \gc{310.4} \\
+        \bottomrule
+    \end{tabular} 
+\end{center}}\end{minipage}
+}
+\\[1em]
+\subfloat[
+\scriptsize \textbf{Encoder scaling.}  rFID is stable across RAE sizes.
+\label{tab:encoder_scaling_dinov2}
+]{
+\begin{minipage}[t]{0.45\linewidth}{
+    \vspace{0pt}
+    \begin{center}
+    \tablestyle{4pt}{1.1}
+        \begin{tabular}{lc}
+        \toprule
+        Encoder & rFID \\
+        \midrule
+        DINOv2-S & 0.52 \\
+        \rowcolor{gray!20}
+        DINOv2-B & 0.49 \\
+        \rowcolor{white}
+        DINOv2-L & 0.52 \\
+        \bottomrule
+        \multicolumn{2}{c}{~} \\
+        \multicolumn{2}{c}{~} \\
+        \end{tabular}
+        \vspace{-0.1cm}
+    \end{center}
+}\end{minipage}
+}
+&
+\subfloat[
+\scriptsize \textbf{Representation quality.} RAEs have much higher linear probing accuracy than VAEs.
+\label{tab:linear_probing}
+]
+{\begin{minipage}[t]{0.45\linewidth}{
+    \vspace{0pt}
+    \begin{center}
+    \tablestyle{4pt}{1.1}
+        \begin{tabular}{lc} 
+            \toprule
+            Model & Top-1 Acc. \\
+            \midrule
+            
+            \rowcolor{gray!20} DINOv2-B & 84.5 \\
+            \rowcolor{white}
+            SigLIP2-B & 79.1 \\
+            MAE-B & 68.0 \\
+            \midrule
+            SD-VAE & \gc{8.0} \\
+            \bottomrule
+        \end{tabular}
+    \end{center}
+}\end{minipage}
+}
+\end{tabular}
+}
+% \vspace{-4pt}
+\caption{
+\small\textbf{Reconstruction and linear probing results of RAEs.} }
+\label{tab:rae_recon_results}
+\end{table*}
+
+\subsection{Sampling from Learned Representations via Denoising and Diffusion}
+
+Having learned a consistent and structured representation space via RAEs, we now turn to the task of generating \textit{new samples} from the learned representation distribution. This involves sampling from the latent space $\cZ$ of the RAE and decoding these samples back to the data space $\cX$ using the trained decoder $g$. To achieve this, we can leverage denoising and diffusion techniques, as introduced in earlier chapters. Concretely, suppose we have a probabilistic model $p(\z)$ that captures the distribution of the learned representations $\cZ$ and an initial standard Gaussian distribution $\cN(0, I)$. Our goal is to learn a denoiser $\bar{\z}$ such that it iteratively denoises a sample from the initial distribution to the target distribution of the learned representations. This denoiser can be trained using objectives introduced in \Cref{ch:conditional-inference}. Let's take the simple case of flow matching. We can define the denoiser as a time-dependent vector field $\bar{\z}_{\theta}(t, \z_t)$ parameterized by $\theta$ that transforms a sample from the initial distribution to the target distribution over time $t \in [0, 1]$. Here, $\z_t$ is an interpolation between $\z_0$ and $\z_1$ at time $t$:
+\begin{equation}
+    \z_t = (1 - t)\z_0 + t\z_1,
+\end{equation}
+where $\z_0 \sim p(\z)$ is a sample from the learned representation distribution and $\z_1 \sim \cN(0, I)$.
+The training objective for the denoiser can then be expressed as:
+\begin{equation}
+    \min_{\theta} \cL_{\mathrm{FM}}(\theta) = \Ex_{\z_0 \sim p(\z), \z_1 \sim \cN(0, I), t \sim \mathrm{Unif}(0, 1)} \left[ \norm{\bar{\z}_{\theta}(t,\z_t) - (\z_1 - \z_0)}_2^2 \right].
+\end{equation}
+
+
+Once we have trained the denoiser, we can use it to generate new samples from the learned representation distribution via a diffusion process. The generated representations can then be decoded back to the data space using the RAE decoder $g$. 
+
 
 \section{Conditioned 2D Image/Video Generation}
 \yima{SimCLIP... and DPS implementation, classifier-free, or cross-attention etc. (Robin, Jingfeng, and Peter)}
