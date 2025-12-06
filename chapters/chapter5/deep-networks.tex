@@ -872,94 +872,7 @@ when pre-trained on ImageNet-1K. For ImageNet-1K/ImageNet-1K ReaL, we directly e
 \end{tabular}}
 \end{table*}
 
-\subsection{Causal CRATE}
 
-Some of the most popular applications of deep networks are in the regimes of \textit{sequence data} where, unlike the previous example of imagery, there is a natural order to the data. For example, unlike in imagery (where one tends to look at the whole image at once), language is processed one token at a time (causally). This simple fact motivates the development of large language models (LLMs), which are trained to predict the (probability distribution of) the next token in a sequence given \textit{only the history of previous tokens}. Then, to sample from an LLM, one simply iteratively samples from the predicted distribution for the next token and then appends the sampled token to the history. In order to train LLMs, and other models such as video generation models, it is necessary to develop architectures which can efficiently perform this causal computation.
-
-With this in mind, and the understanding of causal autoregressive processes from \Cref{ch:intro}, we say that an encoder \(f\) is \textit{causal} if for every input \(\vX = [\vx_{1}, \dots, \vx_{N}]\), it holds 
-\begin{equation}
-    f(\vX)_{1:N-1} = f([\vx_{1}, \dots, \vx_{N}])_{1:N-1} = f([\vx_{1}, \dots, \vx_{N - 1}]) = f(\vX_{1:N-1}),
-\end{equation}
-where \(\vZ_{1:N-1} = [\vz_{1}, \dots, \vz_{N-1}]\), etc. In English, this means that the first \(N-1\) features are equal to the output of the encoder on the first \(N-1\) token embeddings of the input; even simpler, it means we can compute the features of each token \textit{one at a time}, and this would be equivalent to computing the features for the entire input. This causality is necessary for the previously mentioned applications (e.g., LLMs). In particular, the previously presented implementations of CRATE and ToST are \textit{not causal} (proof is left as an exercise).
-
-We can construct causal white-box architectures by a variety of methods. Here, we will showcase a simple method which builds on our previous unrolled optimization framework. Specifically, we compute the features \(\vz_{1}, \dots, \vz_{N}\) corresponding to the first \(N\) tokens of the input \textit{one-at-a-time} to optimize the representation learning objective, such as the sparse rate reduction \eqref{eq:sparse-rr-1}:
-\begin{equation}
-    \max_{\vz_{i}}[\Delta R(\vZ_{1:i} \mid \vU_{[K]}) - \lambda \|\vZ_{1:i}\|_{1}],\quad \forall i \in [N].
-\end{equation}
-If we follow through with the two-step unrolling procedure that yielded CRATE, we can obtain the iteration:
-\begin{align}
-    \vz_{i}^{\ell + 1/2} &\approx \vz_{i}^{\ell} - \kappa \nabla_{\vz_{i}} R(\vZ_{1:i}^{\ell} \mid \vU_{[K]}^{\ell}), \\ 
-    \vz_{i}^{\ell + 1} &\approx \argmin_{\vz_{i}} \left\{\lambda \|\vz_{i}\|_{1} + \frac{1}{2}\norm{\vz_{i}^{\ell + 1/2} - \vD^{\ell} {\vz_{i}}}_F^2\right\},
-\end{align}
-or, using the same conversion from these two steps to network operators that we used for CRATE,
-\begin{align}
-    \vz_{i}^{\ell + 1/2}
-    &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p}{N \epsilon^{2}}\operatorname{MSSA}(\vZ_{1:i}^{\ell} \mid \vU_{[K]}^{\ell})_{i}, \\ 
-    \vz_{i}^{\ell + 1}
-    &= \operatorname{ISTA}(\vz_{i}^{\ell + 1/2} \mid \vD^{\ell}).
-\end{align}
-Let us investigate this iteration in slightly more detail. First, let us note that by construction, this sequence of features corresponds to a causal encoder. Next, let us suppose that we are in a setting where we have computed \(\vZ_{1:i-1}^{\ell + 1} = [\vz_{1}^{\ell + 1}, \dots, \vz_{i-1}^{\ell + 1}]\), having computed the quantities \((\vU_{k}^{\ell})^{\top}\vZ_{1:i-1}^{\ell} = [(\vU_{k}^{\ell})^{\top}\vz_{1}^{\ell}, \dots, (\vU_{k}^{\ell})^{\top}\vz_{i-1}^{\ell}]\) along the way, and want to compute \(\vz_{i}^{\ell + 1}\) (for instance relevant to the case of LLM inference). In this case, note that the update rule for \(\vz_{i}^{\ell + 1/2}\) can be simplified as:
-\begin{align}
-    \vz_{i}^{\ell + 1/2}
-    &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p}{N \epsilon^{2}}\operatorname{MSSA}(\vZ_{1:i}^{\ell} \mid \vU_{[K]}^{\ell})_{i} \\ 
-    &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p^{2}}{N^{2} \epsilon^{4}}\sum_{k =  1}^{K}\vU_{k}\vU_{k}^{\top}\vZ_{1:i}\softmax((\vU_{k}^{\top}\vZ_{1:i})^{\top}(\vU_{k}^{\top}\vz_{i})) \\
-    &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p^{2}}{N^{2} \epsilon^{4}}\sum_{k =  1}^{K}\vU_{k}\vU_{k}^{\top}[\vZ_{1:i-1}, \vz_{i}]\softmax((\vU_{k}^{\top}[\vZ_{1:i-1}, \vz_{i}])^{\top}(\vU_{k}^{\top}\vz_{i})) \\
-    &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p^{2}}{N^{2} \epsilon^{4}}\sum_{k =  1}^{K}\vU_{k}[\vU_{k}^{\top}\vZ_{1:i-1}, \vU_{k}^{\top}\vz_{i}]\softmax(([\vU_{k}^{\top}\vZ_{1:i-1}, \vU_{k}^{\top}\vz_{i}])^{\top}(\vU_{k}^{\top}\vz_{i})).
-\end{align} 
-This step now becomes \textit{highly efficient} if we cache \(\vU_{k}^{\top}\vZ_{1:i-1}\) from previous steps, and add a single column to it each time we compute the projection \(\vU_{k}^{\top}\vz_{i}\). Namely, we greatly reduce the number of large matrix-matrix products and replace them by cache loads and matrix-vector products, which is overall much cheaper in terms of time complexity. This caching is the reason why causal generative models such as LLMs can efficiently sample 1000s of tokens per second, even if each training step takes a few seconds by itself. The cache for the subspace projections of the features is also known as the so-called ``KV cache''.
-
-Finally, let us consider the case where we are to \textit{train} a causal CRATE model, and want to find the most efficient way to do this given a full input sequence \(\vX = [\vx_{1}, \dots, \vx_{N}]\) simultaneously. The ISTA step is parallelizable to become the regular ISTA step from the non-causal CRATE, i.e.,
-\begin{equation}
-    \operatorname{ISTA}(\vZ \mid \vD) \doteq [\ISTA(\vz_{1} \mid \vD), \dots, \ISTA(\vz_{N} \mid \vD)],
-\end{equation}
-therefore implying that the ISTA step remains the same as the non-causal CRATE. The MSSA step is more interesting, since it changes in a meaningful way. To see how it changes, note that each MSSA operator has an interesting structure which merits some attention. Namely, if we define the \textit{causal MSSA operator} as the block matrix:
-\begin{equation}
-    \operatorname{CausalMSSA}(\vZ \mid \vU_{[K]}) \doteq [\operatorname{MSSA}(\vZ_{1:1} \mid \vU_{[K]})_{1}, \dots, \operatorname{MSSA}(\vZ_{1:N} \mid \vU_{[K]})_{N}],
-\end{equation}
-then, working our way through the softmax algebra (proof is again left as an exercise), we can show that
-\begin{align}
-    \operatorname{CausalMSSA}(\vZ \mid \vU_{[K]}) 
-    &\doteq \frac{p}{N\epsilon^{2}}\mat{\vU_{1}, \dots, \vU_{K}}\mat{\softmax((\vU_{1}^{\top}\vZ)^{\top}(\vU_{1}^{\top}\vZ) +\vM_{N}) \\ \vdots \\ \softmax((\vU_{K}^{\top}\vZ)^{\top}(\vU_{K}^{\top}\vZ) + \vM_{N})}, \\ 
-    \text{where} \quad &\vM_{N} = \mat{0 & -\infty & -\infty & \dots & -\infty & -\infty \\ 0 & 0 & -\infty & \dots & -\infty & -\infty \\ \vdots & \vdots & \vdots & \ddots & \vdots & \vdots \\ 0 & 0 & 0 & \dots & 0 & -\infty \\ 0 & 0 & 0 & \dots & 0 & 0} \in \R^{N \times N}.
-\end{align}
-Here the matrix \(\vM_{N}\) is another way to encode that no feature in CausalMSSA depends on a future feature, since the relevant entries of the argument to the softmax are \(-\infty\), and thus are set to \(0\) after the exponential within the softmax, and therefore effectively ignored. This matrix \(\vM_{N}\) is sometimes called a \textit{(causal) attention mask}.
-
-The upshot of this is that when we have the full sequence \(\vZ^{\ell}\), we can compute \(\vZ^{\ell + 1}\) in time similar to or less than that of the usual CRATE layer (since \(\vM_{N}\) is hard-coded, input-independent, and enables us to ignore many entries for the softmax). Thus, we can define and train the full sequence-to-sequence model in the same way as the regular architecture.
-
-When we apply this to language modeling (details to be provided in \Cref{ch:applications}), we find that we can obtain reasonable results compared to similar-sized empirically designed language models, as shown in \Cref{tab:causal-crate-results}.
-
-\begin{table}[t!]
-        \small
-        \caption{\small Zero-shot validation loss of the Causal-CRATE-Base model and GPT2-Small, GPT2-Base model evaluated on the test split of the datasets (lower is better). 
-        }
-        \centering
-        \begin{tabular}{ccccccc}
-        \hline
-        & \#parameters & \textbf{OWT} & \textbf{LAMBADA} & \textbf{WikiText} & \textbf{PTB} & \textbf{Avg} \\
-         \hline
-         GPT2-Base  & {124M} & 2.85 & 4.12 & 3.89 & 4.63 & 3.87 \\
-         {GPT2-Small } &  {64M} & {3.04} & {4.49} & {4.31} & {5.15} & {4.25} \\
-         Causal-CRATE-Base & {60M} & 3.37 & 4.91 & 4.61 & 5.53 & 4.61 \\
-         \hline
-        \end{tabular}
-        \label{tab:causal-crate-results}
-\end{table}
-
-Despite the theoretical advantages of the causal CRATE architecture, the gap on language modeling (and more generally sequence modeling) tasks still remains. Below, we discuss two strategies for potentially closing this gap; they are each the subject of active lines of research.
-
-\begin{example}[Better Objectives and Unrolling Strategies]
-    One path to consider is that the objective of the sparse rate reduction is not the best for causal sequence data. For example, we may want to ensure that the features have some kind of temporal relationships or structure, e.g., being generated by a linear dynamical system with Gaussian (mixture) initialization and Gaussian step noise. There is a recent but explosively popular line of work on efficiently and explicitly modeling dynamics in the features using so-called \textit{state-space models} (SSMs, named such in contravention of the classical notion of ``state space models'' discussed in \Cref{ch:intro}) \citep{gu2024mamba,yang2024parallelizing,yang2024gated}. Such models are empirically promising because they avoid the need for all-pairs attention, dodging the computational and memory complexity of the MSSA operator and its conventional cousin, the multi-head attention. Despite this efficiency gain, they are highly performant and have even been used in some large-scale language models \citep{team2025kimi}. By designing more sophisticated objectives and unrolling strategies, we may be able to build a ``white-box'' SSM architecture, or SSM-transformer hybrid, and thusly close the gap on causal tasks.
-\end{example}
-
-\begin{example}[Inference-Time Computation Strategies]
-    Another path to improve causal models is to use more so-called \textit{inference-time compute} strategies: during inference (such as sampling from an LLM) find a way to do certain network operations more in order to obtain a better result. If we are able to do this, we can solve harder problems by allocating more computational resources to the task at hand.
-
-    One naive approach to this is to loop the model: feed the final features into the initial sequence-to-sequence layers and enable it to go through more rounds of iterative denoising. This methodology is known in the literature as ``looped transformers'' (for the case in which the backbone model is an empirically-designed transformers); this approach has been shown to have benefits at some particularly difficult tasks \citep{giannou2023looped,yang2023looped,saunshi2025reasoning}. However, from our perspective it is more reasonable to loop the iterate through the \textit{same layer} multiple times, taking multiple local denoising or compression steps against the \textit{same model} at each layer before going to the next.
-
-    Still another potential methodology relies on our understanding of the low-dimensional structure in the features and model parameters. For example, since the \(\vU_{[K]}\) matrices are supposed to be supports for the subspaces spanned by the features, we could update them at inference-time using an online algorithm such as online (G)PCA. Similar steps may be able to adapt the dictionary at inference time. This would allow us to improve and specialize our local denoising or compression operators at each layer for the features, and thus potentially yielding better performance.
-
-    There have been many empirical attempts to improve inference-time compute methods. It is still a very active area of ongoing research. 
-\end{example}
 
 
 
@@ -1181,15 +1094,102 @@ where $\eta$ becomes a learnable temperature parameter. Thus, given an input fea
 \end{equation}
 where \(\bm\pi_{k}\) are the columns of \(\bm\Pi = \bm\Pi(\Z \mid \bm U_{[K]})\) defined in \eqref{eq:pi} and \(\bm D\) is defined in \eqref{eq2:grad Rcf}. 
 
+\subsection{Causal CRATE}
 
-\subsection{Online Version}
-\yima{Online causal version: autoregression, RNN, filtering, online PCA...}
+Some of the most popular applications of deep networks are in the regimes of \textit{sequence data} where, unlike the previous example of imagery, there is a natural order to the data. For example, unlike in imagery (where one tends to look at the whole image at once), language is processed one token at a time (causally). This simple fact motivates the development of large language models (LLMs), which are trained to predict the (probability distribution of) the next token in a sequence given \textit{only the history of previous tokens}. Then, to sample from an LLM, one simply iteratively samples from the predicted distribution for the next token and then appends the sampled token to the history. In order to train LLMs, and other models such as video generation models, it is necessary to develop architectures which can efficiently perform this causal computation.
+
+With this in mind, and the understanding of causal autoregressive processes from \Cref{ch:intro}, we say that an encoder \(f\) is \textit{causal} if for every input \(\vX = [\vx_{1}, \dots, \vx_{N}]\), it holds 
+\begin{equation}
+    f(\vX)_{1:N-1} = f([\vx_{1}, \dots, \vx_{N}])_{1:N-1} = f([\vx_{1}, \dots, \vx_{N - 1}]) = f(\vX_{1:N-1}),
+\end{equation}
+where \(\vZ_{1:N-1} = [\vz_{1}, \dots, \vz_{N-1}]\), etc. In English, this means that the first \(N-1\) features are equal to the output of the encoder on the first \(N-1\) token embeddings of the input; even simpler, it means we can compute the features of each token \textit{one at a time}, and this would be equivalent to computing the features for the entire input. This causality is necessary for the previously mentioned applications (e.g., LLMs). In particular, the previously presented implementations of CRATE and ToST are \textit{not causal} (proof is left as an exercise).
+
+We can construct causal white-box architectures by a variety of methods. Here, we will showcase a simple method which builds on our previous unrolled optimization framework. Specifically, we compute the features \(\vz_{1}, \dots, \vz_{N}\) corresponding to the first \(N\) tokens of the input \textit{one-at-a-time} to optimize the representation learning objective, such as the sparse rate reduction \eqref{eq:sparse-rr-1}:
+\begin{equation}
+    \max_{\vz_{i}}[\Delta R(\vZ_{1:i} \mid \vU_{[K]}) - \lambda \|\vZ_{1:i}\|_{1}],\quad \forall i \in [N].
+\end{equation}
+If we follow through with the two-step unrolling procedure that yielded CRATE, we can obtain the iteration:
+\begin{align}
+    \vz_{i}^{\ell + 1/2} &\approx \vz_{i}^{\ell} - \kappa \nabla_{\vz_{i}} R(\vZ_{1:i}^{\ell} \mid \vU_{[K]}^{\ell}), \\ 
+    \vz_{i}^{\ell + 1} &\approx \argmin_{\vz_{i}} \left\{\lambda \|\vz_{i}\|_{1} + \frac{1}{2}\norm{\vz_{i}^{\ell + 1/2} - \vD^{\ell} {\vz_{i}}}_F^2\right\},
+\end{align}
+or, using the same conversion from these two steps to network operators that we used for CRATE,
+\begin{align}
+    \vz_{i}^{\ell + 1/2}
+    &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p}{N \epsilon^{2}}\operatorname{MSSA}(\vZ_{1:i}^{\ell} \mid \vU_{[K]}^{\ell})_{i}, \\ 
+    \vz_{i}^{\ell + 1}
+    &= \operatorname{ISTA}(\vz_{i}^{\ell + 1/2} \mid \vD^{\ell}).
+\end{align}
+Let us investigate this iteration in slightly more detail. First, let us note that by construction, this sequence of features corresponds to a causal encoder. Next, let us suppose that we are in a setting where we have computed \(\vZ_{1:i-1}^{\ell + 1} = [\vz_{1}^{\ell + 1}, \dots, \vz_{i-1}^{\ell + 1}]\), having computed the quantities \((\vU_{k}^{\ell})^{\top}\vZ_{1:i-1}^{\ell} = [(\vU_{k}^{\ell})^{\top}\vz_{1}^{\ell}, \dots, (\vU_{k}^{\ell})^{\top}\vz_{i-1}^{\ell}]\) along the way, and want to compute \(\vz_{i}^{\ell + 1}\) (for instance relevant to the case of LLM inference). In this case, note that the update rule for \(\vz_{i}^{\ell + 1/2}\) can be simplified as:
+\begin{align}
+    \vz_{i}^{\ell + 1/2}
+    &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p}{N \epsilon^{2}}\operatorname{MSSA}(\vZ_{1:i}^{\ell} \mid \vU_{[K]}^{\ell})_{i} \\ 
+    &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p^{2}}{N^{2} \epsilon^{4}}\sum_{k =  1}^{K}\vU_{k}\vU_{k}^{\top}\vZ_{1:i}\softmax((\vU_{k}^{\top}\vZ_{1:i})^{\top}(\vU_{k}^{\top}\vz_{i})) \\
+    &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p^{2}}{N^{2} \epsilon^{4}}\sum_{k =  1}^{K}\vU_{k}\vU_{k}^{\top}[\vZ_{1:i-1}, \vz_{i}]\softmax((\vU_{k}^{\top}[\vZ_{1:i-1}, \vz_{i}])^{\top}(\vU_{k}^{\top}\vz_{i})) \\
+    &= \left(1 - \frac{\kappa p}{N\epsilon^{2}}\right)\vz_{i}^{\ell} + \frac{\kappa p^{2}}{N^{2} \epsilon^{4}}\sum_{k =  1}^{K}\vU_{k}[\vU_{k}^{\top}\vZ_{1:i-1}, \vU_{k}^{\top}\vz_{i}]\softmax(([\vU_{k}^{\top}\vZ_{1:i-1}, \vU_{k}^{\top}\vz_{i}])^{\top}(\vU_{k}^{\top}\vz_{i})).
+\end{align} 
+This step now becomes \textit{highly efficient} if we cache \(\vU_{k}^{\top}\vZ_{1:i-1}\) from previous steps, and add a single column to it each time we compute the projection \(\vU_{k}^{\top}\vz_{i}\). Namely, we greatly reduce the number of large matrix-matrix products and replace them by cache loads and matrix-vector products, which is overall much cheaper in terms of time complexity. This caching is the reason why causal generative models such as LLMs can efficiently sample 1000s of tokens per second, even if each training step takes a few seconds by itself. The cache for the subspace projections of the features is also known as the so-called ``KV cache''.
+
+Finally, let us consider the case where we are to \textit{train} a causal CRATE model, and want to find the most efficient way to do this given a full input sequence \(\vX = [\vx_{1}, \dots, \vx_{N}]\) simultaneously. The ISTA step is parallelizable to become the regular ISTA step from the non-causal CRATE, i.e.,
+\begin{equation}
+    \operatorname{ISTA}(\vZ \mid \vD) \doteq [\ISTA(\vz_{1} \mid \vD), \dots, \ISTA(\vz_{N} \mid \vD)],
+\end{equation}
+therefore implying that the ISTA step remains the same as the non-causal CRATE. The MSSA step is more interesting, since it changes in a meaningful way. To see how it changes, note that each MSSA operator has an interesting structure which merits some attention. Namely, if we define the \textit{causal MSSA operator} as the block matrix:
+\begin{equation}
+    \operatorname{CausalMSSA}(\vZ \mid \vU_{[K]}) \doteq [\operatorname{MSSA}(\vZ_{1:1} \mid \vU_{[K]})_{1}, \dots, \operatorname{MSSA}(\vZ_{1:N} \mid \vU_{[K]})_{N}],
+\end{equation}
+then, working our way through the softmax algebra (proof is again left as an exercise), we can show that
+\begin{align}
+    \operatorname{CausalMSSA}(\vZ \mid \vU_{[K]}) 
+    &\doteq \frac{p}{N\epsilon^{2}}\mat{\vU_{1}, \dots, \vU_{K}}\mat{\softmax((\vU_{1}^{\top}\vZ)^{\top}(\vU_{1}^{\top}\vZ) +\vM_{N}) \\ \vdots \\ \softmax((\vU_{K}^{\top}\vZ)^{\top}(\vU_{K}^{\top}\vZ) + \vM_{N})}, \\ 
+    \text{where} \quad &\vM_{N} = \mat{0 & -\infty & -\infty & \dots & -\infty & -\infty \\ 0 & 0 & -\infty & \dots & -\infty & -\infty \\ \vdots & \vdots & \vdots & \ddots & \vdots & \vdots \\ 0 & 0 & 0 & \dots & 0 & -\infty \\ 0 & 0 & 0 & \dots & 0 & 0} \in \R^{N \times N}.
+\end{align}
+Here the matrix \(\vM_{N}\) is another way to encode that no feature in CausalMSSA depends on a future feature, since the relevant entries of the argument to the softmax are \(-\infty\), and thus are set to \(0\) after the exponential within the softmax, and therefore effectively ignored. This matrix \(\vM_{N}\) is sometimes called a \textit{(causal) attention mask}.
+
+The upshot of this is that when we have the full sequence \(\vZ^{\ell}\), we can compute \(\vZ^{\ell + 1}\) in time similar to or less than that of the usual CRATE layer (since \(\vM_{N}\) is hard-coded, input-independent, and enables us to ignore many entries for the softmax). Thus, we can define and train the full sequence-to-sequence model in the same way as the regular architecture.
+
+When we apply this to language modeling (details to be provided in \Cref{ch:applications}), we find that we can obtain reasonable results compared to similar-sized empirically designed language models, as shown in \Cref{tab:causal-crate-results}.
+
+\begin{table}[t!]
+        \small
+        \caption{\small Zero-shot validation loss of the Causal-CRATE-Base model and GPT2-Small, GPT2-Base model evaluated on the test split of the datasets (lower is better). 
+        }
+        \centering
+        \begin{tabular}{ccccccc}
+        \hline
+        & \#parameters & \textbf{OWT} & \textbf{LAMBADA} & \textbf{WikiText} & \textbf{PTB} & \textbf{Avg} \\
+         \hline
+         GPT2-Base  & {124M} & 2.85 & 4.12 & 3.89 & 4.63 & 3.87 \\
+         {GPT2-Small } &  {64M} & {3.04} & {4.49} & {4.31} & {5.15} & {4.25} \\
+         Causal-CRATE-Base & {60M} & 3.37 & 4.91 & 4.61 & 5.53 & 4.61 \\
+         \hline
+        \end{tabular}
+        \label{tab:causal-crate-results}
+\end{table}
+
+Despite the theoretical advantages of the causal CRATE architecture, the gap on language modeling (and more generally sequence modeling) tasks still remains. Below, we discuss two strategies for potentially closing this gap; they are each the subject of active lines of research.
+
+\begin{example}[Better Objectives and Unrolling Strategies]
+    One path to consider is that the objective of the sparse rate reduction is not the best for causal sequence data. For example, we may want to ensure that the features have some kind of temporal relationships or structure, e.g., being generated by a linear dynamical system with Gaussian (mixture) initialization and Gaussian step noise. There is a recent but explosively popular line of work on efficiently and explicitly modeling dynamics in the features using so-called \textit{state-space models} (SSMs, named such in contravention of the classical notion of ``state space models'' discussed in \Cref{ch:intro}) \citep{gu2024mamba,yang2024parallelizing,yang2024gated}. Such models are empirically promising because they avoid the need for all-pairs attention, dodging the computational and memory complexity of the MSSA operator and its conventional cousin, the multi-head attention. Despite this efficiency gain, they are highly performant and have even been used in some large-scale language models \citep{team2025kimi}. By designing more sophisticated objectives and unrolling strategies, we may be able to build a ``white-box'' SSM architecture, or SSM-transformer hybrid, and thusly close the gap on causal tasks.
+\end{example}
+
+\begin{example}[Inference-Time Computation Strategies]
+    Another path to improve causal models is to use more so-called \textit{inference-time compute} strategies: during inference (such as sampling from an LLM) find a way to do certain network operations more in order to obtain a better result. If we are able to do this, we can solve harder problems by allocating more computational resources to the task at hand.
+
+    One naive approach to this is to loop the model: feed the final features into the initial sequence-to-sequence layers and enable it to go through more rounds of iterative denoising. This methodology is known in the literature as ``looped transformers'' (for the case in which the backbone model is an empirically-designed transformers); this approach has been shown to have benefits at some particularly difficult tasks \citep{giannou2023looped,yang2023looped,saunshi2025reasoning}. However, from our perspective it is more reasonable to loop the iterate through the \textit{same layer} multiple times, taking multiple local denoising or compression steps against the \textit{same model} at each layer before going to the next.
+
+    Still another potential methodology relies on our understanding of the low-dimensional structure in the features and model parameters. For example, since the \(\vU_{[K]}\) matrices are supposed to be supports for the subspaces spanned by the features, we could update them at inference-time using an online algorithm such as online (G)PCA. Similar steps may be able to adapt the dictionary at inference time. This would allow us to improve and specialize our local denoising or compression operators at each layer for the features, and thus potentially yielding better performance.
+
+    There have been many empirical attempts to improve inference-time compute methods. It is still a very active area of ongoing research. 
+\end{example}
+
+
+\subsection{Casual ToST}
+\yima{Causal version of ToST: relations to nonlinear filtering, RNNs, and other linear time architectures...}
+
 
 
 \section{Summary and Notes}
-
-
-
 
 The materials presented in this chapter are based on a series of recent works on this topic, including \cite{chan2021redunet, wang2024global, wang2025attention, wu2025token, yu2023white}. These contributions encompass both theoretical advances and practical methodologies for constructing interpretable deep networks through unrolled optimization. Many of the key results and proofs discussed in this chapter are derived directly from, or inspired by, these foundational works. 
 
