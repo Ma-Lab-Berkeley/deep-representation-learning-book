@@ -1,0 +1,396 @@
+% EgoAllo: Egocentric Human Motion Estimation
+% Section for Chapter 7 - Learning Representations for Real-World Data
+%
+% Following the structure of the Cupid (3D Object Generation) section
+
+% \section{Egocentric Human Motion Estimation}
+% \label{sec:egoallo}
+
+Head-mounted devices, including AR/VR headsets and smart glasses, are becoming increasingly mainstream. These devices sense the world from the wearer's perspective, a viewpoint known as \emph{egocentric}. For many applications in augmented reality, robotics, and telepresence, understanding the wearer's own body motion is critical: we need to know where their hands are to enable interaction, how their body is posed to render a virtual avatar, and how they are moving through the environment.
+
+However, estimating the wearer's body from egocentric sensors presents a fundamental challenge: the body is rarely visible in forward-facing cameras mounted on the head. Unlike third-person (exocentric) views where the full body can be observed, egocentric video typically shows only the hands and the environment ahead.
+The key insight enabling body estimation from head-mounted devices is that \emph{head motion encodes information about body motion}. When a person walks, their head bobs in a characteristic pattern; when they reach for an object, head orientation shifts predictably. These correlations, learned from motion capture data, can be exploited to infer plausible body poses from head trajectories alone.
+
+Unlike most prior work in egocentric motion estimation that focuses solely on body pose, estimating body \emph{height} is critical for scene grounding. A pose estimate cannot be meaningfully placed in the world without knowing the person's height: the feet must contact the floor and the head must align with the sensed camera position. This coupling between pose and height is often overlooked but essential for producing estimates that are physically consistent with the observed environment.
+
+This section presents EgoAllo \citep{yi2025egoallo}, a method that estimates full-body pose, height, and hand parameters from egocentric SLAM poses and images. The approach is a direct application of the conditional inference framework from Chapter~\ref{ch:conditional-inference}: we learn a conditional prior $p(\vec{x} \mid \vec{c})$ over body motion given head motion, then incorporate additional measurements (hand observations from images, physical constraints) via guided sampling. Figure~\ref{fig:egoallo_teaser} illustrates the setup and outputs.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/egoallo/teaser_oct9.pdf}
+    \caption{\textbf{Egocentric Human Motion Estimation.} Given head poses from SLAM and egocentric images from a head-mounted device (left), we estimate full body pose, height, and hand parameters in the world (allocentric) reference frame (right). The estimated bodies are grounded in the scene, enabling applications in AR/VR, telepresence, and human-robot interaction.}
+    \label{fig:egoallo_teaser}
+\end{figure}
+
+
+% ==============================================================================
+\subsection{Task and Objective}
+\label{sub:egoallo_objective}
+% ==============================================================================
+
+\paragraph{Body representation.}
+We represent human bodies using the SMPL-H model \citep{romero2017embodied}, a differentiable function that maps pose and shape parameters to a 3D body mesh. SMPL-H extends the SMPL body model \citep{loper2015smpl} with articulated hands based on the MANO hand model. Given pose parameters $\theta$ (joint rotations), and shape parameters $\beta$ (body proportions), the model produces a rigged mesh with 52 body joints and detailed hand articulation.
+
+\paragraph{Unknown variables.}
+We seek to estimate a human motion sequence over $T$ timesteps:
+\begin{equation}
+\vec{x}_0 = \{\vec{x}_0^{\ 1}, \dots, \vec{x}_0^{\ T}\},
+\end{equation}
+where each per-timestep state collects the relevant human parameters:
+\begin{equation}
+\vec{x}_0^{\ t} = \big(\theta^t,\, \phi^t,\, \beta,\, s\big).
+\end{equation}
+Here $\theta^t$ are SMPL-H body joint rotations at time $t$, $\phi^t$ are hand rotations, $\beta$ are body-shape parameters (time-invariant across the sequence), and $s$ is a height parameter (also time-invariant). We use the subscript $0$ in $\vec{x}_0$ to denote the ``clean'' (noise-free) motion, following standard diffusion model notation where $\vec{x}_n$ denotes the noisy version at diffusion step $n$.
+
+\paragraph{Measurements.}
+We observe metric SLAM head poses and egocentric images from a head-mounted device:
+\begin{equation}
+\mathbf{y} := (\mathbf{h}_{1:T}, I_{1:T}),
+\end{equation}
+where $\mathbf{h}_{1:T} \in SE(3)^T$ are the SLAM head poses (with metric scale and global orientation) and $I_{1:T}$ are the egocentric images.
+
+From the images, an off-the-shelf hand estimator (e.g., HaMeR \citep{pavlakos2023hamer}) produces per-frame hand measurements:
+\begin{equation}
+\mathbf{y}^{\text{hand},t} = \big(\hat{\phi}^{\text{MANO},t},\, \hat{\mathbf{q}}^{3D,t},\, \hat{\mathbf{q}}^{2D,t}\big),
+\end{equation}
+consisting of estimated hand rotations, 3D hand keypoints (in camera frame), and 2D image keypoints. We also consider physical consistency constraints such as ground contact and foot skating penalties, abstracted as $\mathbf{y}^{\text{phys}}$.
+
+\paragraph{Posterior formulation.}
+Following the Bayesian inference framework from Chapter~\ref{ch:conditional-inference}, we seek to sample from the posterior:
+\begin{equation}
+p(\vec{x}_0 \mid \mathbf{y}) \;\propto\; p_\theta(\vec{x}_0 \mid \vec{c}) \cdot p(\mathbf{y}^{\text{hand}}, \mathbf{y}^{\text{phys}} \mid \vec{x}_0),
+\end{equation}
+where:
+\begin{itemize}
+\item $p_\theta(\vec{x}_0 \mid \vec{c})$ is a learned conditional prior (a diffusion model that generates plausible body motion given head motion),
+\item $\vec{c} = g(\mathbf{h}_{1:T})$ is a deterministic, invariant encoding of the head poses (described in Section~\ref{sub:egoallo_representation}),
+\item $p(\mathbf{y}^{\text{hand}}, \mathbf{y}^{\text{phys}} \mid \vec{x}_0)$ is the likelihood of the hand and physics observations given the body motion.
+\end{itemize}
+
+We express the likelihood via a guidance energy $\mathcal{L}_{\text{guide}}$:
+\begin{equation}
+p(\mathbf{y}^{\text{hand}}, \mathbf{y}^{\text{phys}} \mid \vec{x}_0) \propto \exp\big(-\mathcal{L}_{\text{guide}}(\vec{x}_0)\big),
+\end{equation}
+so that the posterior becomes:
+\begin{equation}
+\label{eq:egoallo_posterior}
+p(\vec{x}_0 \mid \mathbf{y}) \;\propto\; p_\theta(\vec{x}_0 \mid \vec{c}) \exp\big(-\mathcal{L}_{\text{guide}}(\vec{x}_0)\big).
+\end{equation}
+This formulation directly parallels the conditional inference framework developed in Chapter~\ref{ch:conditional-inference}, where a learned prior is combined with measurement constraints via guided sampling.
+
+
+% ==============================================================================
+\subsection{Invariant Head Motion Representation}
+\label{sub:egoallo_representation}
+% ==============================================================================
+
+As emphasized throughout this book, the choice of representation fundamentally affects learning and generalization. This principle is particularly important when conditioning a motion prior on head poses: naive approaches using raw $SE(3)$ poses lead to poor generalization. The key insight is to identify invariance properties that the conditioning representation should satisfy.
+
+\paragraph{Spatial invariance.}
+The mapping from head motion to body motion should be invariant to rigid transformations along the floor plane. Intuitively, walking forward in the kitchen should produce the same body pose estimates as walking forward in the living room; the absolute location and orientation in world coordinates should not matter.
+
+This rules out conditioning directly on absolute head poses. As illustrated in Figure~\ref{fig:egoallo_conditioning}, identical local body motion can correspond to completely different absolute head trajectories depending on where the motion occurs in the world.
+
+\paragraph{Temporal invariance.}
+The mapping should also be invariant to shifts of the observation window in time. Processing frames $0$--$100$ should behave the same as processing frames $50$--$150$ if they contain the same motion. This rules out using cumulative quantities (like total displacement from start) or absolute time indices.
+
+A common approach in prior work is to canonicalize sequences by aligning them to the first timestep. However, this violates temporal invariance: different temporal slices of the same motion, when canonicalized to their respective first frames, produce different head pose trajectories even though the underlying body motion is identical.
+
+\paragraph{Invariant parameterization.}
+To achieve both spatial and temporal invariance, we define a canonical coordinate frame at \emph{every} timestep rather than just at the start of each sequence. The resulting representation couples:
+\begin{itemize}
+\item relative head motion $\Delta\mathbf{T}_{\text{head}}^{t}$ between consecutive frames,
+\item per-timestep canonicalized pose $\mathbf{T}_{\text{canonical}}^{t}$ that removes floor-plane translation and rotation.
+\end{itemize}
+
+These transformations are invariant both to the world coordinate system and to choices in temporal windowing. Formally, the invariant encoding is:
+\begin{equation}
+\vec{c} = g(\mathbf{h}_{1:T}) = \{\vec{c}^{\ 1}, \dots, \vec{c}^{\ T}\},
+\end{equation}
+where each $\vec{c}^{\ t}$ captures the local head motion at time $t$ in a canonicalized frame.
+
+We validate this design choice empirically in Section~\ref{sub:egoallo_experiments}, where it yields substantial accuracy improvements over naive parameterizations.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=2in]{\toplevelprefix/chapters/chapter8/figs/egoallo/conditioning_oct9.pdf}
+    \caption{\textbf{Invariant Head Motion Conditioning.} The conditioning representation must be invariant to both spatial transformations (same motion at different world locations, left) and temporal shifts (same motion at different absolute times, right). Our parameterization achieves both by defining a canonical coordinate frame at every timestep.}
+    \label{fig:egoallo_conditioning}
+\end{figure}
+
+
+% ==============================================================================
+\subsection{Architecture}
+\label{sub:egoallo_architecture}
+% ==============================================================================
+
+The overall pipeline consists of two stages: (1) a conditional diffusion prior that generates body motion from head motion, and (2) a guidance mechanism that refines samples to match hand observations and physical constraints. Figure~\ref{fig:egoallo_method} illustrates the architecture.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/egoallo/method_dec10.pdf}
+    \caption{\textbf{EgoAllo Architecture.} Left: SLAM head poses are transformed into invariant conditioning tokens. Middle: A transformer denoiser generates body motion conditioned on head motion. Right: Guidance incorporates hand observations and physical constraints via proximal optimization during sampling.}
+    \label{fig:egoallo_method}
+\end{figure}
+
+\paragraph{Diffusion model.}
+The backbone is a transformer architecture similar to the Vision Transformer described in Section~\ref{sec:image_classification}. The model takes as input:
+\begin{itemize}
+\item the noisy motion sequence $\vec{x}_n$ at diffusion step $n$,
+\item the diffusion timestep embedding,
+\item the invariant head conditioning tokens $\vec{c}$.
+\end{itemize}
+
+Conditioning is injected by concatenating the head encoding tokens $\vec{c}$ with the motion tokens before the transformer layers. The model outputs a denoised estimate of the clean motion $\vec{x}_0$ directly (rather than predicting the noise), parameterized as joint rotations in a head-relative coordinate frame.
+
+\paragraph{Training.}
+The diffusion model is trained on the AMASS motion capture dataset \citep{mahmood2019amass}, which aggregates multiple motion capture sources into a unified SMPL-H representation. Since AMASS contains body motion but not head-mounted device recordings, we simulate head trajectories by extracting the head joint position and orientation from the motion capture data.
+
+The training objective is the standard denoising score-matching loss:
+\begin{equation}
+\mathcal{L}_{\text{diff}} = \mathbb{E}_{\vec{x}_0, n} \left[ w_n \left\| D_\theta(\vec{x}_n, n, \vec{c}) - \vec{x}_0 \right\|^2 \right],
+\end{equation}
+where $w_n$ are noise-dependent weights and $\vec{x}_n$ is obtained by adding noise to $\vec{x}_0$ according to the forward diffusion process.
+
+\paragraph{Guidance energy.}
+The guidance energy $\mathcal{L}_{\text{guide}}$ measures consistency between a motion hypothesis and the observed measurements:
+\begin{equation}
+\mathcal{L}_{\text{guide}}(\vec{x}_0) = \lambda_{3D}\mathcal{L}_{3D} + \lambda_{2D}\mathcal{L}_{2D} + \lambda_{\text{skate}}\mathcal{L}_{\text{skate}} + \lambda_{\text{prior}}\mathcal{L}_{\text{prior}},
+\end{equation}
+where:
+\begin{itemize}
+\item $\mathcal{L}_{3D}$: 3D hand keypoint alignment in world frame,
+\item $\mathcal{L}_{2D}$: 2D reprojection error in the image plane,
+\item $\mathcal{L}_{\text{skate}}$: foot skating penalty (feet should not slide when in contact with ground),
+\item $\mathcal{L}_{\text{prior}}$: weak regularization on hand pose.
+\end{itemize}
+
+Following the energy-based interpretation from Chapter~\ref{ch:conditional-inference}, this guidance energy plays the role of the negative log-likelihood: $p(\mathbf{y} \mid \vec{x}_0) \propto \exp(-\mathcal{L}_{\text{guide}}(\vec{x}_0))$.
+
+
+% ==============================================================================
+\subsection{Sampling with Measurement Matching}
+\label{sub:egoallo_sampling}
+% ==============================================================================
+
+We now apply the measurement matching framework from Section~\ref{sec:conditioned-decoding} to sample from the posterior over body motion. Recall that the conditional denoiser decomposes as
+\begin{equation}
+\mathbb{E}[\vec{x}_0 \mid \vec{x}_n, \mathbf{y}]
+=
+\mathbb{E}[\vec{x}_0 \mid \vec{x}_n]
++
+\sigma_n^2 \nabla_{\vec{x}_n} \log p(\mathbf{y} \mid \vec{x}_n),
+\end{equation}
+where the first term is the prior denoiser and the second term is the measurement matching correction that enforces consistency with observations.
+
+In our setting, we replace the unconditional prior denoiser with the head-conditioned denoiser $D_n^{\text{head}}(\cdot; \vec{c})$. The resulting conditional denoiser becomes
+\begin{equation}
+D_n^{\text{EgoAllo}}(\vec{z})
+=
+D_n^{\text{head}}(\vec{z};\vec{c})
+-
+\sigma_n^2
+\nabla_{\vec{z}}
+\mathcal{L}_{\text{guide}}(\vec{x}_n(\vec{z})),
+\end{equation}
+where we have used the relationship $\nabla \log p(\mathbf{y} \mid \vec{x}) = -\nabla \mathcal{L}_{\text{guide}}(\vec{x})$ from interpreting the guidance energy as a negative log-likelihood.
+
+\paragraph{Sampling algorithm.}
+Starting from an initial sample $\vec{x}_N \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$, we perform guided sampling by alternating two steps at each diffusion timestep $n$:
+
+\begin{enumerate}
+\item \textbf{Prior denoising step.} Given $\vec{x}_n$, apply a DDIM-style update using the head-conditioned denoiser $D_n^{\text{head}}(\cdot;\vec{c})$ to obtain a proposal $\tilde{\vec{x}}_{n-1}$.
+
+\item \textbf{Measurement-matching step.} Refine the proposal by solving the proximal optimization problem:
+\begin{equation}
+\vec{x}_{n-1}
+=
+\operatorname*{arg\,min}_{\vec{x}}
+\left\{
+\frac{1}{2}\|\vec{x}-\tilde{\vec{x}}_{n-1}\|^2
++
+\gamma_n\,\mathcal{L}_{\text{guide}}(\vec{x})
+\right\},
+\end{equation}
+where $\gamma_n$ is a step-size parameter. In practice, this is implemented via a few iterations of Levenberg--Marquardt optimization on the SMPL-H body and hand pose parameters.
+\end{enumerate}
+
+\paragraph{Global alignment.}
+After the final denoising step ($n=0$), the sampled motion sequence $\vec{x}_0$ represents the body in a head-relative (local) coordinate frame. To place the body in the world (allocentric) frame, we compose the local SMPL-H root transform with the observed SLAM head poses:
+\begin{equation}
+\mathbf{T}_{\text{world},\text{root}}^t
+=
+\mathbf{T}_{\text{world},\text{head}}^t
+\cdot
+\mathbf{T}_{\text{head},\text{root}}^{(\theta^t, \beta)},
+\end{equation}
+where $\mathbf{T}_{\text{head},\text{root}}$ is computed via forward kinematics from the estimated body pose $\theta^t$ and shape $\beta$. This ensures that the estimated body is correctly grounded in the scene, with feet on the floor and hands at their correct world positions.
+
+\paragraph{Sequence length extrapolation.}
+While the diffusion model is trained on sequences of fixed length (32--128 frames), we can extrapolate to arbitrary lengths at test time using the MultiDiffusion path fusion approach \citep{bar2023multidiffusion}. Overlapping temporal windows are denoised in parallel, with the shared regions averaged to produce a consistent output. Notably, accuracy improves even when test sequences exceed the maximum training length, validating the utility of this approach for handling longer recordings.
+
+
+% ==============================================================================
+\subsection{Evaluation}
+\label{sub:egoallo_evaluation}
+% ==============================================================================
+
+\paragraph{Datasets.}
+We evaluate on three datasets spanning synthetic and real-world settings:
+\begin{itemize}
+\item \textbf{AMASS} \citep{mahmood2019amass}: A large-scale motion capture dataset with diverse human motions. We use synthetic head trajectories extracted from the motion capture data for both training and evaluation.
+\item \textbf{RICH} \citep{huang2022rich}: A motion capture dataset with challenging human-scene interactions, providing ground-truth body poses with realistic contact scenarios.
+\item \textbf{Aria Digital Twin (ADT)} \citep{pan2023aria}: Real recordings from Project Aria glasses with ground-truth body poses from a multi-view motion capture system. This tests generalization to real egocentric data.
+\end{itemize}
+
+\paragraph{Metrics.}
+For body pose estimation, we report:
+\begin{itemize}
+\item \textbf{MPJPE}: Mean Per-Joint Position Error (mm), the average Euclidean distance between predicted and ground-truth joint positions.
+\item \textbf{PA-MPJPE}: Procrustes-aligned MPJPE, which removes global translation, rotation, and scale to measure pose accuracy independent of global alignment.
+\item \textbf{Foot skating}: A measure of physical plausibility; feet should not slide when in contact with the ground.
+\item \textbf{GND (Grounding)}: A binary metric indicating whether the estimated feet ever contact the ground plane. This addresses a common failure mode where ego-sensed humans appear to ``float'' above the ground.
+\end{itemize}
+
+For hand estimation, we measure world-frame hand position error, comparing performance with and without body context.
+
+\paragraph{Baselines.}
+We compare against EgoEgo \citep{li2023egoego}, a state-of-the-art diffusion-based method that also conditions on head motion but uses a different conditioning parameterization. This comparison directly isolates the effect of our invariant representation design.
+
+
+% ==============================================================================
+\subsection{Experiments}
+\label{sub:egoallo_experiments}
+% ==============================================================================
+
+\paragraph{Conditioning representation ablation.}
+We first validate the importance of the invariant representation derived in Section~\ref{sub:egoallo_representation}. Table~\ref{tab:egoallo_cond_ablation} compares five conditioning parameterizations on the AMASS test set:
+\begin{itemize}
+\item \textbf{Invariant (ours)}: Per-timestep canonicalization achieving both spatial and temporal invariance.
+\item \textbf{Absolute+Local Relative}: Absolute poses augmented with local-frame relative motion.
+\item \textbf{Absolute+Global Deltas}: Absolute poses with world-frame position deltas \citep{castillo2023bodiffusion,jiang2022avatarposer}.
+\item \textbf{Sequence Canonicalization}: Alignment to first frame \citep{li2023egoego}, which violates temporal invariance.
+\item \textbf{Absolute}: Raw $SE(3)$ head poses with no invariance properties.
+\end{itemize}
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Conditioning representation ablation on AMASS.} We compare conditioning parameterizations that vary in their spatial and temporal invariance properties. The invariant conditioning reduces MPJPE by up to 18\% compared to alternatives.}
+\label{tab:egoallo_cond_ablation}
+\small
+\begin{tabular}{lccccc}
+\toprule
+& \multicolumn{2}{c}{\textbf{Seq Length 32}} & \multicolumn{2}{c}{\textbf{Seq Length 128}} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+\textbf{Conditioning} & MPJPE & \% Diff & MPJPE & \% Diff \\
+\midrule
+Invariant (ours) & \textbf{129.8} & --- & \textbf{119.7} & --- \\
+Absolute+Local Relative & 133.0 & +2.4\% & 124.5 & +4.0\% \\
+Absolute+Global Deltas & 136.2 & +4.9\% & 127.4 & +6.4\% \\
+Sequence Canonicalization & 153.1 & +17.9\% & 134.0 & +11.9\% \\
+Absolute & 159.9 & +23.2\% & 148.3 & +23.9\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The results demonstrate that conditioning parameterization has a dramatic impact on accuracy. The invariant conditioning improves MPJPE by 5--18\% compared to the alternatives. This reinforces a central theme of this book: the choice of representation fundamentally affects learning and generalization.
+
+\paragraph{Body pose estimation.}
+Table~\ref{tab:egoallo_body_results} compares body estimation against three baselines across three datasets: (1) \textbf{NoShape}, a variant without height estimation; (2) \textbf{EgoEgo} \citep{li2023egoego}, which uses sequence canonicalization; and (3) \textbf{VAE+Opt}, an optimization approach adapted from SLAHMR \citep{ye2023slahmr}.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Body pose estimation results.} MPJPE and PA-MPJPE in millimeters, with GND (grounding) as fraction of sequences where feet contact the ground. Results for 128-frame sequences.}
+\label{tab:egoallo_body_results}
+\small
+\begin{tabular}{llccc}
+\toprule
+\textbf{Dataset} & \textbf{Method} & \textbf{MPJPE}$\downarrow$ & \textbf{PA-MPJPE}$\downarrow$ & \textbf{GND}$\uparrow$ \\
+\midrule
+AMASS & Ours & \textbf{119.7} & \textbf{101.1} & \textbf{1.00} \\
+      & NoShape & 128.1 & 110.3 & 0.98 \\
+      & EgoEgo & 167.4 & 145.8 & 0.92 \\
+      & VAE+Opt & 205.3 & 192.3 & 0.75 \\
+\midrule
+RICH  & Ours & \textbf{176.2} & \textbf{160.1} & \textbf{0.96} \\
+      & NoShape & 185.7 & 169.9 & 0.82 \\
+      & EgoEgo & 207.8 & 187.8 & 0.88 \\
+      & VAE+Opt & 319.8 & 323.8 & 0.75 \\
+\midrule
+ADT   & Ours & \textbf{155.1} & \textbf{129.3} & 0.94 \\
+      & NoShape & 163.7 & 140.0 & \textbf{0.96} \\
+      & EgoEgo & 182.6 & 153.9 & 0.73 \\
+      & VAE+Opt & 290.8 & 282.5 & 0.70 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Our method outperforms baselines on all datasets, with MPJPE improvements of 28\% on AMASS, 15\% on RICH, and 15\% on ADT compared to EgoEgo. Shape estimation is critical for grounding: the NoShape ablation shows 6--7\% worse MPJPE and degraded grounding metrics. The VAE+Opt baseline, while effective for exocentric settings with keypoint observations, generalizes poorly to our less constrained egocentric setting.
+
+\paragraph{Hand estimation.}
+An important finding is that body context substantially improves hand estimation in the world frame. Single-frame monocular hand estimators like HaMeR produce accurate local hand poses but suffer from scale and depth ambiguity: they cannot determine the hand's absolute 3D position. By estimating the full body first, we can use kinematic constraints (the hand is attached to the arm, which is attached to the torso) to resolve this ambiguity.
+
+Table~\ref{tab:egoallo_hands} compares hand estimation methods on EgoExo4D. The 2D reprojection loss is important: guiding hands using only 3D wrist positions (\textbf{NoReproj}) produces worse results than using reprojection to 2D keypoints (\textbf{Mono}). Our method reduces world-frame hand MPJPE from 237.9mm (raw HaMeR) to 131.5mm---a 45\% improvement. When additional 3D wrist observations from stereo cameras are available (\textbf{Wrist3D}), errors drop further to 60.1mm.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Hand estimation results on EgoExo4D.} MPJPE measures world-frame accuracy; PA-MPJPE measures local pose accuracy after Procrustes alignment. Body context dramatically improves world-frame localization.}
+\label{tab:egoallo_hands}
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Method} & \textbf{MPJPE}$\downarrow$ & \textbf{PA-MPJPE}$\downarrow$ \\
+\midrule
+HaMeR (monocular) & 237.9 & \textbf{13.0} \\
+\midrule
+Ours-NoReproj & 143.2 & 14.8 \\
+Ours-Mono & 131.5 & 14.7 \\
+\midrule
+Ours-Wrist3D & \textbf{60.1} & 14.4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+As shown in Figure~\ref{fig:egoallo_hands}, this demonstrates a symbiotic relationship: head motion informs body estimation, which in turn provides context for hand localization.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/egoallo/hands_oct1_v4.png}
+    \caption{\textbf{Body Context Improves Hand Estimation.} Blue: monocular hand estimates from HaMeR, which are accurate in local pose but incorrect in world-frame position due to scale/depth ambiguity. Purple: our estimates with body context, correctly grounded in the world frame.}
+    \label{fig:egoallo_hands}
+\end{figure}
+
+\paragraph{Qualitative results.}
+Figure~\ref{fig:egoallo_qualitative} shows estimated body poses from real-world recordings with Project Aria glasses \citep{somasundaram2023projectaria}. The estimated bodies are correctly grounded in the scene: feet contact the floor appropriately, body height matches the environment, and the poses are consistent with the observed head motion across diverse activities including walking, sitting, and object manipulation.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/egoallo/qual_grounded_outputs_v3.png}
+    \caption{\textbf{Qualitative Results.} Estimated body poses from real-world egocentric recordings, visualized in 3D scene reconstructions. The method produces physically plausible poses with appropriate grounding (feet on floor, correct height) across diverse activities.}
+    \label{fig:egoallo_qualitative}
+\end{figure}
+
+
+% ==============================================================================
+\subsection{Discussion}
+\label{sub:egoallo_discussion}
+% ==============================================================================
+
+This application demonstrates how the conditional inference framework from Chapter~\ref{ch:conditional-inference} extends beyond images to structured, articulated outputs like human motion. Several key takeaways emerge:
+
+\paragraph{Representation matters.}
+The importance of representation design, a recurring theme throughout this book, is particularly evident here. By carefully analyzing what invariances the conditioning representation should satisfy, we derived a parameterization that substantially outperforms naive alternatives. This validates the principle that good representations encode the right inductive biases for the task.
+
+\paragraph{Measurement matching generalizes.}
+The sampling procedure directly applies the measurement matching framework from Chapter~\ref{ch:conditional-inference}: a learned prior (the head-conditioned diffusion model) is combined with measurement constraints (hand observations, physics) via guided sampling. This same pattern of prior plus guidance applies across modalities from images to motion.
+
+\paragraph{Body provides context for extremities.}
+An unexpected benefit is that body estimation improves hand estimation. Monocular hand estimators cannot resolve global position, but body kinematics provide the missing context. This symbiotic relationship (head informs body, body informs hands) suggests that holistic approaches may outperform modular pipelines that estimate each component independently.
+
+The relationship is bidirectional: not only does body estimation improve hand localization, but hand observations also improve body estimation. When hand guidance is incorporated during sampling, overall body MPJPE on AMASS improves from 119.7mm to 78.8mm---a 34\% reduction. This demonstrates that additional measurement constraints tighten the posterior and produce more accurate full-body estimates.
+
+\paragraph{Limitations.}
+The current approach has several limitations. First, it requires accurate SLAM with metric scale and gravity alignment; errors in head pose estimation directly propagate to body estimates. Second, generalization is limited by the diversity of the motion capture training data, so unusual poses or activities not represented in AMASS may not be captured well. Third, hands can only be refined when visible in the egocentric view; the method cannot improve occluded hand estimates. Finally, we assume flat floors; the method may fail on staircases or uneven terrain.
+
+\paragraph{Future directions.}
+Several extensions are promising: incorporating scene geometry for better physical grounding, enabling real-time inference for live AR/VR applications, and extending to multi-person scenarios where the wearer interacts with others.

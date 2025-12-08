@@ -20,7 +20,9 @@ In the previous chapters of this book, we have studied how to effectively and ef
 More generally, however, the universality and scalability of the theoretical and computational framework presented in this book has enabled us to learn the distribution of a variety of important real-world high-dimensional data such as natural languages, human poses, natural images, videos, and even 3D scenes. Once the intrinsically rich and low-dimensional structures of these real data can be learned and represented correctly, they start to enable a broad family of powerful, often seemingly miraculous, tasks. Hence, from here onwards, we will start to show how to connect and tailor the general methods presented in previous chapters to learn useful representations for specific structured data distributions and for many popular tasks in modern practice of machine intelligence. 
 
 \section{Bayesian Inference and Constrained Optimization}
-\paragraph{Leveraging Low-dimensionality for Stable and Robust Inference.}
+
+\subsection{Bayesian Inference with Low-Dimensional Distributions}
+\paragraph{Leveraging low-dimensionality for stable and robust inference.}
 Generally speaking, a good representation or autoencoding should enable us to utilize the learned low-dimensional distribution of the data $\x$ and its representation $\z$ for various subsequent classification, estimation, and generation tasks under different conditions. As we have alluded to earlier in Chapter \ref{ch:intro} Section \ref{sec:intro-low-dimensionality}, the importance of the {\em low-dimensionality} of the distribution is the key for us to conduct stable and robust inference related to the data $\x$, as illustrated by the few simple examples in Figure \ref{fig:low-dim-properties}, from incomplete, noisy, and even corrupted observations. As it turns out, the very same concept carries over to real-world high-dimensional data whose distributions have a low-dimensional support, such as natural images and languages. 
 
 Despite a dazzling variety of applications in the practice of machine learning with data such as languages, images, videos and many other modalities, almost all practical applications can be viewed as a special case of the following inference problem: given an observation $\y$ that depends on $\x$, say
@@ -89,47 +91,71 @@ Efficiently computing the conditional distribution $p(\x \mid \y)$ naturally dep
 In the modern practice of data-driven machine learning, for certain popular tasks people often directly learn the conditional distribution $p(\x\mid \y)$ or a (probabilistic) mapping or a regressor. Such a mapping is often modeled by some deep networks and trained end-to-end with sufficient paired samples $(\x, \y)$. Such an approach is very different from the above Bayesian approach in which both the distribution of $\x \sim p(\x)$ and the (observation) mapping are needed. The benefit of the Bayesian approach is that the learned distribution $p(\x)$ can facilitate many different tasks with varied observation models and conditions. 
 \end{remark}
 
+\subsection{Constrained Optimization with  Submanifolds}
 \paragraph{Geometric interpretation as constrained optimization.}
 
 As the support \(\cS_{\vx}\) of the distribution of \(\vx\) is low-dimensional, we may assume that there exists a function \(F\) such that
 \begin{equation}
-  F(\vx) = \boldsymbol{0} \qquad \iff \qquad \vx \in \cS_{\vx}
+  F(\vx) = {0} \qquad \iff \qquad \vx \in \cS_{\vx}
 \end{equation}
-such that \(\cS_{\vx} = F^{-1}(\{\vzero\})\) is the low-dimensional support of the distribution $p(\x)$. Geometrically, one natural choice of $F(\x)$ is the ``distance function'' to the support $\mathcal{S}_{\x}$:\footnote{Notice that, in reality, we only have discrete samples on the support of the distribution. In the same spirit of continuation, through diffusion or lossy coding studied in \Cref{ch:denoising,ch:compression}, we may approximate the distance function as $F(\x) \approx \min_{\x_p \in \cC_{\vx}^{\epsilon}} \|\x - \x_p\|_2$ where $\mathcal{S}_{\x}$ is replaced by a covering \(\cC_{\vx}^{\epsilon}\) of the samples with $\epsilon$-balls. }
+such that \(\cS_{\vx} = F^{-1}(\{0\})\) is the low-dimensional support of the distribution $p(\x)$. Geometrically, one natural choice of $F(\x)$ is the ``distance function'' to the support $\mathcal{S}_{\x}$:
 \begin{equation}
     F(\x) = \min_{\x_p \in \mathcal{S}_{\x}} \|\x - \x_p\|_2. 
+    \label{eqn:F-definition}
 \end{equation}
+Notice that, in reality, we only have discrete samples on the support of the distribution. In the same spirit of continuation, through diffusion or lossy coding studied in \Cref{ch:denoising,ch:compression}, we may approximate the distance function as $F(\x) \approx \min_{\x_p \in \cC_{\vx}^{\epsilon}} \|\x - \x_p\|_2$ where $\mathcal{S}_{\x}$ is replaced by a covering \(\cC_{\vx}^{\epsilon}\) of the samples with $\epsilon$-balls. But if the analytical form of a simple distribution is given, sometimes $F(\x)$ can be computed explicitly. 
+\begin{example}[Distance to a Line in $\mathbb{R}^3$]
+Let us assume that the support of a low-dimensional  distribution in $\mathbb{R}^3$ is the $x_3$-axis. Then the distance function $F(\x)$ is given by:
+\begin{equation}
+    F(\x) = \sqrt{x_1^2 + x_2^2}. 
+\end{equation}
+\label{eg:distance-line}
+\end{example}
+To see how such a function plays an important role in exploiting the distribution, for simplicity, we will assume that, for the rest of the subsection, the distance function is already given.
+
 Now given $\y = h(\x) +\vw$, to solve for $\x$, we can solve the following constrained optimization problem:
 \begin{equation}
-    \max_{\x} - \frac{1}{2}\|h(\x) - \y\|_2^2 \quad \mbox{s.t.} \quad F(\x) = \boldsymbol{0}. 
+    \max_{\x} - \frac{1}{2}\|h(\x) - \y\|_2^2 \quad \mbox{s.t.} \quad F(\x) = {0}. 
 \end{equation}
 Using the method of augmented Lagrange multipliers, we can solve the following unconstrained program:
 \begin{equation}
-   \max_{\x} \left[-\frac{1}{2}\|h(\x) - \y\|_2^2  + \vlambda^{\top} F(\x) - \frac{\mu}{2} \|F(\x)\|_2^2\right]
+   \max_{\x} \left[-\frac{1}{2}\|h(\x) - \y\|_2^2  + \lambda F(\x) - \frac{\mu}{2} F(\x)^2\right]
 \end{equation}
-for some constant Lagrange multipliers $\vlambda$.
+for some constant Lagrange multiplier $\lambda$.
 This is equivalent to the following program:
 \begin{equation}\label{eq:lagrange_multiplier_continuation}
-\max_{\x} \left[\log \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big) + \log \exp\Big( - \frac{\mu}{2} \big\|F(\x) - \vlambda/\mu\big\|_2^2\Big)\right],
+\max_{\x} \left[\log \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big) + \log \exp\Big( - \frac{\mu}{2} \big(F(\x) - \lambda/\mu\big)^2\Big)\right],
 \end{equation} 
-where $\vc \doteq {\vlambda}/{\mu}$ can be viewed as a ``mean''  for the constraint function. As $\mu$ becomes large when enforcing the constraint via continuation\footnote{In the same spirit of continuation in \Cref{ch:denoising} where we obtained better approximations of our distribution by sending \(\eps \to 0\), here we send \(\mu \to \infty\). Larger values of \(\mu\) will constrain \(F\) to take smaller and smaller values at the optimum, meaning that the optimum lies within a smaller and smaller neighborhood of the support \(\cS_{\vx}\). Interestingly, the theory of Lagrange multipliers hints that, under certain benign conditions on \(F\) and other terms in the objective, we only need to make \(\mu\) large enough in order to ensure \(F(\vx) = \vzero\) at the optimum, meaning that at \textit{finite} penalty we get \textit{perfect} approximation of the support. In general, we should have the intuition that \(\mu\) plays the same role as  \(\eps^{-1}\).}, $\|\vc\|_2$ becomes increasingly small. The above program may be interpreted in two different ways. 
+where $c \doteq {\lambda}/{\mu}$ can be viewed as a ``mean''  for the constraint function. As $\mu$ becomes large when enforcing the constraint via continuation\footnote{In the same spirit of continuation in \Cref{ch:denoising} where we obtained better approximations of our distribution by sending \(\eps \to 0\), here we send \(\mu \to \infty\). Larger values of \(\mu\) will constrain \(F\) to take smaller and smaller values at the optimum, meaning that the optimum lies within a smaller and smaller neighborhood of the support \(\cS_{\vx}\). Interestingly, the theory of Lagrange multipliers hints that, under certain benign conditions on \(F\) and other terms in the objective, we only need to make \(\mu\) large enough in order to ensure \(F(\vx) = 0\) at the optimum, meaning that at \textit{finite} penalty we get \textit{perfect} approximation of the support. In general, we should have the intuition that \(\mu\) plays the same role as \(\eps^{-1}\).}, $c$ becomes increasingly small. The above program may be interpreted in two different ways. 
 
 Firstly, one may view the first term as the conditional probability of $\y$ given $\x$, and the second term as a probability density for $\x$:
 \begin{equation}
   p(\y\mid \x) \propto \exp\Big(- \frac{1}{2}\|h(\x) - \y\|_2^2\Big), \quad 
-    p(\x) \propto \exp\Big( - \frac{\mu}{2}\|F(\x) - \vc\|_2^2\Big).
+    p(\x) \propto \exp\Big( - \frac{\mu}{2}(F(\x) - c)^2\Big).
 \end{equation} 
 Hence, solving the constrained optimization for the inverse problem is equivalent to conducting Bayes inference with the above probability densities. Hence solving the above program \eqref{eq:lagrange_multiplier_continuation} via gradient ascent is equivalent to the above maximal likelihood estimate \eqref{eqn:loglikelihoo-gradient-ascent}, 
 in which the gradient  takes the form:
 \begin{eqnarray}
    && \nabla_{\x} \log p(\y \mid \x) + \nabla_{\x} \log p(\x)  \\
-   &=&  \big\|h(\x) - \y\big\| \pdv{h}{\vx}(\vx) + \mu \big\| F(\x) - \vc \big\| \pdv{F}{\vx}(\vx), \label{eqn:EngMin-gradient}
+   &=&  - \big\|h(\x) - \y\big\| \pdv{h}{\vx}(\vx) -  \mu \big| F(\x) - c \big| \pdv{F}{\vx}(\vx), \label{eqn:EngMin-gradient}
 \end{eqnarray}
-where $\pdv{h}{\vx}(\vx)$ and $\pdv{F}{\vx}(\vx)$ are the Jacobian of $h(\x)$ and $F(\x)$, respectively. Hence the  process can be viewed as a ``denoising'' process, studied in  \Cref{ch:denoising}, that gradually enforces the data to be closer to the distribution support. Notice that the above derivation suggests that the ``step size'' of the score $\nabla_{\x} \log p(\x)$ of the denoising process is $\mu \big\| F(\x) - \vlambda/\mu\big\|$ which for any fixed $\mu$ is nearly proportional to the distance of the point $\x$ to the support.
+where $\pdv{h}{\vx}(\vx)$ and $\pdv{F}{\vx}(\vx)$ are the Jacobian of $h(\x)$ and $F(\x)$, respectively. 
+\begin{example}[Gradient of $F(\x)$] For the distance function defined in Example \ref{eg:distance-line}, its gradient is given by
+\begin{equation}
+\pdv{F}{\vx}(\vx) =  \frac{2}{\sqrt{x_1^2 + x_2^2}}\left[\begin{matrix}
+x_1 \\ x_2 \\ 0   
+\end{matrix}\right].  
+\end{equation}
+Notice that unlike regular smooth functions whose gradient is typical unique at a fixed point, the gradients of the distance function at a point in the support, say $(0, 0, x_3)$, can span an entire subspace complementary to the support. 
+\end{example}
+
+
+Notice that the above (gradient) 
+$$-  \mu \big| F(\x) - c \big| \pdv{F}{\vx}(\vx)$$ always points towards the low-dimensional support of the distribution. Hence the descent process can be viewed as a ``denoising'' process, studied in  \Cref{ch:denoising}, that gradually enforces the data  to be closer to the correct distribution support. Notice that the above derivation suggests that the ``step size'' of the score $\nabla_{\x} \log p(\x)$ of the denoising process is $$\mu \big| F(\x) - \lambda/\mu\big|$$ which for any fixed $\mu$ is nearly proportional to the distance of the point $\x$ to the support.
 
 Secondly, notice that solving the above program \eqref{eq:lagrange_multiplier_continuation} with $\mu$ increasing is equivalent to:
 \begin{equation}
-\x_\star = \arg\min_{\x} \frac{1}{2}\|h(\x) - \y\|_2^2 + \frac{\mu}{2} \big\|F(\x) - \vlambda/\mu\big\|_2^2 \quad \mbox{as} \quad \mu \uparrow \infty.
+\x_\star = \arg\min_{\x} \frac{1}{2}\|h(\x) - \y\|_2^2 + \frac{\mu}{2} \big(F(\x) - \lambda/\mu\big)^2 \quad \mbox{as} \quad \mu \uparrow \infty.
 \label{eqn:energy-minimization}
 \end{equation} 
 Due to the conspicuous quadratic form of the two terms in the above equation, they can also be interpreted as certain ``energy'' functions. Such a formulation is often referred to as ``Energy Minimization'' in the machine learning literature, advocated by people like Yann LeCun \cite{LeCun-2006}. Here the energy of a point $\x$ is a quadratic function of its distance to the support of the desired distribution. Notice that in \Cref{ch:denoising} and \Cref{ch:lossy-compression}, we have argued that the notion of entropy is to measure the ``volume'' or uncertainty of the data distribution whereas here the energy depends on the ``distance'' of $\x$ to the support of the distribution. As we minimizes the above energy functions, the entropy (or uncertainty) of the feasible solutions reduces until it reaches (a feasible solution of) the optimal MAP estimate, as illustrated in Figure \ref{fig:EngMin}.
@@ -142,8 +168,8 @@ Due to the conspicuous quadratic form of the two terms in the above equation, th
 \end{figure}
 
 
-\paragraph{Several representative practical settings for inference.} 
-Notice that the above discussion and derivation are based on the assumption that we have perfect knowledge about the function $F(\x)$ and the observation model $h(\x)$. In practice, however, they may not be  available at all. Hence to make the above conceptual solution truly computable, we need to deal with various situations in which information about the distributions of $\x$ and the relationship between $\x$ and $\y$ are given or accessible in different ways and forms.
+\subsection{Representative Practical Settings for Inference} 
+Notice that the above discussion and derivation are based on the assumption that we have perfect knowledge about the function $F(\x)$ and the observation model $h(\x)$. In practice, however, they may not be  available at all and need to be ``learned'' from the data given. Hence to make the above conceptual solution truly computable, we need to deal with various situations in which information about the distributions of $\x$ and the relationship between $\x$ and $\y$ are given or accessible in different ways and forms.
 
 In general, they can mostly be categorized into four cases, which are, conceptually, increasingly more challenging:
 \begin{itemize}
@@ -152,7 +178,7 @@ In general, they can mostly be categorized into four cases, which are, conceptua
 \item {\em Case 3:} We only have the paired samples: $(\X, \Y) = \{ (\x_1, \y_1), \ldots, (\x_N, \y_N) \}$ of the two variables  $(\x, \y)$. The distributions of $\x$ and $\y$ and their relationship $h(\cdot)$ need to be learned from these paired sample data. For example, given many images and their captions, learning to conduct text-conditioned image generation is one such problem. 
 \item {\em Case 4:} We only have the samples $\Y = \{\y_1, \ldots, \y_N\}$ of the observations $\y$, and the observation model $h(\cdot)$ needs to be known, at least in some parametric family $h(\cdot, \boldsymbol{\theta})$. The distribution $p(\x)$ and $p(\x \mid \y)$ need to be learned from $\hat \x$, estimated from $\Y$. For example, learning to render a new view from a sequence of calibrated or uncalibrated views is one such problem.
 \end{itemize}
-In this chapter, we will discuss general approaches to learn the desired distributions and solve the associated conditional estimation or generation for these cases, typically with a representative problem.  Throughout the chapter, you should keep \Cref{fig:inference_roadmap} in mind.
+In this chapter, we will discuss general approaches to learn the desired distributions and solve the associated conditional estimation or generation for these cases, typically with a representative practical problem. Throughout the chapter, you should keep \Cref{fig:inference_roadmap} in mind.
 
 
 
@@ -1097,78 +1123,6 @@ $t_{\ell} = T\ell / L$, as for \Cref{eq:denoising-iteration-basic} in
 
 
 
-\subsection{Body Pose Generation Conditioned on Head and Hands}\label{sub:ego-allo}
-This type of
-conditional estimation or generation problem arises rather naturally in many
-practical applications. 
-A typical problem of this kind is how to estimate and generate body pose and hand gesture conditioned on a given head pose and egocentric images, as illustrated in Figure \ref{fig:pose-teaser}. This is often the problem we need to solve when one is wearing a head-mounted device such as the Vision Pro from Apple or the Project Aria from Meta. The pose of the whole body and the gesture of the hands need to be inferred so that we can use the information to control virtual objects that the person interacts with.
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/pose-teaser.pdf}
-    \caption{
-A system that estimates human body height, pose, and hand parameters (middle), conditioned on egocentric SLAM poses and images (left). Outputs capture the wearer's actions in the allocentric reference frame of the scene, which we visualize here with 3D reconstructions (right).
-  }
-  \label{fig:pose-teaser}
-
-\end{figure*}
-
-Notice that in this case, one only has the head pose provided by the device and a very limited field of view for part of one's hands and upper limbs. The pose of the rest of the body needs to be ``inferred'' or ``completed'' based on such partial information. The only way one can estimate the body pose over time is by learning the joint distribution of the head and body pose sequences in advance and then sampling this prior distribution conditioned on the real-time partial inputs. Figure \ref{fig:pose-method} outlines a system called EgoAllo \cite{yi2024egoallo} to solve this problem based on a learned conditional diffusion-denoising model. 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/pose-method.pdf}
-\caption{
-    \textbf{Overview of technical components of EgoAllo \cite{yi2024egoallo}.}
-    A diffusion model is pretrained that can generate body pose sequence based on local body parameters (middle).
-    An invariant parameterization $g(\cdot)$ of SLAM poses (left) is used to condition the diffusion model. These can be placed into the global coordinate frame via global alignment to input poses.
-    When available, egocentric video is used for hand detection (left) via HaMeR~\cite{pavlakos2023reconstructing}, which can be incorporated into samples via guidance by the generated gesture.
-  }
-  \label{fig:pose-method}
-\end{figure*}
-
-
-Figure \ref{fig:comparison} compares some ground truth motion sequences with sampled results generated by the EgoAllo. Although the figure shows one result for each input head pose sequence, different runs can generate different body pose sequences that are consistent with the given head pose, all drawing from the distribution of natural full-body motion sequences.
-\begin{figure}[t]
-\centering
-\begin{subfigure}{0.45\textwidth}
-  \centering
-  \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/qual0_gt.png}
-  \caption{\centering Ground-truth}
-\end{subfigure}
-\hfill
-\begin{subfigure}{0.45\textwidth}
-  \centering
-  \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/qual0_ours.png}
-  \caption{EgoAllo}
-\end{subfigure}
-
-\begin{subfigure}{0.45\textwidth}
-  \centering
-  \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/qual1_gt.png}
-  \caption{\centering Ground-truth}
-\end{subfigure}
-\hfill
-\begin{subfigure}{0.45\textwidth}
-  \centering
-  \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/qual1_ours.png}
-  \caption{EgoAllo}
-\end{subfigure}
-
-\caption{
-\textbf{Egocentric human motion estimation for a running (top) and squatting (bottom) sequence.}
-The ground-truth motion is compared with one output from EgoAllo that is consistent with the given head pose sequence. 
-}
-\label{fig:comparison}
-\end{figure}
-
-Strictly speaking, the solution proposed in EgoAllo \cite{yi2024egoallo} does
-not enforce measurement matching using the techniques introduced above. Instead
-it heuristically enforces the condition by utilizing  the cross-attention
-mechanism in a transformer architecture. As we will describe with more precision
-in the paired data setting in \Cref{sub:text-cond}, there is reason to believe that the
-cross-attention mechanism is in a way approximately realizing the conditional
-sampling of the denoising a posteriori. We believe the more principled
-techniques introduced here, if properly implemented, can lead to better methods
-that further improve the body pose and hand gesture estimation. 
 
 \section{Conditional Inference with Paired Data and Measurements}
 In many practical applications, we do not know either the distribution of the data $\x$ of interest or the explicit relationship between the data and certain observed attributes $\y$ of the data. We only have  a (large) set of paired samples $(\X, \Y) = \{ (\x_1, \y_1), \ldots, (\x_N, \y_N) \}$ from which we need to infer the data distribution and a mapping that models their relationship:
