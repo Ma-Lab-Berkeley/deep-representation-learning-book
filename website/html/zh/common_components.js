@@ -219,7 +219,7 @@
     // Community page content
     community: {
       title: "课程、讲座与社区贡献",
-      intro: "社区资源（建设中）。",
+      intro: "与本书相关的课程、讲座、教程和其他社区贡献。",
       pending: "敬请期待。",
       sections: {
         tutorials: "教程",
@@ -231,8 +231,18 @@
 以下是与本书相关或使用了本书材料的高校课程：
 
  - 香港大学，DATA8014，2025年秋季
-   - 讲座幻灯片： [1](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec01.pdf)、[2](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec02.pdf)、[3](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec03.pdf)、[4](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec04.pdf)、[5](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec05.pdf)、[6](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec06.pdf)、[7](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec07.pdf)、[8](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec08.pdf)、[9](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec09.pdf)
-   - 课程视频: [1.1](https://youtu.be/H6vt_OBO0dk)、[1.2](https://youtu.be/vcpHffMi6NY)、[1.3](https://youtu.be/7Q-SYdzeR0M)、[2.1](https://youtu.be/ybxj5U1cUdM)、[2.2](https://youtu.be/iJ3GNlWCc4k)、[2.3](https://youtu.be/Giz1r7cajPY)、[3.1](https://youtu.be/ctmN-8p7zI8)、[3.2](https://youtu.be/NSwSh1quLqA)、[4](https://youtu.be/XDt6SE3kD58)、[5.1](https://youtu.be/P4Dw0IG2UL8)、[5.2](https://youtu.be/thjqRBJc8Zw)、[6.1](https://youtu.be/KWuRFK7JKk4)、[6.2](https://youtu.be/TpnyTR9Y-m0)、[7.1](https://youtu.be/lq_vbDC7Hp0)、[7.2](https://youtu.be/3t3UrWtsnq4)、[8.1](https://youtu.be/6Ep6HNZSFVs)、[8.2](https://youtu.be/HdNKSGjVD5E)、[9.1](https://youtu.be/IJizSfcw6x8)、[9.2](https://youtu.be/3QFBEAesvFM&t=6689s)
+   - 讲座 1（追求智能的本质）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec01.pdf)、[视频 1](https://youtu.be/H6vt_OBO0dk)、[视频 2](https://youtu.be/vcpHffMi6NY)、[视频 3](https://youtu.be/7Q-SYdzeR0M)
+   - 讲座 2（解析方法与线性模型）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec02.pdf)、[视频 1](https://youtu.be/ybxj5U1cUdM)、[视频 2](https://youtu.be/iJ3GNlWCc4k)、[视频 3](https://youtu.be/Giz1r7cajPY)
+   - 讲座 3（学习线性与混合线性模型）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec03.pdf)、[视频 1](https://youtu.be/ctmN-8p7zI8)、[视频 2](https://youtu.be/NSwSh1quLqA)
+   - 讲座 4（深度表示学习的优化基础）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec04.pdf)、[视频](https://youtu.be/XDt6SE3kD58)
+   - 讲座 5（通过去噪学习低维分布）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec05.pdf)、[视频 1](https://youtu.be/P4Dw0IG2UL8)、[视频 2](https://youtu.be/thjqRBJc8Zw)
+   - 讲座 6（通过有损压缩追求低维结构）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec06.pdf)、[视频 1](https://youtu.be/KWuRFK7JKk4)、[视频 2](https://youtu.be/TpnyTR9Y-m0)
+   - 讲座 7（通过最大化率缩减构建深度网络）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec07.pdf)、[视频 1](https://youtu.be/lq_vbDC7Hp0)、[视频 2](https://youtu.be/3t3UrWtsnq4)
+   - 讲座 8（通过稀疏率缩减的白盒 Transformer 用于表示学习）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec08.pdf)、[视频 1](https://youtu.be/6Ep6HNZSFVs)、[视频 2](https://youtu.be/HdNKSGjVD5E)
+   - 讲座 9（通过压缩闭环转录获得自洽表示）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec09.pdf)、[视频 1](https://youtu.be/IJizSfcw6x8)、[视频 2](https://youtu.be/3QFBEAesvFM)
+   - 讲座 10（使用学习到的低维分布进行推断）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec10.pdf)、[视频 1](https://youtu.be/MgDclnr0gY4)、[视频 2](https://youtu.be/u5Gn6-S7jKo)
+   - 讲座 11（真实世界数据的表示学习）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec11.pdf)、[视频 1](https://youtu.be/1OP4T89dfIk)、[视频 2](https://youtu.be/Vp6X90ojsPA)
+   - 讲座 12（总结与智能研究的未来）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec12.pdf)、[视频 1](https://youtu.be/RJsV40-53WU)、[视频 2](https://youtu.be/2-DYPz6jtlY)
  - 澳门大学，CISC7402，2025年秋季
 
 如果您希望将您的课程列在此处，请到 GitHub 提交 issue，并附上课程名称、学校、学期、链接及简短描述。
@@ -240,9 +250,25 @@
         tutorials: `
 下面是一些与本书内容高度相关的教程或长篇讲座：
 - [ICCV 2025 教程：从高维数据学习低维模型](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/)
-  - 讲座幻灯片：[1](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec1.pdf)、[2](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec3.pdf)、[3](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec4.pdf)、[4](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec5.pdf)、[5](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec6.pdf)、[6](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec7.pdf)
+  - 讲座 1（演绎式低维解析模型方法）：[幻灯片](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec1.pdf)
+  - 讲座 2（深度模型中低维表征的涌现）：[幻灯片](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec3.pdf)
+  - 讲座 3（从高维数据学习深度低维模型：理论到实践）：[幻灯片](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec4.pdf)
+  - 讲座 4（面向科学应用的受限与可控扩散模型中的低维结构）：[幻灯片](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec5.pdf)
+  - 讲座 5（ReduNet：通过最大化率缩减构建深度网络）：[幻灯片](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec6.pdf)
+  - 讲座 6（通过稀疏率缩减实现白盒 Transformer）：[幻灯片](https://low-dim-models-tutorials.github.io/iccv2025-tutorial/assets/slides/ICCV2025_Lec7.pdf)
 - [IAISS 2025 教程：从高维数据学习低维模型](https://2025.iaiss.cc/)
-  - 讲座幻灯片：[1](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec01.pdf)、[2](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec02.pdf)、[3](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec03.pdf)、[4](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec04.pdf)、[5](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec05.pdf)、[6](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec06.pdf)、[7](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec07.pdf)、[8](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec08.pdf)、[9](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec09.pdf)、[10](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec10.pdf)、[11](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec11.pdf)、[12](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec12.pdf)
+  - 讲座 1（智能的历史与深度学习的数学原理）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec01.pdf)
+  - 讲座 2（学习低维线性与独立结构）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec02.pdf)
+  - 讲座 3（通过去噪学习低维分布）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec03.pdf)
+  - 讲座 4（通过有损压缩学习低维结构）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec04.pdf)
+  - 讲座 5（通过展开优化获得深度表示）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec05.pdf)
+  - 讲座 6（通过压缩与优化构建白盒深度网络架构）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec06.pdf)
+  - 讲座 7（基于低维结构的推断）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec07.pdf)
+  - 讲座 8（通过压缩自编码与转录获得一致与自洽表示）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec08.pdf)
+  - 讲座 9（机器智能的未来方向）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec09.pdf)
+  - 讲座 10（扩散模型中的低维性：可泛化性）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec10.pdf)
+  - 讲座 11（扩散模型中的低维性：可控性与合成数据训练）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec11.pdf)
+  - 讲座 12（扩散模型中的低维性：求解逆问题与科学 AI）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/iaiss2025_slides/lec12.pdf)
 - [CVPR 2024 教程：从高维数据学习低维模型](https://low-dim-models-tutorials.github.io/cvpr2024-tutorial/)
   - 讲座幻灯片：[Dropbox](https://www.dropbox.com/scl/fo/7m57krmeordlohel4qxye/AKho1GYbOe0AbBlKNzm28Vk?rlkey=le2yuel4ipq50xhzxmyxxczxi&e=4&st=s8ndn2ix&dl=0)
         `,
