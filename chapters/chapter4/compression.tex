@@ -1030,7 +1030,58 @@ Despite the fact that the MCR$^2$ objective seems to allow us to learn better re
 
 \subsection{Unsupervised Representation Learning}
 \label{sec:SimDINO}
-\yima{Ziyang, probably introdue the objective of SimDINO here? and featuring some experimental justificaiton and leave the implementation details to Chapter 7 (or the new Chapter 8).}
+% \yima{Ziyang, probably introdue the objective of SimDINO here? and featuring some experimental justificaiton and leave the implementation details to Chapter 7 (or the new Chapter 8).}
+
+Now we present how to extend the MCR$^2$ principle to unsupervised representation learning. Contrary to supervised learning where the class labels are known, in unsupervised learning, the group memberships of the data samples are unknown. In this case, we can apply certain class of augmentations/transformations, say $\tau$ with a distribution $P_{\tau}$,  to the data and view the augmented samples of each data point as belonging to the same group or cluster. 
+Specifically, given a set of $N$ data samples $\X = [\x_1,\dots,\x_N]$, we generate $m$ augmented views $\{\tau_i\}_{i=1}^m$ for each data point $\x_i$ , denoted as $\tilde{\X}_{i} = [\tau_1(\x_i), \tau_2(\x_i), \dots, \tau_m(\x_i)]$. We treat the augmented samples $\tilde{\X}_{i}$ as the $i$-th class with $K=N$ groups/clusters in total. Now, we can apply the MCR$^2$ principle as we did before in the supervised learning case. Specifically, we learn the feature mapping $f(\x,\theta)$ by maximizing the coding rate reduction as follows:
+\begin{equation}
+	\begin{aligned}
+		\max_{\theta } & \;  \Delta R_{\epsilon}\big(\Z \big) \doteq R_{\epsilon}(\Z) - R_{\epsilon}^c(\Z ), \\
+		\mbox{s.t.} & \ \ \, \Z = f(\tilde{\X}, \theta),\  \|\Z_k\|_F^2                                          = m,\ k=1,\dots,N. 
+	\end{aligned}
+	\label{eqn:maximal-rate-reduction-unsupervised}
+\end{equation}
+Here, $\tilde{\X} = [\tilde{\X}_1,\dots,\tilde{\X}_N]$ and $\Z_k = f(\tilde{\X}_k,\theta)$ denotes the features of the augmented samples of $\x_k$ for each $k=1,\dots,N$.
+
+Let us again adopt ResNet-18 as the feature mapping $f(\x,\theta)$ and optimize the network parameters $\theta$ to maximize the unsupervised objective \eqref{eqn:maximal-rate-reduction-unsupervised}. 
+After training on the CIFAR10 dataset, we visualize the evoluation of the two rates and their difference (for both training and test data) over epochs of training in \Cref{fig:train-test-loss-selfsup-mcr}. Similar to the supervised learning case, after an initial phase, $R_\epsilon$ gradually increases while $R^c_\epsilon$ decreases, indicating that features $\bm Z$ are expanding as a whole while each cluster $\bm Z_k$ is being compressed. Compared to the supervised case shown in \Cref{fig:train-test-loss-pca-1}, we can observe that, in the unsupervised case, the total coding rate $R_\epsilon$ expands rapidly and the overall MCR$^2$ objective saturates at a local optimum. To alleviate this, we can alter the optimization strategy by controlling the dynamics of $R_\epsilon$ and $R^c_\epsilon$. Specifically, we can rescale the rates by replacing the coding rate $R_\epsilon(\Z)$ in \eqref{eqn:maximal-rate-reduction-unsupervised} with $\tilde{R}_\epsilon(\Z) \doteq \frac{1}{2\gamma_1} \log \det \left(\I + \frac{\gamma_2 d}{N m \epsilon^{2}}\Z \Z ^{\top}\right)$. By setting $\gamma_1 = \gamma_2 = N$, we arrive at a modified learning objective, referred to as MCR$^2$-{\scriptsize CTRL}, whose training dynamics are shown in \Cref{fig:train-test-loss-selfsup-mcr-ctrl}. As we can see, with this controlled MCR$^2$ objective, features are first compressed and then gradually expanded, leading to a higher value of the overall objective $\Delta R_{\epsilon}(\Z)$.
+
+To assess the quality of the learned representations and verify whether they have good subspace structures, we adopt a subspace clustering algorithm EnSC \cite{you2016oracle}. For evaluation metrics, we consider normalized mutual information (NMI), clustering accuracy (ACC), and adjusted rand index (ARI) \footnote{Refer to the Appendix in \cite{yu2020learning} for their specific definitions.}. For comparison, we consider methods including JULE \cite{yang2016joint}, RTM \cite{nina2019decoder}, DEC \cite{xie2016unsupervised}, DAC \cite{chang2017deep}, and DCCM \cite{wu2019deep}. The clustering results are summarized in Table \ref{fig:unsupervised-clustering-results}. As we can see, the features learned by maximizing the MCR$^2$-{\scriptsize CTRL} objective achieve better clustering accuracy than those learned by other algorithms.
+\begin{figure}[t]
+	\begin{subfigure}[t]{0.42\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter4/figs/loss_selfsup_mcr.png}
+		\caption{MCR$^2$}
+		\label{fig:train-test-loss-selfsup-mcr}
+	\end{subfigure}
+	\hfill
+	\begin{subfigure}[t]{0.42\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter4/figs/loss_selfsup_mcr_ctrl.png}
+		\caption{MCR$^2$-ctrl}
+		\label{fig:train-test-loss-selfsup-mcr-ctrl}
+	\end{subfigure}
+	\caption{\small Evolution of the rates of MCR$^2$ in the training process for unsupervised learning on CIFAR-10.}
+	\label{fig:train-test-loss-selfsup}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{chapters/chapter4/figs/clustering_results.png}
+    \caption{Comparison of clustering performance accuracy between training with the MCR$^2$-{\scriptsize CTRL} objective and other unsupervised learning algorithms on CIFAR10, CIFAR100, and STL10 datasets.}
+    \label{fig:unsupervised-clustering-results}
+\end{figure}
+
+There is one main drawback though: the MCR$^2$-based unsupervised learning method requires a costly $\log \det$ operation of $\O(d^3)$ complexity \textit{per sample} when computing $R^c_\epsilon$. This quickly becomes computationally prohibitive as we try to scale to larger datasets. Instead of minimizing the exact coding rate for each group of augemented samples $\tilde{\X}_{i}$, we can approximate the effect of compression by maximizing the cosine similarity between the features of the augmented samples:
+
+\begin{equation}
+	\begin{aligned}
+		\max_{\theta } & \;  R_{\epsilon}(\Z) + \frac{\gamma}{N}\sum_{i=1}^N \sum_{j \neq k} \z_{i,j}^\top \z_{i,k}, \\
+		\mbox{s.t.} &  \ \ \, \z_{i,j} = f(\tau_j(\x_i),\theta),\  \|\z_{i,j}\|_2^2                                          = 1, 
+	\end{aligned}
+	\label{eqn:maximal-rate-reduction-unsupervised-simdino}
+\end{equation}
+where $\gamma > 0$ is a hyperparameter that controls the strength of the cosine similarity term, as it differs from the coding rate in magnitude. This objective avoids the costly $\log \det$ operation and is much more scalable. In fact, this objective is closely related to contrastive learning methods such as SimCLR \cite{chen2020simple} and DINO \cite{caron2021emerging}, which have been shown to learn high-quality representations for images. As we will see in Chapter \ref{ch:applications}, this objective \eqref{eqn:maximal-rate-reduction-unsupervised-simdino} can be implemented efficiently and leads to state-of-the-art performance on large datasets without heavy engineering efforts as in DINO.
 
 
 \section{Summary and Notes}
