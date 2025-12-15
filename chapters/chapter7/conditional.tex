@@ -516,7 +516,7 @@ we can exploit this knowledge to help reconstruct and sample $\vx$.
   \end{subfigure}
   \caption{Statistical dependency diagrams for the conditional sampling process.
   \textbf{Left:} In a direct (conceptual) application of the diffusion-denoising scheme
-  we have developed in \Cref{ch:diffusion} to conditional sampling, we use
+  we have developed in \Cref{ch:denoising} to conditional sampling, we use
   samples from the posterior $p_{\vx \mid \vy}$ to train denoisers directly on
   the posterior at different noise levels, then use them to generate new
   samples. In practice, however, we do not normally have direct samples from the
@@ -661,9 +661,26 @@ of the entire process, continuing from those we have developed in
   suppose we obtain linear measurements of $\vx$ with independent Gaussian
   noise, where $\vA \in \bR^{d \times D}$ and $\vy = \vA \vx + \sigma \vw$
   with $\vw \sim \cN(\Zero, \vI)$ independent of $\vx$.
-  Then $\vx =_{d} \vSigma^{1/2} \vg + \vmu$, where $\vg \sim \cN(\Zero, \vI)$ is
-  independent of $\vw$ and $\vSigma^{1/2}$ is the unique positive square root of
-  the covariance matrix $\vSigma$, and
+  Below, we are going to work out the following consequences of this model for
+  the general framework we have derived above. Specifically:
+  \begin{enumerate}
+    \item We will work out the precise forms of the posterior distribution
+      $p_{\vx \mid \vy}$ that we are aiming to sample from.
+    \item We will work out the form of the measurement matching term from
+      \eqref{eqn:conditional-denoising-score}, which gives us the additive
+      correction to the unconditional denoiser for $p_{\vx \mid \vx_t}$ that
+      yields the denoiser for $p_{\vx \mid \vx_t, \vy}$ (recall
+      \eqref{eq:posterior-sampling-denoiser-decomposition}).
+    \item We will assess the specific form of the measurement matching term we
+      derived in the previous step, and posit a natural approximation that
+      makes it far less sample and compute intensive to learn the measurement
+      matching term from data. This approximation will be applied in greater
+      generality, after the conclusion of this example.
+  \end{enumerate}
+
+  First, we note that $\vx =_{d} \vSigma^{1/2} \vg + \vmu$, where $\vg \sim
+  \cN(\Zero, \vI)$ is independent of $\vw$ and $\vSigma^{1/2}$ is the unique
+  positive square root of the covariance matrix $\vSigma$, and
   after some algebra, we can then write
   \begin{equation*}
     \begin{bmatrix}
@@ -709,17 +726,24 @@ of the entire process, continuing from those we have developed in
   (\Cref{exercise:conditional_gaussian}).
   By this, we obtain that
   \begin{equation}
-    p_{\x \mid \y}(\spcdot \mid \vnu) = \cN\left(
-    \underbrace{%
+    \begin{split}
+    p_{\x \mid \y}(\spcdot \mid \vnu) = \cN\Biggl(
+    &\underbrace{%
       \vmu + \vSigma\vA^\top \left(\vA\vSigma\vA^\top + \sigma^2 \vI\right)^{-1} 
-      (\vnu - \vA\vmu)}_{\vmu_{\vx \mid \vy}(\vnu)},
-      \underbrace{%
+      (\vnu - \vA\vmu)}_{\vmu_{\vx \mid \vy}(\vnu)}, \\
+      &\underbrace{%
       \vSigma - \vSigma \vA^\top \left(\vA\vSigma\vA^\top + \sigma^2
       \vI\right)^{-1} \vA \vSigma}_{\vSigma_{\vx\mid \vy}}
-    \right).
+    \Biggr).
+    \end{split}
   \end{equation}
-  By the equivalence we have derived above, we get by another application of
-  \Cref{exercise:conditional_gaussian}
+
+  Next, since $\vx_t = \vx + t \vg'$, where $\vg' \sim \cN(\Zero, \vI)$ is
+  independent of all other random vectors, and since $\vx \mid \vy$ is Gaussian,
+  by the calculation directly above, it follows by another
+  application of \Cref{exercise:conditional_gaussian} that $\vx \mid \vx_t, \vy$
+  is Gaussian. Its conditional expectation function is given by reading off the
+  mean of the Gaussian distribution, which in this case is
   \begin{equation}\label{eq:conditional-posterior-denoiser-gaussian-case}
     \bE[ \vx \mid \vx_t=\vxi, \vy=\vnu ]
     =
@@ -787,18 +811,20 @@ of the entire process, continuing from those we have developed in
   \end{equation*}
   Another application of \Cref{exercise:conditional_gaussian} then gives us
   \begin{equation}
-    p_{\y \mid \vx_t}(\spcdot \mid \vxi) = \cN\left(
-    \underbrace{%
+    \begin{split}
+    p_{\y \mid \vx_t}(\spcdot \mid \vxi) = \cN\Biggl(
+    &\underbrace{%
       \vA\vmu + \vA\vSigma\left( \vSigma + t^2 \vI \right)^{-1}
       \left(
         \vxi - \vmu
       \right)
-      }_{\vmu_{\vy \mid \vx_t}(\vxi)},
-      \underbrace{%
+      }_{\vmu_{\vy \mid \vx_t}(\vxi)}, \\
+      &\underbrace{%
         \vA\vSigma\vA^\top + \sigma^2 \vI - \vA\vSigma \left( \vSigma
         + t^2 \vI\right)^{-1} \vSigma \vA^\top
       }_{\vSigma_{\vy\mid \vx_t}}
-    \right).
+    \Biggr).
+    \end{split}
   \end{equation}
   Now notice that $\vmu_{\vy \mid \vx_t}(\vxi) = \vA \bE[\vx \mid \vx_t=\vxi]$.
   So, by the chain rule,
@@ -823,7 +849,9 @@ of the entire process, continuing from those we have developed in
   unconditional posterior denoiser \eqref{eq:posterior-denoiser-gaussian-case}
   and the measurement matching term
   \eqref{eq:conditional-posterior-measurementmatching-gaussian-case}.
-  We can further analyze the measurement matching term. Notice that
+
+  We can further analyze the measurement matching term to understand cases under
+  which it can be approximated. Notice that
   \begin{equation}
     \vSigma_{\vy \mid \vx_t}
     =
@@ -858,8 +886,8 @@ of the entire process, continuing from those we have developed in
   Then for any eigenvalue of $\vSigma$ equal to zero, the corresponding summand
   is zero; and
   writing $\lambda_{\min}(\vSigma)$ for the smallest positive eigenvalue of
-  $\vSigma$ (it has at least one positive eigenvalue, by assumption), we have
-  (in a sense that can be made quantitatively precise) that whenever $t \ll
+  $\vSigma$, we have
+  that whenever $t \ll
   \sqrt{\lambda_{\min}(\vSigma)}$, it holds
   \begin{equation}
     \frac{\lambda_i t^2}{\lambda_i + t^2} \approx 0.
@@ -877,124 +905,138 @@ of the entire process, continuing from those we have developed in
     \label{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
   \end{equation}
 
-  \begin{figure}[tbp]
-    \centering
-    \begin{subfigure}{0.32\textwidth}
-      \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_000_t_100_largenoise.png}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.32\textwidth}
-      \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_050_t_50_largenoise.png}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.32\textwidth}
-      \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_100_t_0_largenoise.png}
-    \end{subfigure}
-
-    \vspace{2mm} %
-
-    \begin{subfigure}{0.32\textwidth}
-      \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_000_t_100_smallnoise.png}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.32\textwidth}
-      \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_010_t_90_smallnoise.png}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.32\textwidth}
-      \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_100_t_0_smallnoise.png}
-    \end{subfigure}
-
-    \caption{Numerical simulation of the conditional sampling setup
-    \eqref{eq:measurement-matching-observation}, with Gaussian data, linear
-    measurements, and Gaussian noise. We simulate $D=2$ and $d=1$, with $\vSigma
-    = \ve_1 \ve_1^\top + \tfrac{1}{4} \ve_2 \ve_2^\top$, $\vmu = \Zero$, and
-    $\vA = \ve_1^\top$. The underlying signal $\vx$ is marked with a black star,
-    and the measurement $\vy$ is marked with a black circle.
-    Each individual plot corresponds to a different value of sampler time
-    $t_{\ell}$, with different rows corresponding to different observation noise
-    levels $\sigma^2$.
-    In each plot, the covariance matrix of $\vx$ is plotted in gray, the
-    posterior covariance matrix and posterior mean of $p_{\vx \mid \vy}$ are
-    plotted in blue (with the posterior mean marked by a blue ``x''), and
-    contours for $p_{\vx_{t_{\ell}} \mid \vy}$ are drawn in green. The sampler
-    hyperparameters are $T=1$, $L=100$, and we draw $100$
-    independent samples to initialize the samplers. Samplers are implemented
-    with the closed-form denoisers derived in
-    \Cref{example:denoising-conditional-gaussian}, with those using the
-    approximation
-    \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
-    marked with red triangles, and those using the exact conditional posterior
-    denoiser marked with blue circles.
-    \textbf{Top:} For large observation noise $\sigma = 0.5$, both the exact
-    conditional posterior denoiser and the approximate one do a good job of
-    converging to the posterior $p_{\vx \mid \vy}$. Sampling time (corresponding
-    to time in the ``forward process'', so larger times mean larger noise)
-    decreases from left to right.  The convergence dynamics for the exact and
-    approximate measurement matching term are similar. \textbf{Bottom:} For
-    smaller observation noise $\sigma = 0.1$, the
-    approximate measurement matching term leads to extreme bias in the sampler
-    (red triangles): samples rapidly converge to an affine subspace
-    of points that are consistent, modulo some shrinkage from the posterior mean
-    denoiser, with the measured ground truth, and later sampling iterations are
-    unable to recover the lost posterior variance along this dimension. Note
-    that different times $t_{\ell}$ are plotted in the bottom row, compared to
-    the top row, to show the rapid collapse of the approximation to the
-    posterior along the measurement dimension.}
-    \label{fig:conditional_sampling_computational_gaussian}
-  \end{figure}
-
-  \Cref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
-  is, of course, a direct consequence of our calculations above. However, notice
-  that if we directly interpret this approximation, it is \textit{ab initio}
-  tractable: the likelihood $p_{\vy \mid \vx} = \cN(\vA\vx, \sigma^2 \vI)$ is
-  a simple Gaussian distribution centered at the observation, and the
-  approximation to the measurement matching term that we arrive at can be
-  interpreted as simply evaluating the log-likelihood at the conditional
-  expectation $\bE[\vx \mid \vx_t = \vxi]$, then taking gradients with respect
-  to $\vxi$ (and backpropagating through the conditional expectation, which is
-  given here by \Cref{eq:posterior-denoiser-gaussian-case}).
-  Nevertheless, note that the approximation in
-  \Cref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
-  requires $t \ll \sqrt{\lambda_{\min}(\vSigma)}$, and that it is never accurate
-  in general when this condition does not hold, even in this Gaussian setting.
-
-  To gain insight into the effect of the convenient approximation
-  \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx},
-  we implement and simulate a simple numerical experiment in the Gaussian
-  setting in \Cref{fig:conditional_sampling_computational_gaussian}. 
-  The sampler we implement is a direct implementation of the simple scheme
-  \eqref{eq:denoising-iteration-basic} we have developed in \Cref{ch:denoising}
-  and recalled above, using the true conditional posterior denoiser, i.e.\
-  \Cref{eq:conditional-posterior-denoiser-gaussian-case} (top row of
-  \Cref{fig:conditional_sampling_computational_gaussian}), and the 
-  convenient approximation to this denoiser made with the decomposition
-  \eqref{eq:posterior-sampling-denoiser-decomposition}, the posterior denoiser
-  \eqref{eq:posterior-denoiser-gaussian-case}, and the measurement
-  matching approximation
-  \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
-  (bottom row of \Cref{fig:conditional_sampling_computational_gaussian}).
-  We see that even in the simple Gaussian setting, the approximation to the
-  measurement matching term we have made is not without its
-  drawbacks---specifically, at small noise levels $\sigma^2 \ll 1$, it leads to
-  rapid collapse of the variance of the sampling distribution along directions
-  that are parallel to the rows of the linear measurement operator $\vA$, which
-  cannot be corrected by later iterations of sampling. We can intuit this from
-  the approximation
-  \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
-  and the definition of the denoising iteration
-  \eqref{eq:denoising-iteration-basic}, given
-  \Cref{eq:posterior-sampling-denoiser-decomposition}: for $\sigma^2 \ll 1$,
-  early steps of sampling effectively take gradient descent steps with a very
-  large step size on the likelihood, via
-  \Cref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx},
-  which leads the sampling distribution to get ``stuck'' in a collapsed state.
 
 \end{example}
 
 
+
+Let us take some time to interpret the results of
+\Cref{example:denoising-conditional-gaussian} before we generalize it.
+The approximation \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
+is, of course, a direct consequence of the specific modeling assumptions we have
+made in \Cref{example:denoising-conditional-gaussian}. However, notice
+that if we directly interpret this approximation, it is \textit{ab initio}
+tractable: the likelihood $p_{\vy \mid \vx} = \cN(\vA\vx, \sigma^2 \vI)$ is
+a simple Gaussian distribution centered at the observation, and the
+approximation to the measurement matching term that we arrive at can be
+interpreted as simply evaluating the log-likelihood at the conditional
+expectation $\bE[\vx \mid \vx_t = \vxi]$, then taking gradients with respect
+to $\vxi$ (which involves backpropagating through the conditional expectation).
+%Nevertheless, note that the approximation in
+%\Cref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
+%requires $t \ll \sqrt{\lambda_{\min}(\vSigma)}$, and that it is never accurate
+%in general when this condition does not hold, even in this Gaussian setting.
+
+\begin{figure}[tbp]
+  \centering
+  \begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_000_t_100_largenoise.png}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_050_t_50_largenoise.png}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_100_t_0_largenoise.png}
+  \end{subfigure}
+
+  \vspace{2mm} %
+
+  \begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_000_t_100_smallnoise.png}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_010_t_90_smallnoise.png}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter7/figs/samples_step_100_t_0_smallnoise.png}
+  \end{subfigure}
+
+  \caption{Numerical simulation of the conditional sampling setup
+  \eqref{eq:measurement-matching-observation}, with Gaussian data, linear
+  measurements, and Gaussian noise. We simulate $D=2$ and $d=1$, with $\vSigma
+  = \ve_1 \ve_1^\top + \tfrac{1}{4} \ve_2 \ve_2^\top$, $\vmu = \Zero$, and
+  $\vA = \ve_1^\top$. The underlying signal $\vx$ is marked with a black star,
+  and the measurement $\vy$ is marked with a black circle.
+  Each individual plot corresponds to a different value of sampler time
+  $t_{\ell}$, with different rows corresponding to different observation noise
+  levels $\sigma^2$.
+  In each plot, the covariance matrix of $\vx$ is plotted in gray, the
+  posterior covariance matrix and posterior mean of $p_{\vx \mid \vy}$ are
+  plotted in blue (with the posterior mean marked by a blue ``x''), and
+  contours for $p_{\vx_{t_{\ell}} \mid \vy}$ are drawn in green. The sampler
+  hyperparameters are $T=1$, $L=100$, and we draw $100$
+  independent samples to initialize the samplers. Samplers are implemented
+  with the closed-form denoisers derived in
+  \Cref{example:denoising-conditional-gaussian}, with those using the
+  approximation
+  \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
+  marked with red triangles, and those using the exact conditional posterior
+  denoiser marked with blue circles.
+  \textbf{Top:} For large observation noise $\sigma = 0.5$, both the exact
+  conditional posterior denoiser and the approximate one do a good job of
+  converging to the posterior $p_{\vx \mid \vy}$. Sampling time (corresponding
+  to time in the ``forward process'', so larger times mean larger noise)
+  decreases from left to right.  The convergence dynamics for the exact and
+  approximate measurement matching term are similar. \textbf{Bottom:} For
+  smaller observation noise $\sigma = 0.1$, the
+  approximate measurement matching term leads to extreme bias in the sampler
+  (red triangles): samples rapidly converge to an affine subspace
+  of points that are consistent, modulo some shrinkage from the posterior mean
+  denoiser, with the measured ground truth, and later sampling iterations are
+  unable to recover the lost posterior variance along this dimension. Note
+  that different times $t_{\ell}$ are plotted in the bottom row, compared to
+  the top row, to show the rapid collapse of the approximation to the
+  posterior along the measurement dimension.}
+  \label{fig:conditional_sampling_computational_gaussian}
+\end{figure}
+
+To gain insight into the effect of the convenient approximation
+\eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx},
+we implement and simulate a simple numerical experiment in the Gaussian
+setting in \Cref{fig:conditional_sampling_computational_gaussian}. 
+The sampler we implement is a direct implementation of the simple scheme
+\eqref{eq:denoising-iteration-basic} we have developed in \Cref{ch:denoising}
+and recalled above, using the true conditional posterior denoiser, i.e.\
+\Cref{eq:conditional-posterior-denoiser-gaussian-case} (samples are marked with
+blue circles), and the 
+convenient approximation to this denoiser made through the measurement
+matching approximation
+\eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
+(samples are marked with red triangles).
+The top row of \Cref{fig:conditional_sampling_computational_gaussian} shows
+a setting with large measurement noise $\sigma^2$, and the bottom with small
+measurement noise.
+The measurement matching approximation works very well in the large-noise
+setting, with the caveat that in the small-noise setting, it suffers from
+%We see that even in the simple Gaussian setting, the approximation to the
+%measurement matching term we have made is not without its
+%drawbacks---specifically, at small noise levels $\sigma^2 \ll 1$, it leads to
+rapid collapse of the variance of the sampling distribution along directions
+that are parallel to the rows of the linear measurement operator $\vA$, which
+cannot be corrected by later iterations of sampling. 
+%We can intuit this from
+%the approximation
+%\eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}
+%and the definition of the denoising iteration
+%\eqref{eq:denoising-iteration-basic}, given
+%\Cref{eq:posterior-sampling-denoiser-decomposition}: for $\sigma^2 \ll 1$,
+%early steps of sampling effectively take gradient descent steps with a very
+%large step size on the likelihood, via
+%\Cref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx},
+%which leads the sampling distribution to get ``stuck'' in a collapsed state.
+Our analysis in \Cref{example:denoising-conditional-gaussian} precisely
+characterizes the level at which the noise becomes too ``small'' in terms of the
+data covariance matrix $\vSigma$.
+
+
+
+\paragraph{Generalizing the approximation: Diffusion Posterior Sampling.}
 \Cref{example:denoising-conditional-gaussian} suggests a convenient
-approximation for the measurement matching term
+approximation for the measurement matching term, i.e.\
 \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx},
 which can be made beyond the Gaussian setting of the example. To
 motivate this approximation in greater generality, notice that
@@ -1122,7 +1164,138 @@ $t_{\ell} = T\ell / L$, as for \Cref{eq:denoising-iteration-basic} in
 \Cref{sub:compression_denoising}).
 
 
+\paragraph{Application to medical image reconstruction.}
 
+\begin{figure}[t]
+\centering
+\begin{subfigure}{\textwidth}
+    \centering
+    \includegraphics[width=0.85\textwidth]{\toplevelprefix/chapters/chapter7/figs/MRI.png}
+    \caption{}
+\end{subfigure}
+
+\vspace{0.3cm}
+
+\begin{subfigure}[b]{0.47\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter7/figs/mri-sampling.png}
+    \caption{}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.47\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter7/figs/mri-machine.png}
+    \caption{}
+\end{subfigure}
+
+\caption{Simplified overview of magnetic resonance imaging (MRI) reconstruction.
+  \textbf{(a)} An overview of the imaging process. A slice of the object being
+  imaged (say, a human brain) is measured in the Fourier domain via the MRI
+  machine. The spatial image can be reconstructed via direct inversion of the
+  Fourier domain measurements. \textbf{(b)} In practice, the MRI machine
+  \textit{subsamples} the Fourier domain via a structured sampling pattern for
+  the sake of efficiency. This creates a linear inverse problem, where priors
+  about the structure of the underlying image must be exploited to enable unique
+  reconstruction. \textbf{(c)} The actual measurement apparatus uses
+  a controlled magnetic field to obtain the Fourier domain measurements. Images
+  reproduced with permission from \cite{Wright-Ma-2022}.
+  }\label{fig:mri-reconstruction}
+\end{figure}
+
+%Liyue's work:
+%\begin{enumerate}
+%  \item ICLR 2022 with Yang Song
+%  \item ReSample paper (latent diffusion)
+%  \item ECCV 2024, consistency models (distilled)
+%  \item NeurIPS 2024 DiffusionBlend (high resolution)
+%  \item NeurIPS 2024 patch diffusion models (efficiency focus)
+%\end{enumerate}
+
+The framework that we have developed above is already powerful enough to be
+applied to solve various \textit{scientific inverse problems}, where the measurements
+$\vy = h(\vx_o) + \vw$ are the outputs of a known measurement process $h$ on
+a specific signal of interest $\vx_o$, and where there are infinitely many
+possible signals $\vx$ that satisfy $\vy = h(\vx) + \vw$. This means that to
+find the \textit{true} $\vx_o$ that generated $\vy$, we need to exploit prior
+information about the structure of $\vx_o$.
+We will consider the probabilistic setting where $\vx_o \sim p_{\vx}$, and where
+we have say in the form of a diffusion model for $p_{\vx}$.
+
+An instructive example of a scientific inverse problem is magnetic resonance
+imaging (MRI) (\Cref{fig:mri-reconstruction}), wherein the data distribution
+$\vx$ is over images corresponding to an underlying object of interest (such as
+a 2D slice of a human subject's brain). In MRI applications, the measurement
+operator $h$ corresponds to the machine generating and modulating the magnetic
+field and recording the patient's response to it
+(\Cref{fig:mri-reconstruction}(c)). It can be modeled as implementing the
+\textit{Fourier transform} of the underlying spatial signal
+(\Cref{fig:mri-reconstruction}(a))---see \cite[Chapter 10]{Wright-Ma-2022} for
+a detailed mathematical derivation.
+In addition, for efficiency's sake, the MRI machine typically only measures
+a subset of the measured frequencies, in a structured measurement pattern that
+can be modeled as either a radial or a spiral pattern
+(\Cref{fig:mri-reconstruction}(b)). Writing $\cF$ to denote the (discrete) Fourier
+transform operator and $\cS$ to denote the machine's (known) subsampling
+pattern, the measured signal is then
+\begin{equation}\label{eq:mri-measurement}
+  \vy = \cS \circ \cF(\vx_o) + \vw.
+\end{equation}
+The measurement operator $\cS \circ \cF$ is \textit{linear}, implying that it
+can be represented by a $m \times n$ matrix after appropriate reshaping, but it
+is also \textit{compressive}, which means that $m \ll n$ and that we need to
+exploit prior knowledge about $p_{\vx}$ to reconstruct $\vx_o$ (or more
+generally to sample from the posterior $p_{\vx \mid \vy}$). 
+
+The distribution
+$p_{\vx}$ of MRI images is simpler than some image distributions (e.g., natural
+images), but it is still complex enough to benefit from using a learned model
+for $p_{\vx}$ rather than an analytical one (c.f.\ \cite{Wright-Ma-2022}).
+One direct approach is to apply the diffusion posterior sampling approximation
+we developed in the previous section, which led to
+\Cref{alg:iterative_denoising_conditional_DPS}, with the specific MRI
+measurement operator $\vA = \cS \circ \cF$ and a diffusion model pretrained on
+MRI data.
+This precise combination of approaches has not appeared in the literature.
+Instead, we highlight results from a different but related approach, which
+enforces measurement consistency on each diffusion step.
+Following the pioneering work of \textcite{song2022solving}, numerous
+such measurement consistency algorithms for medical image reconstruction have been
+developed, including the improved approaches of \textcite{song2024solving} and
+\textcite{rout2023solving} (which utilize latent diffusion models, as we have
+developed for representation autoencoders in \Cref{ch:consistent}).
+\Cref{tab:mri-reconstruction} shows MRI reconstruction accuracy results
+(measured in terms of PSNR)
+for the approach developed by \textcite{song2022solving}. It compares favorably
+to supervised baselines (trained on many independent paired samples $(\vy,
+\vx_o)$, which is an additional requirement) and unsupervised baselines (which
+correspond to measurement matching approximations that came before diffusion
+posterior sampling). \sdb{TODO: Ask Liyue about figure of MRI visual results.}
+
+\begin{table}[t]
+    \centering
+    \begin{tabular}{@{}lccc@{}}
+        \toprule
+        Method & $24\times$ Accel. & $8\times$ Accel. & $4\times$ Accel. \\
+        \midrule
+        Cascade DenseNet & $23.39_{\pm 2.17}$ & $28.35_{\pm 2.30}$ & $30.97_{\pm 2.33}$ \\
+        DuDoRNet & $18.46_{\pm 3.05}$ & $\bf 37.88_{\pm 3.03}$ & $30.53_{\pm 4.13}$ \\
+        \textcite{song2020score} & $27.83_{\pm 2.73}$ & $35.04_{\pm 2.11}$ & $37.55_{\pm 2.08}$ \\
+        \textcite{NEURIPS2021_7d6044e9} & $28.80_{\pm 3.21}$ & $36.44_{\pm 2.28}$ & $38.76_{\pm 2.32}$ \\
+        \textcite{song2022solving} & $\bf 29.42_{\pm 3.03}$ & $37.63_{\pm 2.70}$ & $\bf 39.91_{\pm 2.67}$ \\
+        \bottomrule
+    \end{tabular}
+    \caption{\textbf{MRI reconstruction results} comparing diffusion
+    posterior sampling approaches across different acceleration factors (the
+    degree of Fourier space subsampling in $\cS$) on the BraTS MRI
+    reconstruction dataset. PSNR metrics (higher is better) with
+    standard deviations are reported.
+    Cascade DenseNet
+    \cite{NEURIPS2019_1e48c442} and DuDoRNet \cite{9156506} are supervised
+    baselines trained on paired samples at an 8x acceleration level. The last
+    three methods are diffusion-based approaches using measurement consistency.
+    Reproduced with permission from \textcite{song2022solving}.}
+    \label{tab:mri-reconstruction}
+\end{table}
 
 \section{Conditional Inference with Paired Data and Measurements}
 In many practical applications, we do not know either the distribution of the data $\x$ of interest or the explicit relationship between the data and certain observed attributes $\y$ of the data. We only have  a (large) set of paired samples $(\X, \Y) = \{ (\x_1, \y_1), \ldots, (\x_N, \y_N) \}$ from which we need to infer the data distribution and a mapping that models their relationship:
@@ -1963,9 +2136,7 @@ sizes, in particular in modern instantiations of Stable Diffusion
 \cite{DBLP:conf/icml/EsserKBEMSLLSBP24}, as well as in competing models such as
 FLUX.1 \cite{Labs2025-fb}, Imagen \cite{Saharia2022-na}, and DALL-E \cite{Ramesh2022-nu}. 
 The conditioning mechanism of cross attention has also become ubiquitous in
-other applications, as in EgoAllo (\Cref{sub:ego-allo}) for conditioned pose generation and in Michelangelo \cite{zhao2023michelangelo} for conditional 3D shape generation based on images or texts. 
-
-
+other applications, as in EgoAllo (\Cref{sec:egoallo}) for conditioned pose generation and in Michelangelo \cite{zhao2023michelangelo} for conditional 3D shape generation based on images or texts. 
 
 
 
