@@ -1034,7 +1034,7 @@ data covariance matrix $\vSigma$.
 
 
 
-\subparagraph{Generalizing the approximation: Diffusion Posterior Sampling.}
+\paragraph{Generalizing the approximation: Diffusion Posterior Sampling.}
 \Cref{example:denoising-conditional-gaussian} suggests a convenient
 approximation for the measurement matching term, i.e.\
 \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx},
@@ -1164,7 +1164,138 @@ $t_{\ell} = T\ell / L$, as for \Cref{eq:denoising-iteration-basic} in
 \Cref{sub:compression_denoising}).
 
 
+\paragraph{Application to medical image reconstruction.}
 
+\begin{figure}[t]
+\centering
+\begin{subfigure}{\textwidth}
+    \centering
+    \includegraphics[width=0.85\textwidth]{\toplevelprefix/chapters/chapter7/figs/MRI.png}
+    \caption{}
+\end{subfigure}
+
+\vspace{0.3cm}
+
+\begin{subfigure}[b]{0.47\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter7/figs/mri-sampling.png}
+    \caption{}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.47\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter7/figs/mri-machine.png}
+    \caption{}
+\end{subfigure}
+
+\caption{Simplified overview of magnetic resonance imaging (MRI) reconstruction.
+  \textbf{(a)} An overview of the imaging process. A slice of the object being
+  imaged (say, a human brain) is measured in the Fourier domain via the MRI
+  machine. The spatial image can be reconstructed via direct inversion of the
+  Fourier domain measurements. \textbf{(b)} In practice, the MRI machine
+  \textit{subsamples} the Fourier domain via a structured sampling pattern for
+  the sake of efficiency. This creates a linear inverse problem, where priors
+  about the structure of the underlying image must be exploited to enable unique
+  reconstruction. \textbf{(c)} The actual measurement apparatus uses
+  a controlled magnetic field to obtain the Fourier domain measurements. Images
+  reproduced with permission from \cite{Wright-Ma-2022}.
+  }\label{fig:mri-reconstruction}
+\end{figure}
+
+%Liyue's work:
+%\begin{enumerate}
+%  \item ICLR 2022 with Yang Song
+%  \item ReSample paper (latent diffusion)
+%  \item ECCV 2024, consistency models (distilled)
+%  \item NeurIPS 2024 DiffusionBlend (high resolution)
+%  \item NeurIPS 2024 patch diffusion models (efficiency focus)
+%\end{enumerate}
+
+The framework that we have developed above is already powerful enough to be
+applied to solve various \textit{scientific inverse problems}, where the measurements
+$\vy = h(\vx_o) + \vw$ are the outputs of a known measurement process $h$ on
+a specific signal of interest $\vx_o$, and where there are infinitely many
+possible signals $\vx$ that satisfy $\vy = h(\vx) + \vw$. This means that to
+find the \textit{true} $\vx_o$ that generated $\vy$, we need to exploit prior
+information about the structure of $\vx_o$.
+We will consider the probabilistic setting where $\vx_o \sim p_{\vx}$, and where
+we have say in the form of a diffusion model for $p_{\vx}$.
+
+An instructive example of a scientific inverse problem is magnetic resonance
+imaging (MRI) (\Cref{fig:mri-reconstruction}), wherein the data distribution
+$\vx$ is over images corresponding to an underlying object of interest (such as
+a 2D slice of a human subject's brain). In MRI applications, the measurement
+operator $h$ corresponds to the machine generating and modulating the magnetic
+field and recording the patient's response to it
+(\Cref{fig:mri-reconstruction}(c)). It can be modeled as implementing the
+\textit{Fourier transform} of the underlying spatial signal
+(\Cref{fig:mri-reconstruction}(a))---see \cite[Chapter 10]{Wright-Ma-2022} for
+a detailed mathematical derivation.
+In addition, for efficiency's sake, the MRI machine typically only measures
+a subset of the measured frequencies, in a structured measurement pattern that
+can be modeled as either a radial or a spiral pattern
+(\Cref{fig:mri-reconstruction}(b)). Writing $\cF$ to denote the (discrete) Fourier
+transform operator and $\cS$ to denote the machine's (known) subsampling
+pattern, the measured signal is then
+\begin{equation}\label{eq:mri-measurement}
+  \vy = \cS \circ \cF(\vx_o) + \vw.
+\end{equation}
+The measurement operator $\cS \circ \cF$ is \textit{linear}, implying that it
+can be represented by a $m \times n$ matrix after appropriate reshaping, but it
+is also \textit{compressive}, which means that $m \ll n$ and that we need to
+exploit prior knowledge about $p_{\vx}$ to reconstruct $\vx_o$ (or more
+generally to sample from the posterior $p_{\vx \mid \vy}$). 
+
+The distribution
+$p_{\vx}$ of MRI images is simpler than some image distributions (e.g., natural
+images), but it is still complex enough to benefit from using a learned model
+for $p_{\vx}$ rather than an analytical one (c.f.\ \cite{Wright-Ma-2022}).
+One direct approach is to apply the diffusion posterior sampling approximation
+we developed in the previous section, which led to
+\Cref{alg:iterative_denoising_conditional_DPS}, with the specific MRI
+measurement operator $\vA = \cS \circ \cF$ and a diffusion model pretrained on
+MRI data.
+This precise combination of approaches has not appeared in the literature.
+Instead, we highlight results from a different but related approach, which
+enforces measurement consistency on each diffusion step.
+Following the pioneering work of \textcite{song2022solving}, numerous
+such measurement consistency algorithms for medical image reconstruction have been
+developed, including the improved approaches of \textcite{song2024solving} and
+\textcite{rout2023solving} (which utilize latent diffusion models, as we have
+developed for representation autoencoders in \Cref{ch:consistent}).
+\Cref{tab:mri-reconstruction} shows MRI reconstruction accuracy results
+(measured in terms of PSNR)
+for the approach developed by \textcite{song2022solving}. It compares favorably
+to supervised baselines (trained on many independent paired samples $(\vy,
+\vx_o)$, which is an additional requirement) and unsupervised baselines (which
+correspond to measurement matching approximations that came before diffusion
+posterior sampling). \sdb{TODO: Ask Liyue about figure of MRI visual results.}
+
+\begin{table}[t]
+    \centering
+    \begin{tabular}{@{}lccc@{}}
+        \toprule
+        Method & $24\times$ Accel. & $8\times$ Accel. & $4\times$ Accel. \\
+        \midrule
+        Cascade DenseNet & $23.39_{\pm 2.17}$ & $28.35_{\pm 2.30}$ & $30.97_{\pm 2.33}$ \\
+        DuDoRNet & $18.46_{\pm 3.05}$ & $\bf 37.88_{\pm 3.03}$ & $30.53_{\pm 4.13}$ \\
+        \textcite{song2020score} & $27.83_{\pm 2.73}$ & $35.04_{\pm 2.11}$ & $37.55_{\pm 2.08}$ \\
+        \textcite{NEURIPS2021_7d6044e9} & $28.80_{\pm 3.21}$ & $36.44_{\pm 2.28}$ & $38.76_{\pm 2.32}$ \\
+        \textcite{song2022solving} & $\bf 29.42_{\pm 3.03}$ & $37.63_{\pm 2.70}$ & $\bf 39.91_{\pm 2.67}$ \\
+        \bottomrule
+    \end{tabular}
+    \caption{\textbf{MRI reconstruction results} comparing diffusion
+    posterior sampling approaches across different acceleration factors (the
+    degree of Fourier space subsampling in $\cS$) on the BraTS MRI
+    reconstruction dataset. PSNR metrics (higher is better) with
+    standard deviations are reported.
+    Cascade DenseNet
+    \cite{NEURIPS2019_1e48c442} and DuDoRNet \cite{9156506} are supervised
+    baselines trained on paired samples at an 8x acceleration level. The last
+    three methods are diffusion-based approaches using measurement consistency.
+    Reproduced with permission from \textcite{song2022solving}.}
+    \label{tab:mri-reconstruction}
+\end{table}
 
 \section{Conditional Inference with Paired Data and Measurements}
 In many practical applications, we do not know either the distribution of the data $\x$ of interest or the explicit relationship between the data and certain observed attributes $\y$ of the data. We only have  a (large) set of paired samples $(\X, \Y) = \{ (\x_1, \y_1), \ldots, (\x_N, \y_N) \}$ from which we need to infer the data distribution and a mapping that models their relationship:
@@ -2006,8 +2137,6 @@ sizes, in particular in modern instantiations of Stable Diffusion
 FLUX.1 \cite{Labs2025-fb}, Imagen \cite{Saharia2022-na}, and DALL-E \cite{Ramesh2022-nu}. 
 The conditioning mechanism of cross attention has also become ubiquitous in
 other applications, as in EgoAllo (\Cref{sec:egoallo}) for conditioned pose generation and in Michelangelo \cite{zhao2023michelangelo} for conditional 3D shape generation based on images or texts. 
-
-
 
 
 
