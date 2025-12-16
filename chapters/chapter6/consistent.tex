@@ -926,7 +926,32 @@ such that $\hat \X$ and $\X$ are close.
 
 Furthermore, those low-dimensional (linear) structures are still embedded in a high-dimensional representation space. Hence in order to use the so learned representations, we need to be able to access their distributions too. In Chapter \ref{ch:denoising}, we have learned that denoising is a general approach to identify hence access such low-dimensional representations. We have also learned that if the target distributions can be modeled (approximately) as a mixture of subspaces or low-rank Gaussians, their optimal denoiser operators share a similar structures as the Transformers, or the CRATE introduced in \Cref{ch:unrolling}. 
 
-Hence, altogether, we want to learn an autoencoder whose representation can be easily accessed.
+Hence, altogether, we want to learn an autoencoder whose representation can be easily accessed. 
+Concretely, we would like to learn an encoder $f$ and a decoder $g$ such that:
+\begin{enumerate}
+  \item The representation $\Z = f(\X)$ is a consistent representation of the original data $\X$ as defined in \Cref{def:bidirectional_rep}.
+  \item The representation $\Z$ can be modeled as a low-dimensional distribution so that we can learn a denoiser $D$ to access the distribution of $\Z$.
+\end{enumerate}
+
+\Cref{fig:RAE} illustrates this process. From \Cref{ch:compression}, we know that the the learned representation $\Z$ by optimizing the (unsupervised) MCR$^2$ objectives already satisfies the second requirement and can be modeled as a mixture of subspaces or low-rank Gaussians. By incorporating a sample-consistency objective, we can extend the rate reduction objective in \ref{sec:SimDINO} to learn a consistent representation:
+\begin{equation}
+  \min_{f, g}
+  [ - \Delta R_{\epsilon}(\Z) + d(\X, \hat \X)],
+  \label{eqn:autoencode-consistent}
+\end{equation}
+where $d(\X, \hat \X)$ is a measure of similarity between the original data $\X$ and the reconstructed data $\hat \X = g(\Z)$. In practice, because the objective $\Delta R_{\epsilon}(\Z)$ alone already promotes low-dimensional structure of $\Z$, we can pretrain the encoder $f$ to maximize $\Delta R_{\epsilon}(\Z)$ first, and then learn the decoder $g$ to minimize the reconstruction loss $d(\X, \hat \X)$ while fixing the encoder $f$. This two-step approach has been demonstrated to be effective, as we will see in later chapters. 
+
+Once we have learned such a consistent representation $\Z$, we can then learn a denoiser $D$ to access its distribution, as we have studied in \Cref{ch:denoising}. Concretely, suppose we have a probabilistic model $p(\z)$ that captures the distribution of the learned representations $\cZ$ and an initial standard Gaussian distribution $\cN(0, I)$. Our goal is to learn a denoiser $\bar{\z}$ such that it iteratively denoises a sample from the initial distribution to the target distribution of the learned representations. This denoiser can be trained using objectives introduced in \Cref{ch:conditional-inference}. For instance, let's take the simple case of flow matching. We can define the denoiser as a time-dependent vector field $\bar{\z}_{\theta}(t, \z_t)$ parameterized by $\theta$ that transforms a sample from the initial distribution to the target distribution over time $t \in [0, 1]$. Here, $\z_t$ is an interpolation between $\z_0$ and $\z_1$ at time $t$:
+\begin{equation}
+    \z_t = (1 - t)\z_0 + t\z_1,
+\end{equation}
+where $\z_0 \sim p(\z)$ is a sample from the learned representation distribution and $\z_1 \sim \cN(0, I)$.
+The training objective for the denoiser can then be expressed as:
+\begin{equation}
+    \min_{\theta} \cL_{\mathrm{FM}}(\theta) = \Ex_{\z_0 \sim p(\z), \z_1 \sim \cN(0, I), t \sim \mathrm{Unif}(0, 1)} \left[ \norm{\bar{\z}_{\theta}(t,\z_t) - (\z_1 - \z_0)}_2^2 \right].
+\end{equation}
+Once we have trained the denoiser, we can use it to generate new samples from the learned representation distribution via a diffusion process. This completes the learning of a representation autoencoder (RAE) with an accessible representation distribution. In \Cref{ch:applications}, we will see a specific implementation of RAE and its applications in image generation.
+
 \begin{figure}
     \centering
     \includegraphics[width=0.6\linewidth]{chapters/chapter6/figs/mental-picture.pdf}
