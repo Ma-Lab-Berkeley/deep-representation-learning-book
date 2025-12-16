@@ -407,7 +407,7 @@ This implies
 	&= \frac{1}{1 + t^{2}}\vU\vU^{\top}.\label{eq:gaussian_lowrank_denoiser_simplified}
 \end{align}
 Our optimal denoiser is a (rescaled) linear projection onto the low-rank subspace supporting our data distribution. This is essentially the same thing as probabilistic PCA from \Cref{ch:classic} (cf \Cref{subsec:probabilistic PCA}). We can formalize this intuition by considering a class of subspace-parameterized denoisers:
-\begin{equation}
+\begin{equation}\label{eq:optimal nn}
 	\bar{\vx}_{\vV}(t, \vx_{t}) = \frac{1}{1 + t^{2}}\vV\vV^{\top}\vx_{t},
 \end{equation}
 and showing that the denoising problem \(\min_{\vV \in \O(D, P)}\Ex_{\vx, \vx_{t}}\norm{\bar{\vx}_{\vV}(t, \vx_{t}) - \vx}_{2}^{2}\) obtains the same solution as probabilistic PCA (\Cref{subsec:probabilistic PCA}). Indeed, plugging our subspace denoiser into the training loss \eqref{eq:denoising_loss}, we obtain
@@ -427,7 +427,7 @@ where the second equality follows from \(\vg \sim \dNorm(\vzero, \vI)\) and \( \
 	& \qquad = \Ex_{\vx}\norm{\vx}_{2}^{2} + \bp{\frac{1}{(1 + t^{2})^{2}} - \frac{2}{1 + t^{2}}}\Ex_{\vx}\norm{\vV^{\top}\vx}_{2}^{2},
 \end{align}
 which in turn is equivalent to the problem
-\begin{equation}
+\begin{equation}\label{eq:PCA}
     \min_{\vV \in \O(D, P)}\Ex_{\vx}\norm{\vV^{\top}\vx}_{2}^{2}
 \end{equation}
 which is exactly the probabilistic PCA formulation \eqref{eq:PPCA}.
@@ -569,7 +569,7 @@ Note that the denoising iteration \eqref{eq:gen_denoising_iteration} gives a sam
 \end{algorithm}
 
 \paragraph{Step 3: optimizing training pipelines.} If we use the procedure dictated by \Cref{sub:intro_diffusion_denoising} to learn a separate denoiser \(\bar{\vx}(t, \cdot)\) for each time \(t\) to be used in the sampling algorithm, \textit{we would have to learn \(L\) separate denoisers!} This is highly inefficient---the usual case is that we have to train \(L\) separate neural networks, taking up \(L\) times the training time and storage memory, and then be locked into using these timesteps for sampling forever. Instead, we can \textit{train a single neural network} to denoise across all times \(t\), taking as input the continuous variables \(\vx_{t}\) and \(t\) (instead of just \(\vx_{t}\) before). Mechanically, our training loss averages over \(t\), i.e., solves the following problem:
-\begin{equation}
+\begin{equation}\label{eq:training loss}
 	\min_{\theta}\Ex_{t, \vx, \vx_{t}}\norm{\bar{\vx}_{\theta}(t, \vx_{t}) - \vx}_{2}^{2}.
 \end{equation}
 Similar to Step 1, where we used more timesteps closer to \(t = 0\) to ensure a better sampling process, we may want to ensure that the denoiser is higher quality closer to \(t = 0\), and thereby \textit{weight the loss} so that \(t\) near \(0\) has higher weight. Letting \(w_{t}\) be the weight at time \(t\), the weighted loss would look like
@@ -673,9 +673,9 @@ Note that if \(L \to \infty\) and we correctly learn the Bayes optimal denoiser 
 Building on the discussion of denoisers that simply memorize the training data, we now turn to a deeper investigation of when diffusion models transition from memorization to generalization. %While an overly expressive network can reproduce the empirical distribution exactly, practical diffusion models often capture the underlying structure of the data, enabling the generation of novel samples. 
 In theory, the training of diffusion models is designed to learn the empirical distribution 
 \begin{align*}
-    p_{\text{emp}}(\vx) = \sum_{i=1}^N \delta(\vx - \vx^{(i)})
+    p_{\text{emp}}(\vx) = \sum_{i=1}^N \delta(\vx -  \vx^{(i)})
 \end{align*}
-over the training samples $\mathcal S= \{  \vx^{(i)} \}_{i=1}^N$ via neural networks (i.e., a summation of delta functions $\delta(\cdot)$ of the training data points), implying that a perfectly learned neural network would simply memorize the training data. But in practice, diffusion models can creatively generate new, sensible examples that differ significantly from the training data. In this section, we analyze the mechanisms and principles that govern when a diffusion model memorizes versus generalizes, providing insights into network design and training strategies. 
+over the training samples $\{   \vx^{(i)} \}_{i=1}^N$ via neural networks (i.e., a summation of delta functions $\delta(\cdot)$ of the training data points), implying that a perfectly learned neural network would simply memorize the training data. But in practice, diffusion models can creatively generate new, sensible examples that differ significantly from the training data. In this section, we analyze the mechanisms and principles that govern when a diffusion model memorizes versus generalizes, providing insights into network design and training strategies. 
 
 % Despite the remarkable empirical success of diffusion models, their fundamental mechanisms are still poorly understood. In theory, the training of diffusion models is designed to learn the empirical distribution 
 % \begin{align*}
@@ -721,20 +721,61 @@ Moreover, within a fixed capacity, diffusion models transition from memorization
 
 \paragraph{Towards a mathematical theory of generalization}
 
-Diffusion models avoid the curse of dimensionality because they effectively learn low-dimensional distributions, where the required sample size for generalization scales linearly with the intrinsic dimension in high-dimensional space. While real-world image datasets are high-dimensional in terms of pixel count and data volume, extensive empirical evidence implies that they have a significantly lower intrinsic dimension and reside on the union of low-dimensional manifolds [5].
+Diffusion models avoid the curse of dimensionality because they effectively learn low-dimensional distributions, where the required sample size for generalization scales linearly with the intrinsic dimension in high-dimensional space. While real-world image datasets are high-dimensional in terms of pixel count and data volume, extensive empirical evidence implies that they have a significantly lower intrinsic dimension and reside on the union of low-dimensional manifolds \cite{brown2023verifying,gong2019intrinsic}.
 
-However, the complexity of image distributions makes it difficult to rigorously verify our claim regarding image datasets. To mathematically understand generalization behavior, let us consider a simple example of the mixture of low-rank Gaussian (MoLRG) distribution: 
-\begin{align}
-    \vx \sim \sum_{k=1}^K \pi_k \mathcal N(\mathbf 0, \bm U_k\bm U_k^\top),
+However, the complexity of real-world image distributions makes it difficult to rigorously verify our claims on image datasets. To mathematically understand generalization behavior, we therefore consider a simplified setting: a low-rank Gaussian distribution, i.e., 
+\begin{equation} 
+	\vx \sim \dNorm(\vzero, \vU^*\vU^{*\top}),
+\end{equation}
+where $\bm U^* \in \O(D, P)$ denotes an orthonormal basis. Accordingly, the training samples $\{ \vx^{(i)}\}_{i=1}^N$ are generated according to  
+\begin{align}\label{eq:Ua+e} 
+      \vx^{(i)} = \bm U^\star \bm a_i + \bm e_i, 
 \end{align}
-where $\pi_k$ is the mixing proportion for each $k$ that satisfies $\sum_{k=1}^K \pi_k = 1$ with $\pi_k \geq 0$, and $\bm U_k$ is the orthonormal basis of the $k$th component for each $k$. Note that MoLRG data lie on a union of linear subspaces and locally approximate the low-dimensional manifolds of image data. Furthermore, the MoLRG model is amenable to mathematical analysis with closed-form score functions while also preserving the low-dimensional characteristics of image distributions. Importantly, MoLRG differs from mixture of Gaussian (MoG) distributions in diffusion models; the use of MoLRG generally focuses on learning the covariance matrices, whereas prior studies of generic MoG have primarily emphasized learning the means. 
+where $\bm a_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm 0, \bm I)$ is coefficients for each $i \in [N]$, and $\bm e_i \in \R^D$ is noise for each $i \in [N]$. According to \eqref{eq:training loss}, the empirical training loss of diffusion models is 
+\begin{equation}\label{eq:loss}
+	\min_{\theta} \frac{1}{N}\Ex_{t, \bm g \sim \mathcal{N}(\bm 0, \bm I)}\norm{\bar{\vx}_{\theta}(t, \vx^{(i)}_t) - \vx^{(i)}}_{2}^{2},
+\end{equation}
+where $ \vx^{(i)}_t = \alpha_t \bm x^{(i)} + \sigma_t\bm g$ and $\bm g \sim \mathcal{N}(\bm 0, \bm I)$ as defined in \eqref{eq:gen_additive_gaussian_noise_model}.  According to \eqref{eq:gen_denoising_iteration}, one can show that the optimal network parameterization is
+\begin{align}
+    \bar{\vx}_{\theta}(t, \vx^{(i)}_t) = \frac{\alpha_t}{\alpha_t^2 + \sigma_t^2}\bm U\bm U^T\bm x_t,
+\end{align}
+where $\bm U \in \O(D, P)$. Using similar arguments in \eqref{eq:optimal nn}--\eqref{eq:PCA}, Problem \eqref{eq:loss} is equivalent to the following PCA problem: 
+    \begin{align}\label{eq:em loss}
+        \max_{\bm U \in \O(D, P)} \sum_{i=1}^N \|\bm U^T \bm x^{(i)}\|^2. 
+    \end{align}
+This theorem shows that training diffusion models is equivalent to performing PCA on the training samples. Note that PCA is a classical and well-studied method for learning low-dimensional subspaces, whose optimal solution can be computed via singular value decomposition (SVD). This closed-form solution allows us to leverage existing results, such as Wedin's Theorem \cite{wedin1972perturbation}, to facilitate our analysis. Leveraging this equivalence and using the concentration inequalities, we can precisely determine the minimal number of samples required to learn a single low-rank Gaussian as follows: 
+\begin{theorem}\label{thm:2}
+    Suppose that the training samples $\{\bm x^{(i)}\}_{i=1}^N$ are generated according to \eqref{eq:Ua+e}. Let $\hat{\bm U}$ denote an optimal solution of Problem (\ref{eq:em loss}). The following statements hold: 
+    \begin{itemize} 
+        \item[i)] If $N \ge P$, it holds with probability at least $1 - 1/2^{N-P+1} - \exp\left(-c_2N\right) $ that any optimal solution $\hat{\bm U}$ satisfies
+   \begin{align}\label{rst1:thm 2}
+       \left\|\hat{\bm U}\hat{\bm U}^T - \bm U^*\bm U^{* T}\right\|_F \le \frac{c_1\sqrt{\sum_{i=1}^N \|\bm e_i\|^2}}{\sqrt{N} - \sqrt{P-1}},
+   \end{align}
+   where $c_1, c_2 > 0$ are constants. 
+   \item[ii)] If $N < P$, there exists an optimal solution $\hat{\bm U} \in \O(D, P)$ such that with probability at least $1 - 1/2^{P-N+1} - \exp\left(-c_2^\prime P\right)$, 
+   \begin{align}\label{rst2:thm 2}
+       \left\|\hat{\bm U}\hat{\bm U}^T - \bm U^\star\bm U^{\star T}\right\|_F \ge \alpha - 
+       \frac{c_1^\prime\sqrt{\sum_{i=1}^N \|\bm e_i\|^2}}{\sqrt{P} - \sqrt{N-1}},
+   \end{align}
+   where $\alpha := \sqrt{2\min\{P-N, D-P\}}$ and $c_1^\prime, c_2^\prime > 0$ are constants . 
+    \end{itemize}
+\end{theorem} 
+This theorem demonstrates a phase transition from failure to success of diffusion models for learning the underlying distribution as the number of training samples increases. More precisely, when the number of training samples is larger than the intrinsic dimension of the subspace, i.e., $N \geq P$, any optimal solution $\hat{\bm U}$ recovers the basis of the underlying subspace with an approximation error depending on the noise level. Conversely, when $N < P$, optimizing the training loss fails to learn the underlying distribution. Please refer to \citep{wang2024diffusion} for the formal proof. 
+% According to \eqref{eq:optimal nn}-\eqref{eq:PCA}, seeking the optimal denoiser under the parameterization 
 
-If we consider the denoising autoencoder (DAE) formulation for training diffusion models, then the training loss can be written as
-\begin{align*}
-\min_{\bm \theta}\ \ell(\bm \theta) := \sum_{i=1}^N \int_0^1 \lambda_t \mathbb E_{\bm \epsilon \sim \mathcal{N}(\bm 0, \bm I_n)} \left[\left\| \bm x_{\bm \theta}( s_t \bm x^{(i)} + \gamma_t \bm \epsilon, t) -  \bm x^{(i)} \right\|^2\right] \mathrm{d}t,
-\end{align*}
-Here, $s_t$ and $\gamma_t$ are the predefined hyperparameters that control the added noise schedule, and $\lambda_t$ is a weight function for the training loss. If we parameterize the DAE according to the form of the optimal posterior estimator of the above MoLRG distribution—where the subspace 
- is learnable—we can then show that the training loss is equivalent to the canonical subspace clustering problem [8]:
+
+% To mathematically understand generalization behavior, let us consider a simple example of the mixture of low-rank Gaussian (MoLRG) distribution: 
+% \begin{align}
+%     \vx \sim \sum_{k=1}^K \pi_k \mathcal N(\mathbf 0, \bm U_k\bm U_k^\top),
+% \end{align}
+% where $\pi_k$ is the mixing proportion for each $k$ that satisfies $\sum_{k=1}^K \pi_k = 1$ with $\pi_k \geq 0$, and $\bm U_k$ is the orthonormal basis of the $k$th component for each $k$. Note that MoLRG data lie on a union of linear subspaces and locally approximate the low-dimensional manifolds of image data. Furthermore, the MoLRG model is amenable to mathematical analysis with closed-form score functions while also preserving the low-dimensional characteristics of image distributions. Importantly, MoLRG differs from mixture of Gaussian (MoG) distributions in diffusion models; the use of MoLRG generally focuses on learning the covariance matrices, whereas prior studies of generic MoG have primarily emphasized learning the means. 
+
+% If we consider the denoising autoencoder (DAE) formulation for training diffusion models, then the training loss can be written as
+% \begin{align*}
+% \min_{\bm \theta}\ \ell(\bm \theta) := \sum_{i=1}^N \int_0^1 \lambda_t \mathbb E_{\bm \epsilon \sim \mathcal{N}(\bm 0, \bm I_n)} \left[\left\| \bm x_{\bm \theta}( s_t \bm x^{(i)} + \gamma_t \bm \epsilon, t) -  \bm x^{(i)} \right\|^2\right] \mathrm{d}t,
+% \end{align*}
+% Here, $s_t$ and $\gamma_t$ are the predefined hyperparameters that control the added noise schedule, and $\lambda_t$ is a weight function for the training loss. If we parameterize the DAE according to the form of the optimal posterior estimator of the above MoLRG distribution—where the subspace 
+%  is learnable—we can then show that the training loss is equivalent to the canonical subspace clustering problem [8]:
 
 \section{Summary and Notes}
 
