@@ -307,7 +307,7 @@ output of the Bayes-optimal denoiser \(\bar{\vx}^{\ast}(t, \cdot)\) is almost ne
 \end{example}
 
 
-\subsubsection{Incremental denoising.}
+\subsubsection{Incremental Denoising.}
 Therefore, if we want to denoise the very noisy sample \(\vx_{T}\) (where—recall—\(T\) is the maximum time), we cannot just use the denoiser \textit{once}. Instead, we must use the denoiser many times, analogously to gradient descent with \textit{decaying step sizes}, to converge to a stationary point \(\hat{\vx}\). Namely, we shall use the denoiser to go from \(\vx_{T}\) to \(\hat{\vx}_{T - \delta}\) which approximates \(\vx_{T - \delta}\), then from \(\hat{\vx}_{T - \delta}\) to \(\hat{\vx}_{T - 2\delta}\), etc., all the way from \(\hat{\vx}_{\delta}\) to \(\hat{\vx} = \hat{\vx}_{0}\). Each time we take a denoising step, the action of the denoiser becomes more like a gradient step on the original (log-)density. 
 
 More formally, we uniformly discretize \([0, T]\) into \(L + 1\) timesteps \(0 = t_{0} < t_{1} < \cdots < t_{L} = T\), i.e.,
@@ -385,7 +385,7 @@ What is a good architecture for this neural network \(\bar{\vx}_{\theta^{\ast}}(
 	\vx \sim \dNorm(\vzero, \vU\vU^{\top}),
 \end{equation}
 where \(\vU \in \O(D, P)\) is a tall orthogonal matrix with \(P \leq D\) (using zero-mean for essentially notational convenience).  The optimal denoiser under \eqref{eq:x_gaussian_distribution} is (from \Cref{example:denoising_gaussian_mixture}):
-\begin{equation}
+\begin{equation}\label{eq:optimal denoiser}
 	\bar{\vx}^{\ast}(t, \vx_{t}) = \vU\vU^{\top}(\vU\vU^{\top} + t^{2}\vI)^{-1}\vx_{t}.
 \end{equation}
 The matrix  \(\vU\vU^{\top} + t^{2}\vI\) is a low-rank perturbation of the full-rank matrix \(t^{2}\vI\), and thus ripe for simplification via the \textit{Sherman-Morrison-Woodbury identity}, i.e., for matrices \(\vA, \vC, \vU, \vV\) such that \(\vA\) and \(\vC\) are invertible,
@@ -428,9 +428,13 @@ where the second equality follows from \(\vg \sim \dNorm(\vzero, \vI)\) and \( \
 \end{align}
 which in turn is equivalent to the problem
 \begin{equation}\label{eq:PCA}
-    \min_{\vV \in \O(D, P)}\Ex_{\vx}\norm{\vV^{\top}\vx}_{2}^{2}
+    \max_{\vV \in \O(D, P)}\Ex_{\vx}\norm{\vV^{\top}\vx}_{2}^{2}
 \end{equation}
-which is exactly the probabilistic PCA formulation \eqref{eq:PPCA}.
+which was shown in \Cref{sub:pca} to be equivalent to the problem 
+\begin{equation}
+    \min_{\vV \in \O(D, P)}\Ex_{\vx}\norm{\vx - \vV\vV^{\top}\vx}_{2}^{2},
+\end{equation}
+i.e., the probabilistic PCA formulation \eqref{eq:PPCA}.
 
 Thus, if we were to assume our data were drawn from a low-rank Gaussian, our denoising algorithm essentially would consist of many PCA iterations in a row. While this method sounds very simple, it can actually produce complex and relatively powerful denoising behaviors when applied to practical data, as demonstrated by PCANet \parencite{chan2015pcanet}. Nevertheless, in order to obtain a more general denoising operator that may work on complex and multi-modal data distributions, we will consider a more broad class of data distributions: the ubiquitous class of \textit{low-rank Gaussian mixture models},  whose denoiser we computed in \Cref{ex:gaussian_mixture} and \Cref{example:denoising_gaussian_mixture}. In the context of denoising, since Gaussian mixture models can approximate a very broad class of distributions arbitrarily well, in practice optimizing among the class of denoisers for Gaussian mixture models can potentially give us something close to the optimal denoiser for the real data distribution. 
 
@@ -439,7 +443,7 @@ Formally, we now assume that \(\vx\) is drawn from a low-rank Gaussian mixture m
 	\vx \sim \frac{1}{K}\sum_{k = 1}^{K}\dNorm(\vzero, \vU_{k}\vU_{k}^{\top}).
 \end{equation}
 Then the optimal denoiser under \eqref{eq:additive_gaussian_noise_model} is (from \Cref{example:denoising_gaussian_mixture})
-\begin{equation}
+\begin{equation} 
 	\bar{\vx}^{\ast}(t, \vx_{t}) = \sum_{k = 1}^{K}\frac{\phi(\vx_{t} ; \vzero,
 	\vU_{k}\vU_{k}^{\top} + t^{2}\vI)}{\sum_{i = 1}^{K}\phi(\vx_{t} ; \vzero, \vU_{i}\vU_{i}^{\top} + t^{2}\vI)}\cdot\bp{\vU_{k}\vU_{k}^{\top}(\vU_{k}\vU_{k}^{\top} + t^{2}\vI)^{-1}\vx_{t}}.
 \end{equation}
@@ -592,18 +596,20 @@ One reasonable choice of weight in practice is \(w_{t} = \alpha_{t}/\sigma_{t}\)
 
 		\Function{TrainDenoiser}{$\cD, \Theta$}
 		\State{Initialize \(\theta^{(1)} \in \Theta\)}
-		\For{\(i \in [M]\)}
-		\For{\(n \in [N]\)}
-		\State{\(\vx_{n}^{(i)} \sim \cD\)} \Comment{Draw a sample from the dataset.}
-		\State{\(t_{n}^{(i)} \simiid \dUnif(\{t_{\ell}\}_{\ell = 1}^{L})\)} \Comment{Sample a timestep.}
-		\State{\(\vg_{n}^{(i)} \simiid \dNorm(\vzero, \vI)\)} \Comment{Sample a noise vector.}
-		\State{\(\vx_{t, n}^{(i)} \doteq \alpha_{t_{n}^{(i)}}\vx_{n}^{(i)} + \sigma_{t_{n}^{(i)}}\vg_{n}^{(i)}\)} \Comment{Compute the noised sample.}
-		\State{\(w_{n}^{(i)} \doteq w_{t_{n}^{(i)}}\)} \Comment{Compute the loss weight.}
+		\For{\(m \in [M]\)}
+		\For{\(i \in [N]\)}
+		\State{\(\vx^{(m, i)} \sim \cD\)} \Comment{Draw a sample from the dataset.}
+		\State{\(t^{(m, i)} \simiid \dUnif(\{t_{\ell}\}_{\ell = 1}^{L})\)} \Comment{Sample a timestep.}
+        \State{\(\alpha^{(m, i)} \doteq \alpha_{t^{(m, i)}}\)} \Comment{Compute the mean scale.}
+        \State{\(\sigma^{(m, i)} \doteq \sigma_{t^{(m, i)}}\)} \Comment{Compute the noise scale.}
+		\State{\(w^{(m, i)} \doteq w_{t^{(m, i)}}\)} \Comment{Compute the loss weight.}
+		\State{\(\vg^{(m, i)} \simiid \dNorm(\vzero, \vI)\)} \Comment{Sample a noise vector.}
+		\State{\(\vx_{t}^{(m, i)} \doteq \alpha^{(m, i)}\vx^{(m, i)} + \sigma^{(m, i)}\vg^{(m, i)}\)} \Comment{Compute the noised sample.}
 		\EndFor
-		\State{\(\hat{\cL}^{(i)} \doteq \displaystyle \frac{1}{N}\sum_{n = 1}^{N}w_{n}^{(i)}\norm{\vx_{n}^{(i)} - \bar{\vx}_{\theta^{(i)}}(t_{n}^{(i)}, \vx_{t, n}^{(i)})}_{2}^{2}\)} \Comment{Compute the loss estimate.}
-		\State{\(\theta^{(i + 1)} \doteq \texttt{OptimizationUpdate}^{(i)}(\theta^{(i)}, \nabla_{\theta^{(i)}}\hat{\cL}^{(i)})\)} \Comment{Update parameters.}
+		\State{\(\hat{\cL}^{(m)} \doteq \displaystyle \frac{1}{N}\sum_{i = 1}^{N}w^{(m, i)}\norm{\vx^{(m, i)} - \bar{\vx}_{\theta^{(m)}}(t^{(m, i)}, \vx_{t}^{(m, i)})}_{2}^{2}\)} \Comment{Compute the loss.}
+		\State{\(\theta^{(m + 1)} \doteq \texttt{OptimizationUpdate}^{(m)}(\theta^{(m)}, \nabla_{\theta^{(m)}}\hat{\cL}^{(m)})\)} \Comment{Update parameters.}
 		\EndFor
-		\State{\Return{\(\bar{\vx}_{\theta^{(K + 1)}}\)}}
+		\State{\Return{\(\bar{\vx}_{\theta^{(M + 1)}}\)}}
 		\EndFunction
 	\end{algorithmic}
 	\caption{Learning a denoiser from data.}
@@ -624,7 +630,7 @@ and vice-versa. Thus a good network for estimating \(\bar{\vg}\) is the same as 
 \end{equation}
 For the sake of completeness we will mention that other targets have been proposed for different tasks, e.g., \(\Ex[\odv*{\vx_{t}}{t} \mid \vx_{t}]\) (called \(v\)-prediction or velocity prediction), etc., but denoising and noise prediction remain commonly used. Throughout the rest of this book we will only consider denoising.
 
-\subsubsection{Sampling error rate of the denoising process.}
+\subsubsection{Sampling Error Rate of the Denoising Process.}
 We have made lots of changes to our original platonic noising/denoising process. To assure ourselves that the new process still works in practice, we can compute numerical examples (such as \Cref{fig:vp_gmm_denoising}). To assure ourselves that it is theoretically sound, we can prove a \textit{bound on the error rate} for the sampling algorithm, which shows that the error rate is small. We will now furnish such a rate from the literature, which shows that the output distribution of the sampler converges in the so-called \textit{total variation (TV) distance} to the true distribution. The TV distance is defined between two random variables \(\vx\) and \(\vy\) as:
 \begin{equation}
 	\TV(\vx, \vy) \doteq \sup_{A \subseteq \R^{d}}\abs*{\Pr[\vx \in A] - \Pr[\vy \in A]}.
@@ -655,11 +661,11 @@ Note that if \(L \to \infty\) and we correctly learn the Bayes optimal denoiser 
 \end{remark}
 
 \begin{remark}
-	The theory presented at the end of the last \Cref{sub:intro_diffusion_denoising} seems to suggest (loosely speaking) that in practice, using a transformer-like network is a good choice for learning or approximating a denoiser. This is reasonable, but what is the problem with using any old neural network (such as a multi-layer perceptron (MLP)) and just trying to scale it up to infinity? To observe the problem with this, let us look at another special case of the Gaussian mixture model studied in \Cref{example:denoising_gaussian_mixture}. Namely, the \textit{empirical distribution} is an instance of a degenerate Gaussian mixture model, with \(K = N\) components \(\dNorm(\vx_{i}, \vzero)\) sampled with equal probability \(\pi_{i} = \frac{1}{N}\). In this case the Bayes optimal denoiser is
+	The theory presented at the end of the last \Cref{sub:intro_diffusion_denoising} seems to suggest (loosely speaking) that in practice, using a transformer-like network is a good choice for learning or approximating a denoiser. This is reasonable, but what is the problem with using any old neural network (such as a multi-layer perceptron (MLP)) and just trying to scale it up to infinity? To observe the problem with this, let us look at another special case of the Gaussian mixture model studied in \Cref{example:denoising_gaussian_mixture}. Namely, the \textit{empirical distribution} on vectors \((\vx^{(i)})_{i = 1}^{N} \subseteq \R^{D}\) is an instance of a degenerate Gaussian mixture model, with \(K = N\) components \(\dNorm(\vx^{(i)}, \vzero)\) sampled with equal probability \(\pi_{i} = \frac{1}{N}\). In this case the Bayes optimal denoiser is
 	\begin{equation}\label{eq:memorizing_denoiser}
-		\bar{\vx}^{\star}(t, \vx_{t}) = \sum_{i = 1}^{N}\frac{\exp({-\|\vx_{t} - \alpha_{t}\vx_{i}\|_{2}^{2}/(2\sigma_{t}^{2})})}{\sum_{j = 1}^{N}\exp({-\|\vx_{t} - \alpha_{t}\vx_{j}\|_{2}^{2}/(2\sigma_{t}^{2})})}\vx_{i}.
+		\bar{\vx}^{\star}(t, \vx_{t}) = \sum_{i = 1}^{N}\frac{\exp({-\|\vx_{t} - \alpha_{t}\vx^{(i)}\|_{2}^{2}/(2\sigma_{t}^{2})})}{\sum_{j = 1}^{N}\exp({-\|\vx_{t} - \alpha_{t}\vx^{(j)}\|_{2}^{2}/(2\sigma_{t}^{2})})}\vx^{(i)}.
 	\end{equation}
-	This is a convex combination of the data \(\vx_{i}\), and the coefficients get ``sharper'' (i.e., closer to \(0\) or \(1\)) as \(t \to 0\). Notice that this denoiser \textit{optimally solves} the denoising optimization problem \eqref{eq:parametric_denoising_loss} when we compute the loss based on drawing \(\vx\) uniformly at random from a fixed finite dataset \(\vX = \{\vx_{i}\}_{i = 1}^{N}\), which is a very realistic setting. Thus, if our network architecture \(\bar{\vx}_{\theta}\) is expressive enough such that optimal denoisers of the above form \eqref{eq:memorizing_denoiser} may be well-approximated, then the learned denoiser may do just that. Then, our iterative denoising \Cref{alg:iterative_denoising} will sample exactly from the empirical distribution, re-generating samples in the training data, as certified by \Cref{thm:diffusion_sampler_convergence}. This is a bad sampler, not really more interesting than a database of all samples, and so it is important to understand how to avoid this in practice. The key is to come up with a network architecture which can well-approximate the true denoiser (say corresponding to a low-rank distribution as in \eqref{eq:gmm_lowrank_denoiser}) but not the empirical Bayesian denoiser as in \eqref{eq:memorizing_denoiser}. Some work has explored this fine line and why modern diffusion models, which use transformer- and convolutional-based network architectures, can memorize and generalize in different regimes \citep{kamb2024analytic,niedoba2024towards}.
+	This is a convex combination of the data \(\vx^{(i)}\), and the coefficients get ``sharper'' (i.e., closer to \(0\) or \(1\)) as \(t \to 0\). Notice that this denoiser \textit{optimally solves} the denoising optimization problem \eqref{eq:parametric_denoising_loss} when we compute the loss based on drawing \(\vx\) uniformly at random from a fixed finite dataset \(\vX = (\vx^{(i)})_{i = 1}^{N}\), which is a realistic model for training on a finite dataset. Thus, if our network architecture \(\bar{\vx}_{\theta}\) is expressive enough such that optimal denoisers of the above form \eqref{eq:memorizing_denoiser} may be well-approximated, then the learned denoiser may do just that. Then, our iterative denoising \Cref{alg:iterative_denoising} will sample exactly from the empirical distribution, re-generating samples in the training data, as certified by \Cref{thm:diffusion_sampler_convergence}. This is a bad sampler, not really more interesting than a database of all samples, and so it is important to understand how to avoid this in practice. The key is to come up with a network architecture which can well-approximate the true denoiser (say corresponding to a low-rank distribution as in \eqref{eq:gmm_lowrank_denoiser}) but not the empirical Bayesian denoiser as in \eqref{eq:memorizing_denoiser}. Some work has explored this fine line and why modern diffusion models, which use transformer- and convolutional-based network architectures, can memorize and generalize in different regimes \citep{kamb2024analytic,niedoba2024towards}.
 
 	At a high level, a denoiser which memorizes all the training points, as in \eqref{eq:memorizing_denoiser}, corresponds to a parametric model of the distribution which has minimal coding rate, and achieves this by just coding every sample separately. We will discuss this problem (and seeming paradox with our initial desiderata at the end of \Cref{sub:min_entropy}) from the perspective of information theory in the next section.
 \end{remark}
@@ -675,7 +681,7 @@ In theory, the training of diffusion models is designed to learn the empirical d
 \begin{align*}
     p_{\text{emp}}(\vx) = \sum_{i=1}^N \delta(\vx -  \vx^{(i)})
 \end{align*}
-over the training samples $\{   \vx^{(i)} \}_{i=1}^N$ via neural networks (i.e., a summation of delta functions $\delta(\cdot)$ of the training data points), implying that a perfectly learned neural network would simply memorize the training data. But in practice, diffusion models can creatively generate new, sensible examples that differ significantly from the training data. In this section, we analyze the mechanisms and principles that govern when a diffusion model memorizes versus generalizes, providing insights into network design and training strategies. 
+over the training samples $(\vx^{(i)})_{i=1}^N$ via neural networks (i.e., a summation of delta functions $\delta(\cdot)$ of the training data points), implying that a perfectly learned neural network would simply memorize the training data. But in practice, diffusion models can creatively generate new, sensible examples that differ significantly from the training data. In this section, we analyze the mechanisms and principles that govern when a diffusion model memorizes versus generalizes, providing insights into network design and training strategies. 
 
 % Despite the remarkable empirical success of diffusion models, their fundamental mechanisms are still poorly understood. In theory, the training of diffusion models is designed to learn the empirical distribution 
 % \begin{align*}
@@ -697,7 +703,7 @@ Quantitatively, we measure the reproducibility (RP) with the following probabili
 \begin{align}
     \text{RP Score} := \mathbb P\left[\mathcal M_{\text{SSCD}}(\vx_1,\vx_2)>\tau\right],
 \end{align}
-where $\tau>0$ is some threshold, $\mathcal M_{\text{SSCD}}(\vx_1,\vx_2)$ measures the cosine similarity between $\vx_1$ and $\vx_2$ in the latent space of a self-supervised copy-detection (SSCD) neural descriptor, and $\vx_1$ and $\vx_2$ are generated by two different diffusion models starting from the same initial noise. Strong model reproducibility implies that different diffusion models learn the same score functions. However, we have not yet answered the critical question: Why are diffusion models able to generalize? To answer this question, we introduce a generalization (GL) score that quantifies the distinction between a generated sample $\vx$ and the training samples $\{ \vx^{(i)} \}_{i=1}^N$:
+where $\tau>0$ is some threshold, $\mathcal M_{\text{SSCD}}(\vx_1,\vx_2)$ measures the cosine similarity between $\vx_1$ and $\vx_2$ in the latent space of a self-supervised copy-detection (SSCD) neural descriptor, and $\vx_1$ and $\vx_2$ are generated by two different diffusion models starting from the same initial noise. Strong model reproducibility implies that different diffusion models learn the same score functions. However, we have not yet answered the critical question: Why are diffusion models able to generalize? To answer this question, we introduce a generalization (GL) score that quantifies the distinction between a generated sample $\vx$ and the training samples $(\vx^{(i)})_{i=1}^N$:
 \begin{align}
     \text{GL Score} := 1- \mathbb P( \max_{i \in [N]} \mathcal M_{\text{SSCD}}(\vx,\vx^{(i)})>\tau),
 \end{align}
@@ -727,19 +733,23 @@ However, the complexity of real-world image distributions makes it difficult to 
 \begin{equation} 
 	\vx \sim \dNorm(\vzero, \vU^*\vU^{*\top}),
 \end{equation}
-where $\bm U^* \in \O(D, P)$ denotes an orthonormal basis. Accordingly, the training samples $\{ \vx^{(i)}\}_{i=1}^N$ are generated according to  
+where $\bm U^* \in \O(D, P)$ denotes the ground-truth orthonormal basis. Accordingly, the training samples $( \vx^{(i)})_{i=1}^N$ are generated according to  
 \begin{align}\label{eq:Ua+e} 
-      \vx^{(i)} = \bm U^\star \bm a_i + \bm e_i, 
+      \vx^{(i)} = \bm U^* \bm a_i + \bm e_i, 
 \end{align}
-where $\bm a_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm 0, \bm I)$ is coefficients for each $i \in [N]$, and $\bm e_i \in \R^D$ is noise for each $i \in [N]$. According to \eqref{eq:training loss}, the empirical training loss of diffusion models is 
+where $\bm a_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm 0, \bm I)$ is coefficients for each $i \in [N]$, and $\bm e_i \in \R^D$ is noise for each $i \in [N]$. Note that the noise $\bm e_i$ captures variability arising from real-world factors---such as measurement error, modeling mismatch, or deviations from an ideal low-rank structure. According to \eqref{eq:training loss}, the empirical training loss of diffusion models is 
 \begin{equation}\label{eq:loss}
 	\min_{\theta} \frac{1}{N}\Ex_{t, \bm g \sim \mathcal{N}(\bm 0, \bm I)}\norm{\bar{\vx}_{\theta}(t, \vx^{(i)}_t) - \vx^{(i)}}_{2}^{2},
 \end{equation}
-where $ \vx^{(i)}_t = \alpha_t \bm x^{(i)} + \sigma_t\bm g$ and $\bm g \sim \mathcal{N}(\bm 0, \bm I)$ as defined in \eqref{eq:gen_additive_gaussian_noise_model}.  According to \eqref{eq:gen_denoising_iteration}, one can show that the optimal network parameterization is
+where $ \vx^{(i)}_t = \alpha_t \bm x^{(i)} + \sigma_t\bm g$ and $\bm g \sim \mathcal{N}(\bm 0, \bm I)$ as defined in \eqref{eq:gen_additive_gaussian_noise_model}.  Using \eqref{eq:gen_additive_gaussian_noise_model} and the same calculation in \eqref{eq:optimal denoiser}--\eqref{eq:gaussian_lowrank_denoiser_simplified}, the optimal denoiser is  
+\begin{align}
+    \bar{\vx}^{\ast}(t, \vx_{t}) = \frac{\alpha_t}{\alpha_t^2 + \sigma_t^2}\bm U^*\bm U^{*T}\bm x_t.
+\end{align}
+Therefore, the optimal network parameterization is
 \begin{align}
     \bar{\vx}_{\theta}(t, \vx^{(i)}_t) = \frac{\alpha_t}{\alpha_t^2 + \sigma_t^2}\bm U\bm U^T\bm x_t,
 \end{align}
-where $\bm U \in \O(D, P)$. Using similar arguments in \eqref{eq:optimal nn}--\eqref{eq:PCA}, Problem \eqref{eq:loss} is equivalent to the following PCA problem: 
+where $\bm U \in \O(D, P)$. Using similar arguments in \eqref{eq:optimal nn}--\eqref{eq:PCA}, we can show that Problem \eqref{eq:loss} is equivalent to the following PCA problem: 
     \begin{align}\label{eq:em loss}
         \max_{\bm U \in \O(D, P)} \sum_{i=1}^N \|\bm U^T \bm x^{(i)}\|^2. 
     \end{align}
@@ -754,7 +764,7 @@ This theorem shows that training diffusion models is equivalent to performing PC
    where $c_1, c_2 > 0$ are constants. 
    \item[ii)] If $N < P$, there exists an optimal solution $\hat{\bm U} \in \O(D, P)$ such that with probability at least $1 - 1/2^{P-N+1} - \exp\left(-c_2^\prime P\right)$, 
    \begin{align}\label{rst2:thm 2}
-       \left\|\hat{\bm U}\hat{\bm U}^T - \bm U^\star\bm U^{\star T}\right\|_F \ge \alpha - 
+       \left\|\hat{\bm U}\hat{\bm U}^T - \bm U^*\bm U^{* T}\right\|_F \ge \alpha - 
        \frac{c_1^\prime\sqrt{\sum_{i=1}^N \|\bm e_i\|^2}}{\sqrt{P} - \sqrt{N-1}},
    \end{align}
    where $\alpha := \sqrt{2\min\{P-N, D-P\}}$ and $c_1^\prime, c_2^\prime > 0$ are constants . 
