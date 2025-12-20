@@ -153,9 +153,10 @@ where the \(\softmax \colon \R^{s} \to \Delta_{s}\) function is defined by
 and \(\tau > 0\) is a ``temperature'' parameter which controls the entropy of the softmax's output.
 
 In particular, DINO minimizes the difference between the probability vector \(\vp_{\theta, \vW, \vmu}(\vX_{g}) \doteq h_{\vW, \vmu}(\vz_{\theta}(\vX_{g}))\) for each global view \(\vX_{g} \doteq v_{g}(\vX)\) and the probability vector \(\vp_{\theta, \vW}(\vX_{c}) \doteq h_{\vW, \vzero_{m}}(\vz_{\theta}(\vX_{c}))\) for each view \(\vX_{c} \doteq v_{c}(\vX)\). Here, \(v_{c}\) can \textit{either} be a local view or a global view. We will discuss the implementation of \(f_{\theta}\) and \(f_{\theta}^{\ext}\) shortly in \Cref{sub:contrastive_learning_architecture}. Overall, DINO solves the problem
- \begin{equation}\label{eq:dino_loss}
-     \min_{\theta, \vW, \vmu}\cL_{\dino}(\theta, \vW, \vmu) \qquad \text{where} \qquad \cL_{\dino}(\theta, \vW, \vmu) \doteq \Ex[d_{\CE}(\vp_{\theta, \vW, \vmu}(\vX_{g}), \vp_{\theta, \vW}(\vX_{c}))],
-\end{equation}
+ \begin{eqnarray}
+     &&\min_{\theta, \vW, \vmu}\cL_{\dino}(\theta, \vW, \vmu) \qquad \text{where} \nonumber \\
+     &&\cL_{\dino}(\theta, \vW, \vmu) \doteq \Ex[d_{\CE}(\vp_{\theta, \vW, \vmu}(\vX_{g}), \vp_{\theta, \vW}(\vX_{c}))],\label{eq:dino_loss}
+\end{eqnarray}
 where the expectation is over data \(\vX\), global views \(v_{g}\), and other views \(v_{c}\).
 
 In this specific case, however, if you try to implement \eqref{eq:dino_loss} and optimize it on a real network, it is very likely that you will run into a problem: after running a few iterations of the learning algorithm, the feature mapping \(f_{\theta}^{\ext} \circ f_{\theta}\) will \textit{become the constant function}! This certainly optimizes the above loss since it minimizes the distance between features of different views of the same image. But we obviously do not want to learn this solution. 
@@ -173,7 +174,7 @@ Before, collapse was avoided by using tricks to update \(\vmu\) and \(\tau\). In
     \cL_{\simdino}(\theta) \doteq \Ex[d_{\ell^{2}}(\vz_{\theta}(\vX_{g}),
     \vz_{\theta}(\vX_{c}))] - \frac{\gamma}{2}\log\det\rp{\vI + \frac{d}{\eps^{2}}\Cov(\vz_{\theta}(\vX_{g}))},
 \end{equation}
-where \(\eps > 0\) is fixed and the appropriate expectations are, as before, taken over data \(\vX\), global view \(v_{g}\), and other (local or global) view \(v_{c}\). The loss in \eqref{eq:simdino_loss} is the loss used for the simplified DINO (``SimDINO''). As we will see, when properly implemented, it works at least as well as the original DINO.
+where \(\eps > 0\) is fixed and the appropriate expectations are, as before, taken over data \(\vX\), global view \(v_{g}\), and other (local or global) view \(v_{c}\). The loss in \eqref{eq:simdino_loss} is essentially the same loss introduced in Section \ref{sec:SimDINO} of Chapter \ref{ch:lossy-compression} for the simplified DINO (``SimDINO''). As we will see, when properly implemented, it works at least as well as the original DINO.
 
 \subsection{Architecture: Vision Transformer}\label{sub:contrastive_learning_architecture}
 
@@ -239,11 +240,11 @@ and \(f_{\theta}^{\ell}\) is defined such that \(f_{\theta}^{\ell}(\vZ_{\theta}^
 \begin{itemize}
     \item The \(\MHSA_{\theta}^{\ell}\) operator is multi-head-self-attention, the predecessor of the multi-head subspace self-attention (cf \Cref{ch:representation}). The formulation is as follows:
     \begin{align}
-        \MHSA_{\theta}^{\ell}(\vZ) \label{eq:mhsa}
-        &\doteq \vU_{\out}^{\ell}\mat{\SA([\vU_{\query}^{1, \ell}]^{\top}\vZ, [\vU_{\attnkey}^{1, \ell}]^{\top}\vZ, [\vU_{\val}^{1, \ell}]^{\top}\vZ) \\ \vdots \\ \SA([\vU_{\query}^{K, \ell}]^{\top}\vZ, [\vU_{\attnkey}^{K, \ell}]^{\top}\vZ, [\vU_{\val}^{K, \ell}]^{\top}\vZ)} + \vb_{\out}^{\ell}\vone_{n}^{\top}, \\
+        &\MHSA_{\theta}^{\ell}(\vZ) \label{eq:mhsa}
+        \doteq \vU_{\out}^{\ell}\mat{\SA([\vU_{\query}^{1, \ell}]^{\top}\vZ, [\vU_{\attnkey}^{1, \ell}]^{\top}\vZ, [\vU_{\val}^{1, \ell}]^{\top}\vZ) \\ \vdots \\ \SA([\vU_{\query}^{K, \ell}]^{\top}\vZ, [\vU_{\attnkey}^{K, \ell}]^{\top}\vZ, [\vU_{\val}^{K, \ell}]^{\top}\vZ)} + \vb_{\out}^{\ell}\vone_{n}^{\top}, \\
         \label{eq:self_attention}
-        \text{where} \qquad \SA(\vQ, \vK, \vV)
-        &\doteq \vV \underbrace{\softmax\rp{\frac{\vK^{\top}\vQ}{\sqrt{p}}}}_{\doteq \vA(\vQ, \vK)}
+        &\text{where} \qquad \SA(\vQ, \vK, \vV)
+        \doteq \vV \underbrace{\softmax\rp{\frac{\vK^{\top}\vQ}{\sqrt{p}}}}_{\doteq \vA(\vQ, \vK)}
     \end{align}
     where \(p\) is a positive integer, \(\vU_{\query}^{k, \ell}, \vU_{\attnkey}^{k, \ell}, \vU_{\val}^{k, \ell} \in \R^{d \times p}\), \(\vU_{\out}^{\ell} \in \R^{d \times Kp}\), and \(\vb_{\out}^{\ell} \in \R^{d}\) are trainable parameters contained in the parameter set \(\theta\), and the \(\softmax\) is defined column-wise as 
     \begin{align}
@@ -253,10 +254,11 @@ and \(f_{\theta}^{\ell}\) is defined such that \(f_{\theta}^{\ell}(\vZ_{\theta}^
         &= \mat{\vm_{1}, \dots, \vm_{p}} \in \R^{n \times p}.
     \end{align}
     In practice, the dimensions are usually picked such that \(Kp = d\). The terms 
-    \begin{equation}
-        \label{eq:attention_map}
-        \vA_{\theta}^{k, \ell}(\vZ) \doteq \vA([\vU_{\query}^{k, \ell}]^{\top}\vZ, [\vU_{\attnkey}^{k, \ell}]^{\top}\vZ), \qquad \SA_{\theta}^{k, \ell}(\vZ) \doteq \SA([\vU_{\query}^{k, \ell}]^{\top}\vZ, [\vU_{\attnkey}^{k, \ell}]^{\top}\vZ, [\vU_{\val}^{k, \ell}]^{\top}\vZ)
-    \end{equation}
+\begin{eqnarray}
+        \vA_{\theta}^{k, \ell}(\vZ) &\doteq& \vA([\vU_{\query}^{k, \ell}]^{\top}\vZ, [\vU_{\attnkey}^{k, \ell}]^{\top}\vZ), \nonumber \\
+        \SA_{\theta}^{k, \ell}(\vZ) &\doteq& \SA([\vU_{\query}^{k, \ell}]^{\top}\vZ, [\vU_{\attnkey}^{k, \ell}]^{\top}\vZ, [\vU_{\val}^{k, \ell}]^{\top}\vZ)
+    \label{eq:attention_map}
+\end{eqnarray}
     are also known as the \textit{\(k\)th attention map} and \textit{\(k\)th attention head output} at layer \(\ell\), respectively. Furthermore, the operation \(\SA(\vQ, \vK, \vV)\) can be computed extremely efficiently using specialized software such as FlashAttention \citep{shah2025flashattention}.
     \item The \(\MLP_{\theta}^{\ell}\) is a two-layer perceptron, a regular nonlinearity used in deep networks, and has the form 
     \begin{equation}
@@ -1153,6 +1155,7 @@ For linear probing, we use several evaluation datasets such as CIFAR10, CIFAR100
 
 
 \section{Representation Auto-Encoding of Imagery Data}
+\label{sec:RAE-implement}
 % \yima{Conceptual connections and necessity... Practical implementations details... (Robin and Peter)}
 
 % rae stuff
@@ -1165,7 +1168,8 @@ Once we have learned a good representation of the data, it is often desirable to
 
 \subsection{Consistent Auto-Encoding of Learned Representations}
 
-As discussed in \Cref{ch:representation-learning}, learning structured representations of the data is crucial for many downstream tasks. In visual representation learning, this is often achieved by self-supervised learning methods such as DINO \cite{caron2021emerging} and SimDINO. In \Cref{ch:consistent}, we posit that a good representation of data should be effectively decoded back into the original data space. This requires a consistent auto-encoding framework that can accurately reconstruct the original data from its learned representation. It is then natural to ask: is the representation learned by methods like DINO consistent and can it be effectively decoded in an auto-encoding framework?
+
+As discussed in \Cref{ch:representation-learning}, learning structured representations of the data is crucial for many downstream tasks. In visual representation learning, this is often achieved by self-supervised learning methods such as DINO \cite{caron2021emerging} and SimDINO (studied in Section \ref{sec:contrastive_learning}). In \Cref{ch:consistent}, we posit that a good representation of data should be effectively decoded back into the original data space. This requires a consistent auto-encoding framework that can accurately reconstruct the original data from its learned representation. It is then natural to ask: is the representation learned by methods like DINO consistent and can it be effectively decoded in an auto-encoding framework?
 
 To find out, we can train a \textit{representation auto-encoder} (RAE) that consists of an pretrained representation encoder (e.g. DINO) and a trainable decoder. The encoder $f$ maps an input sample $\x$ to its learned representation $\z = f(\x)$, while the decoder $g$ maps the representation back to the original data space $\x'=g(\z)$. As detailed in \Cref{ch:consistent}, one simple objective is to impose sample-wise consistency by training the decoder to minimize the reconstruction loss between the original data $\x$ and the reconstructed data $\x'$. We outline the details as follows.
 
@@ -1298,9 +1302,13 @@ We can compare RAEs trained on different pretrained encoders, including DINOv2, 
 \label{tab:rae_recon_results}
 \end{table*}
 
+\yima{Besides the quantitative results, please have some illustrations to show qualitative improvements... }
+
 \subsection{Sampling from Learned Representations via Denoising}
 
-Having learned a consistent and structured representation space via RAEs, we now turn to the task of generating \textit{new samples} from the learned representation distribution. This involves sampling from the latent space $\cZ$ of the RAE and decoding these samples back to the data space $\cX$ using the trained decoder $g$. To achieve this, we can leverage denoising and diffusion techniques, as introduced in earlier chapters. Concretely, suppose we have a probabilistic model $p(\z)$ that captures the distribution of the learned representations $\cZ$ and an initial standard Gaussian distribution $\cN(0, I)$. Our goal is to learn a denoiser $\bar{\z}$ such that it iteratively denoises a sample from the initial distribution to the target distribution of the learned representations. This denoiser can be trained using objectives introduced in \Cref{ch:conditional-inference}. Let's take the simple case of flow matching. We can define the denoiser as a time-dependent vector field $\bar{\z}_{\theta}(t, \z_t)$ parameterized by $\theta$ that transforms a sample from the initial distribution to the target distribution over time $t \in [0, 1]$. Here, $\z_t$ is an interpolation between $\z_0$ and $\z_1$ at time $t$:
+Having learned a consistent and structured representation space via RAEs, we now turn to the task of generating \textit{new samples} from the learned representation distribution. This involves sampling from the latent space $\cZ$ of the RAE and decoding these samples back to the data space $\cX$ using the trained decoder $g$. To achieve this, we can leverage denoising and diffusion techniques, as introduced in earlier chapters. Concretely, suppose we have a probabilistic model $p(\z)$ that captures the distribution of the learned representations $\cZ$ and an initial standard Gaussian distribution $\cN(0, I)$. Our goal is to learn a denoiser $\bar{\z}$ such that it iteratively denoises a sample from the initial distribution to the target distribution of the learned representations. This denoiser can be trained using objectives introduced in \Cref{ch:conditional-inference}. \yima{Chapter 7 or Chapter 3? Chapter 7 is about conditional sampling... But below seems unconditioned...} 
+
+Let's take the simple case of flow matching. We can define the denoiser as a time-dependent vector field $\bar{\z}_{\theta}(t, \z_t)$ parameterized by $\theta$ that transforms a sample from the initial distribution to the target distribution over time $t \in [0, 1]$. Here, $\z_t$ is an interpolation between $\z_0$ and $\z_1$ at time $t$:
 \begin{equation}
     \z_t = (1 - t)\z_0 + t\z_1,
 \end{equation}
@@ -1309,13 +1317,14 @@ The training objective for the denoiser can then be expressed as:
 \begin{equation}
     \min_{\theta} \cL_{\mathrm{FM}}(\theta) = \Ex_{\z_0 \sim p(\z), \z_1 \sim \cN(0, I), t \sim \mathrm{Unif}(0, 1)} \left[ \norm{\bar{\z}_{\theta}(t,\z_t) - (\z_1 - \z_0)}_2^2 \right].
 \end{equation}
+\yima{Here we should discuss the difficulty in learning a diffusion model in a high-dimensional latent space and how and why this matter can be alleviated in the case of DINO features or RAE... mainly because of better structures of the feature distribution and certain implementation details ... }
 
 
 Once we have trained the denoiser, we can use it to generate new samples from the learned representation distribution via a diffusion process. The generated representations can then be decoded back to the data space using the RAE decoder $g$. 
 
 
 \section{Conditioned 2D Image/Video Generation}
-\yima{SimCLIP... and DPS implementation, classifier-free, or cross-attention etc. (Robin, Jingfeng, Daniel, and Peter)}
+\yima{From the above latent diffusion model for images, it is natural to transition to conditioned image generation. Text condition via CLIP or SimCLIP... and DPS implementation, classifier-free, or cross-attention etc. (Robin, Jingfeng, Daniel, and Peter, decide what to feature...)}
 
 \section{Conditioned 3D Object Generation}
 \yima{image-conditioned CUPID and text-conditioned Michelangelo etc. (Shenghua and Yi)}
@@ -1356,7 +1365,14 @@ Once we have trained the denoiser, we can use it to generate new samples from th
 \newcommand{\low}{\mathrm{l}}
 \newcommand{\high}{\mathrm{h}}
 
-
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{chapters/chapter8/figs/cupid_definition.pdf}
+    \caption{\textbf{Cupid jointly infer a canonical 3D model and camera pose from a single image.} Left: Input image. 
+    Middle: Our method recovers a canonical 3D model (intrinsic properties such as shape and texture) along with the exact camera pose (extrinsic property) that generated the input.
+    Right: Re-rendering the 3D model from the estimated pose faithfully reproduces the input.}
+    \label{fig:cupid_teaser}
+\end{figure}
 Having explored methods for learning representations from 2D imagery, such as contrastive learning and masked autoencoding, we now turn to a significantly more challenging and ill-posed problem: inferring a complete 3D object structure from a single 2D image. This task lies at the heart of computer vision, aiming to reverse the physics of image formation. An image $\image$ is the result of a rendering process,
 \[
 \image = \render(\object, \pose),
@@ -1365,7 +1381,7 @@ where $\object$ represents the 3D object in a canonical, view-agnostic frame and
 
 Previous approaches have typically addressed this ambiguity by simplifying the problem. On one hand, 3D generative models focus on producing a high-quality canonical object $\object$ but often disregard the camera pose $\pose$, leading to reconstructions that are plausible but not faithfully pasted to the input view. On the other hand, traditional 3D reconstruction methods often operate in a view-centric frame, effectively fixing the camera pose and thus limiting their ability to generate or ``in-paint'' occluded regions.
 
-In this section, we introduce a unified probabilistic framework, which we call \textbf{Cupid}, that bridges this gap by jointly modeling the distribution over both the 3D object and the camera pose. The central idea is that an ideal system should be able to simultaneously generate a complete 3D model and reason about the precise camera viewpoint that produced the given 2D observation. In the way, the genereated 3D object can be \textit{pasted} into the original image. This approach recasts single-view 3D reconstruction as a conditional sampling problem, aiming to achieve both the geometric fidelity of reconstruction and the rich priors of a generative model.
+In this section, we introduce a unified probabilistic framework, which we call \textbf{Cupid}, that bridges this gap by jointly modeling the distribution over both the 3D object and the camera pose, as figure~\ref{fig:cupid_teaser} shows. The central idea is that an ideal system should be able to simultaneously generate a complete 3D model and reason about the precise camera viewpoint that produced the given 2D observation. In the way, the genereated 3D object can be \textit{pasted} into the original image. This approach recasts single-view 3D reconstruction as a conditional sampling problem, aiming to achieve both the geometric fidelity of reconstruction and the rich priors of a generative model.
 
 
 \subsection{Task and Objective}

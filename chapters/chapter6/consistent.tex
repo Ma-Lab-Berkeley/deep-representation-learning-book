@@ -786,6 +786,8 @@ Recent representation learning methodologies have made notable improvements to
 this baseline, and they can even be formulated in the white-box framework we
 have developed in \Cref{ch:unrolling}, as we will soon see.
 
+\yima{Robin and Peter, this is a good place to have some discussion about the use of VAE for the latent diffusion (and denoising) models, as in SD-VAE. Some of its difficulties become the justification for the RAE to be introduced in the next subsection.}
+
 %\subsubsection{VAE Training as Probabilistic Autoencoding}
 %
 %There is a general methodology for maximizing the ELBO objective in
@@ -919,18 +921,18 @@ to \textit{efficiently sample} in the learned representation space $\vZ$.
 
 As we have seen at the end of \Cref{ch:lossy-compression} (Section \ref{sec:representations-image}) we often can learn a good representation $\Z$ of the data $\X$:
 \begin{equation}
-    \X \rightarrow \Z,
+   f: \X \rightarrow \Z,
 \end{equation}
 based on some end-to-end supervised or self-supervised methods, including the
 MCR$^2$ and SimDINO methods introduced in Sections \ref{sec:MCR2-classification}
-and  \ref{sec:SimDINO}. As we have also argued, the so-learned representations
+and  \ref{sec:SimDINO}, respectively. As we have also argued, the so-learned representations
 have better structures than the original data distribution. The representations
 tend to be a mixture of low-dimensional linear subspaces (or low-rank
 Gaussians). However, we have not answered the question of how to assess the
 goodness of the so-learned representations. That is, can we establish from them
 a reverse decoder:
 \begin{equation}
-    \Z \rightarrow \hat{\X}
+   g: \Z \rightarrow \hat{\X}
 \end{equation}
 such that $\hat \X$ and $\X$ are close? In light of the preceding examples of
 classical autoencoding setups, we should expect that an objective of the form
@@ -948,24 +950,26 @@ Furthermore, those low-dimensional (linear) structures are still embedded in
 a high-dimensional representation space. Hence in order to use the so learned
 representations, we need to be able to access their distributions too. In
 Chapter \ref{ch:denoising}, we have learned that denoising is a general approach
-to identify hence access such low-dimensional representations. We have also
-learned that if the target distributions can be modeled (approximately) as
+to identify hence access such low-dimensional representations. Hence, we can  access the distribution of the learned features via a (learned) denoising process from a random noise:
+\begin{equation}
+    h: \boldsymbol{G} \rightarrow \Z.
+\end{equation}
+In addition, we have also
+learned that if the target distribution of $\Z$ can be modeled (approximately) as
 a mixture of subspaces or low-rank Gaussians, their optimal denoising operators
 share a similar structure to those found in Transformers, or in CRATE
 introduced in \Cref{ch:unrolling}. 
 
-Thus, altogether, we want to learn an autoencoder whose representation can be easily accessed. 
+Thus, altogether, we want to learn an autoencoder for the data $\X$ whose  representation $\Z$ can be easily accessed. 
 Concretely, we would like to learn an encoder $f$ and a decoder $g$ such that:
 \begin{enumerate}
   \item The representation $\Z = f(\X)$ is a consistent representation of the original data $\X$ as defined in \Cref{def:bidirectional_rep}.
-  \item The representation $\Z$ can be modeled as a low-dimensional distribution so that we can learn a denoiser to access the distribution of $\Z$.
+  \item The structured representation $\Z$ can be modeled approximately as a mixture of low-dimensional Gaussians so that we can learn a denoiser to efficiently access the distribution of $\Z$.
 \end{enumerate}
+\Cref{fig:RAE} illustrates the above overall processes. 
 
-
-
-\Cref{fig:RAE} illustrates this process. From \Cref{ch:compression}, we know
-that the the learned representation $\Z$ by optimizing the (unsupervised)
-MCR$^2$ objective already satisfies the second requirement and can be modeled as
+From \Cref{ch:compression}, we know that the the learned representation $\Z$ by optimizing the (unsupervised)
+MCR$^2$ objective satisfies the second requirement and can be viewed to have structures close to 
 a mixture of subspaces or low-rank Gaussians. By incorporating
 a sample-consistency objective, we can extend the rate reduction objective in \Cref{sec:SimDINO} to learn a consistent representation:
 \begin{equation}
@@ -979,8 +983,9 @@ $\Delta R_{\epsilon}(\Z)$ alone already promotes low-dimensional structure of
 $\Z$, we can pretrain the encoder $f$ to maximize $\Delta R_{\epsilon}(\Z)$
 first, and then learn the decoder $g$ to minimize the reconstruction loss $d(\X,
 \hat \X)$ while fixing the encoder $f$. This two-step approach has been
-demonstrated to be effective, as we will see in \Cref{ch:applications}.
+demonstrated to be effective, as we will see in Section \ref{sec:RAE-implement} of \Cref{ch:applications}.
 
+\yima{Below kind of suggests that the denoiser network and the above decoder network are learned separately. Is that the case for RAE?}
 Once we have learned such a consistent representation $\Z$, we can then learn
 a denoiser to access its distribution, as we have studied in
 \Cref{ch:denoising}. Concretely, suppose we have a probabilistic model $p(\z)$
@@ -1003,6 +1008,8 @@ The training objective for the denoiser can then be expressed as:
     \min_{\theta} \cL_{\mathrm{FM}}(\theta) = \Ex_{\z_0 \sim p(\z), \z_1 \sim
     \cN(\Zero, \vI), t \sim \mathrm{Unif}(0, 1)} \left[ \norm{\bar{\z}_{\theta}(t,\z_t) - (\z_1 - \z_0)}_2^2 \right].
 \end{equation}
+\yima{Here we need to discuss the difference in learning a latent diffusion/denoising model for the distributions of features learned from VAE and those from DINO... One is low-dimensional and the other is much higher dimensional. Both are somewhat structured (Gaussian), but the DINO features are apparently more structured and linear. Refer back to Chapter 4.}
+
 Once we have trained the denoiser, we can use it to generate new samples from
 the learned representation distribution via a diffusion process, as we have
 shown in \Cref{ch:denoising}. This completes the learning of
