@@ -232,7 +232,7 @@ spanning all of \(\R^{d}\)) then we would have perfect recovery:
     \textit{learned representations} would just be \((\vU^{\star})^{\top}\vx \approx \vz\). In this way, PCA serves as a model problem for (deep) representation learning, which we will draw upon further in the monograph. Notice that in this analogy, the representations reflect, or are projections of, the input data towards a learned low-dimensional structure. This property will be particularly relevant in the future.
 \end{remark}
 
-\subsection{Pursuing Low-rank Structure via Power Iteration}\label{subsec:power iterations}
+\subsection{Pursuing Low-Rank Structure via Power Iteration}\label{subsec:power iterations}
 
 There is a computationally efficient way to estimate the top eigenvectors of \(\vX\vX^{\top}/N\) or any symmetric positive semidefinite matrix \(\vM\), called \textit{power iteration}. This method is the building block of several algorithmic approaches to high-dimensional data analysis that we discuss later in the chapter, so we discuss it here. 
 
@@ -282,13 +282,72 @@ which is a top unit eigenvector of \(\vM\). The top eigenvalue \(\lambda_{1}\) o
 
 To find the second top eigenvector, we apply the power iteration algorithm to \(\vM - \lambda_{1}\vv_{1}\vv_{1}^{\top}\), which has eigenvectors \((\vw_{i})_{i = 2}^{D}\) and corresponding eigenvalues \((\lambda_{i})_{i = 2}^{D}\). By repeating this procedure \(d\) times in sequence, we can very efficiently estimate the top \(d\) eigenvectors of \(\vM\) for any symmetric positive semidefinite matrix \(\vM\). Thus we can also apply it to \(\vX\vX^{\top}/N\) to recover the top \(d\) principal components, which is what we were after in the first place. Notice that this approach recovers one principal component at a time; we will contrast this to other algorithmic approaches, such as gradient descent on all eigenvectors, in future sections.
 
-\begin{remark}[Online PCA] For simplicity, all algorithms that we present in this chapter assume that a sufficient set of samples $\X$ have been given in advance. This is not always the case. In the case of continuous learning, we may need to learn the distribution (subspace) from samples that are given one at at time. This problem is often referred to as {\em online} PCA. We will leave the study to \Cref{ch:closed-loop}.
-    
-\end{remark}
+%\begin{remark}[Online PCA] For simplicity, all algorithms that we present in this chapter assume that a sufficient set of samples $\X$ have been given in advance. This is not always the case. In the case of continuous learning, we may need to learn the distribution (subspace) from samples that are given one at at time. This problem is often referred to as {\em online} PCA. We will leave the study to \Cref{ch:closed-loop}.
+%    
+%\end{remark}
+
+\subsection{Local and Incremental Learning via Online PCA} 
+Notice that in the above construction, the
+linear transform $\vU$ (i.e., the matrix of principal components)
+used for encoding and decoding is computed ``offline'' from all
+the input data beforehand. One question is whether this transform
+can be learned ``online'' as the input data comes in order. This
+question was answered by the work of Oja in 1982 \cite{Oja1982SimplifiedNM}.
+\begin{example}[Normalized Hebbian learning scheme for PCA] Consider a
+  sequence of i.i.d. random vectors $\x_1, \ldots, \x_i, \ldots \in
+  \mathbb{R}^n$ with covariance $\boldsymbol{\Sigma} \in
+  \mathbb{R}^{n\times n}$. Let $\vu_0 \in \mathbb{R}^n$ and define
+  the response of an input vector $\x_i$ against a weight vector
+  $\vu_i$ to be their inner product:
+  \begin{equation}
+    \eta_i = \vu_i^T \x_i
+  \end{equation}
+  and we update the weight vector according to the following scheme:
+  \begin{equation}
+    \vu_{i+1} = \frac{\vu_i + \gamma \eta_i \x_i}{\|\vu_i + \gamma
+    \eta_i \x_i\|_2}
+    \label{eqn:Hebbian}
+  \end{equation}
+  for some small gain $\gamma >0$. This update scheme can be viewed
+  as a normalized Hebbian scheme, in which the weights of connections
+  between neurons become stronger if (products of) both the input
+  $\x$ and output $\eta$ are strong. One may view the vector of
+  weights $\vu$ as ``learned'' based on a form of feedback from the
+  output $\eta$.
+  Then, under reasonable assumptions, Oja \cite{Oja1982SimplifiedNM} has 
+  shown that $\vu_i$ converges to the eigenvector associated with
+  the largest eigenvalue of $\boldsymbol{\Sigma}$.
+\end{example}
+
+
+To interpret the normalized Hebbian scheme \eqref{eqn:Hebbian}, let us think of
+the data sample PCA objective \eqref{eq:orthogonal_denoising} as an
+approximation to the \textit{population} version of the objective, defined via
+an expectation over the distribution of samples $\vx$:
+\begin{equation}\label{eq:pca-reconstruction-expectation}
+  \min_{\vU^\top \vU = \vI}\, \bE_{\vx}\left[\norm*{\vx
+  - \vU\vU^\top \vx}_2^2\right]
+\end{equation}
+We will dig into this objective further in the following section.
+Then the normalized Hebbian scheme can be interpreted as
+a first-order approximation to a \textit{stochastic} projected
+gradient descent scheme on
+\Cref{eq:pca-reconstruction-expectation} (with batch size
+$1$, and with the number of columns of $\vU$ equal to $1$) as long as
+$\norm{\vu}_2 = 1$, which is maintained by the projection operation in
+\eqref{eqn:Hebbian}.
+Such an \textit{online algorithm} is a useful primitive for more complex
+algorithms that process sequentially-structured data with causal structure, as
+we will study in \Cref{sec:tost}.
+Interestingly, and more generally, the simple online PCA algorithm is suggestive
+of the fact that \textit{simpler algorithms than (end-to-end) back propagation
+can succeed in learning encoder-decoder pairs}, which we will briefly revisit in
+\Cref{ch:future} as an important goal for the future study of intelligence.
 
 
 
-\subsection{Probabilistic PCA}\label{subsec:probabilistic PCA}
+
+\subsection{The Statistical View: Probabilistic PCA}\label{subsec:probabilistic PCA}
 
 Notice that the above formulation makes no statistical assumptions on the
 data-generating process. However, it is common to include statistical elements
@@ -366,7 +425,7 @@ In particular, if \(\Cov[\veps]\) is small, it holds that \(\Cov[\vx] = \Ex[\vx\
 
 
 
-\subsection{Matrix Completion}
+\subsection{Matrix Completion: Error Correction via Low-Rankness}
 
 In the previous subsections, we discussed the problem of \textit{learning a low-rank geometric or statistical distribution}, where the data were sampled from a subspace with additive noise. But this is not the only type of disturbance from a low-dimensional distribution that is worthwhile to study. In this subsection, we introduce one more class of non-additive errors which become increasingly important in deep learning. Let us consider the case where we have some data \(\{\vx_{i}\}_{i = 1}^{N}\) generated according to \eqref{eq:pca_dgp}. Now we arrange them into a matrix \(\vX = \mat{\vx_{1}, \dots, \vx_{N}} \in \R^{D \times N}\). Unlike before, we do not observe \(\vX\) directly; we instead imagine that our observation was corrupted en route and we obtained 
 \begin{equation}
