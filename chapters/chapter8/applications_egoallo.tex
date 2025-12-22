@@ -10,12 +10,12 @@
 We sense the 3D world to move through it and manipulate objects in it. Body and hand motion are thus central to how we interact with our environment, and important for machines to understand. Our brain dedicates significant resources to this: the motor cortex coordinates movement, while proprioceptive signals provide continuous feedback about limb positions.
 
 In this section, we show how the conditional inference framework from Chapter~\ref{ch:conditional-inference} can learn distributions over human motion and apply them to a practical body pose estimation problem.
-The setup: a person wears a head-mounted device such as an AR headset or smart glasses that tracks its 3D pose via SLAM and captures forward-facing video. SLAM, or Simultaneous Localization and Mapping, estimates the device's position by tracking visual features in the environment. We want to estimate the wearer's full-body pose, height, and hand configuration from these egocentric observations, even though the body is rarely visible in the captured video. The key observation is that \emph{head motion encodes body motion}. When we walk, our head bobs; when we reach, it tilts; when we sit, it follows a distinctive arc. These correlations, learned from motion capture data, form a conditional prior $p(\text{body} \mid \text{head})$. We incorporate additional measurements like hand detections and ground contact via guided sampling. Figure~\ref{fig:egoallo_teaser} illustrates the problem.
+The setup: a person wears a head-mounted device such as an AR headset or smart glasses that tracks its 3D pose via SLAM and captures forward-facing video. SLAM, or Simultaneous Localization and Mapping, estimates the device's position by tracking visual features in the environment. The goal is to estimate the wearer's full-body pose, height, and hand configuration from these egocentric observations, even though the body is rarely visible in the captured video. The key observation is that \emph{head motion encodes body motion}. When we walk, our head bobs; when we reach, it tilts; when we sit, it follows a distinctive arc. These correlations, learned from motion capture data, form a conditional prior $p(\text{body} \mid \text{head})$. The method we develop, called EgoAllo (for egocentric-to-allocentric estimation), incorporates additional measurements like hand detections and ground contact via guided sampling. Figure~\ref{fig:egoallo_teaser} illustrates the problem.
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/egoallo/teaser_oct9.pdf}
-    \caption{\textbf{Egocentric Human Motion Estimation.} Given head poses from SLAM and egocentric images from a head-mounted device (left), we estimate full body pose, height, and hand parameters in the world (allocentric) reference frame (right). The estimated bodies are grounded in the scene, with feet contacting the floor and hands at physically plausible positions.}
+    \caption{\textbf{Egocentric Human Motion Estimation.} Given head poses from SLAM and egocentric images from a head-mounted device (left), EgoAllo estimates full body pose, height, and hand parameters in the world (allocentric) reference frame (right). The estimated bodies are grounded in the scene, with feet contacting the floor and hands at physically plausible positions.}
     \label{fig:egoallo_teaser}
 \end{figure}
 
@@ -51,7 +51,7 @@ Why use SMPL-H rather than, say, directly regressing joint positions or mesh ver
 % ==============================================================================
 
 \paragraph{Inputs.}
-We observe two streams from a head-mounted device:
+The inputs consist of two streams from a head-mounted device:
 \begin{itemize}
 \item \textbf{Head poses} $\mathbf{h}_{1:T} \in SE(3)^T$: Position and orientation of the device in world coordinates at each timestep, from visual-inertial SLAM. Here $SE(3)$ denotes the group of rigid transformations in 3D, comprising rotations and translations. These poses have metric scale, meaning we know actual distances in meters rather than just relative geometry, and are gravity-aligned so we know which direction is up.
 \item \textbf{Egocentric images} $I_{1:T}$: Forward-facing video. The wearer's body is mostly not visible, but hands frequently appear when reaching or manipulating objects.
@@ -64,7 +64,7 @@ From images, an off-the-shelf hand estimator like HaMeR \citep{pavlakos2023hamer
 consisting of estimated hand rotations, 3D keypoints in the camera frame, and 2D keypoints.
 
 \paragraph{Outputs.}
-We estimate a motion sequence over $T$ timesteps:
+EgoAllo estimates a motion sequence over $T$ timesteps:
 \begin{equation}
 \vec{x}_0 = \{\vec{x}_0^{\ 1}, \dots, \vec{x}_0^{\ T}\},
 \quad\text{where}\quad
@@ -72,10 +72,10 @@ We estimate a motion sequence over $T$ timesteps:
 \end{equation}
 Here $\theta^t$ are body joint rotations, $\phi^t$ hand rotations, $\beta$ shape parameters shared across time, and $s$ a height parameter that is also shared. The subscript $0$ denotes clean motion, following diffusion notation where $\vec{x}_n$ is the noisy version at step $n$.
 
-We estimate height in addition to pose, which is essential for grounding. Without it, the body floats at an arbitrary vertical position; with it, feet contact the floor and the head aligns with the camera.
+EgoAllo estimates height in addition to pose, which is essential for grounding. Without it, the body floats at an arbitrary vertical position; with it, feet contact the floor and the head aligns with the camera.
 
 \paragraph{Posterior formulation.}
-Following the Bayesian framework from Chapter~\ref{ch:conditional-inference}, we formulate estimation as sampling from a posterior. Let $\mathbf{y}$ denote all observations and $\vec{c} = g(\mathbf{h}_{1:T})$ a processed representation of head poses (Section~\ref{sub:egoallo_representation}). The posterior factorizes as:
+Following the Bayesian framework from Chapter~\ref{ch:conditional-inference}, estimation is formulated as sampling from a posterior. Let $\mathbf{y}$ denote all observations and $\vec{c} = g(\mathbf{h}_{1:T})$ a processed representation of head poses (Section~\ref{sub:egoallo_representation}). The posterior factorizes as:
 \begin{equation}
 p(\vec{x}_0 \mid \mathbf{y}) \;\propto\; p_\theta(\vec{x}_0 \mid \vec{c}) \cdot p(\mathbf{y}^{\text{hand}}, \mathbf{y}^{\text{phys}} \mid \vec{x}_0),
 \end{equation}
@@ -85,7 +85,7 @@ where:
 \item $p(\mathbf{y}^{\text{hand}}, \mathbf{y}^{\text{phys}} \mid \vec{x}_0)$ is the likelihood of hand observations and physical constraints such as ground contact and no foot skating, given the body motion.
 \end{itemize}
 
-We express the likelihood via a guidance energy $\mathcal{L}_{\text{guide}}$:
+The likelihood is expressed via a guidance energy $\mathcal{L}_{\text{guide}}$:
 \begin{equation}
 p(\mathbf{y}^{\text{hand}}, \mathbf{y}^{\text{phys}} \mid \vec{x}_0) \propto \exp\big(-\mathcal{L}_{\text{guide}}(\vec{x}_0)\big),
 \end{equation}
@@ -117,7 +117,7 @@ The mapping should also not depend on when in an observation window the motion o
 One might try canonicalizing to the first timestep by placing the first frame at the origin. But this violates temporal invariance: different temporal slices of the same motion, canonicalized to their respective first frames, produce different trajectories. The model sees different inputs for the same underlying body motion.
 
 \paragraph{The solution: per-timestep canonicalization.}
-To achieve both spatial and temporal invariance, we define a canonical coordinate frame at \emph{every} timestep rather than just at the start. The representation $\vec{c} = \{\vec{c}^{\ 1}, \dots, \vec{c}^{\ T}\}$ couples:
+To achieve both spatial and temporal invariance, EgoAllo defines a canonical coordinate frame at \emph{every} timestep rather than just at the start. The representation $\vec{c} = \{\vec{c}^{\ 1}, \dots, \vec{c}^{\ T}\}$ couples:
 \begin{itemize}
 \item Relative head motion $\Delta\mathbf{T}_{\text{head}}^{t}$ between consecutive frames, capturing how the head moved from $t-1$ to $t$.
 \item Per-timestep canonicalized pose $\mathbf{T}_{\text{canonical}}^{t}$: the head's orientation relative to gravity and height above floor, with floor-plane position and yaw removed.
@@ -151,7 +151,7 @@ The model takes three inputs:
 The head tokens are first processed by an encoder consisting of six transformer blocks with self-attention to produce contextualized representations. These condition a decoder, another six transformer blocks, that denoises the motion sequence. Conditioning is injected via cross-attention: in each decoder layer, the motion tokens form queries that attend to the head tokens as keys and values, allowing the model to dynamically select which aspects of head motion are relevant for predicting each body joint at each timestep. The model outputs a direct estimate of the clean motion $\vec{x}_0$, rather than predicting noise, parameterized as joint rotations in a head-relative coordinate frame.
 
 \paragraph{Training data.}
-We train on AMASS \citep{mahmood2019amass}, a large-scale motion capture dataset aggregating multiple sources into unified SMPL-H format. AMASS contains diverse human motions---walking, running, dancing, sitting, reaching, exercising---but no head-mounted device recordings. We simulate head trajectories by extracting head joint position and orientation from the motion capture data, as if a device were rigidly attached to the head.
+The model is trained on AMASS \citep{mahmood2019amass}, a large-scale motion capture dataset aggregating multiple sources into unified SMPL-H format. AMASS contains diverse human motions---walking, running, dancing, sitting, reaching, exercising---but no head-mounted device recordings. Head trajectories are simulated by extracting head joint position and orientation from the motion capture data, as if a device were rigidly attached to the head.
 
 \paragraph{Training objective.}
 Training uses the denoising score-matching loss from Chapter~\ref{ch:diffusion}:
@@ -166,7 +166,7 @@ where $D_\theta$ is the denoiser network, $w_n$ are noise-dependent weights, and
 \label{sub:egoallo_guidance}
 % ==============================================================================
 
-The conditional prior captures the relationship between head motion and body motion, but does not use image observations or physical constraints. To incorporate these, we define a guidance energy $\mathcal{L}_{\text{guide}}$ that measures consistency between a motion hypothesis and the observations.
+The conditional prior captures the relationship between head motion and body motion, but does not use image observations or physical constraints. To incorporate these, EgoAllo defines a guidance energy $\mathcal{L}_{\text{guide}}$ that measures consistency between a motion hypothesis and the observations.
 
 \paragraph{Guidance energy.}
 The total guidance energy combines several terms:
@@ -217,7 +217,7 @@ D_n^{\text{head}}(\vec{z};\vec{c})
 using the relationship $\nabla \log p(\mathbf{y} \mid \vec{x}) = -\nabla \mathcal{L}_{\text{guide}}(\vec{x})$.
 
 \paragraph{Alternating optimization.}
-In practice, rather than computing gradients through the full guidance energy at each step, we alternate between two operations:
+In practice, rather than computing gradients through the full guidance energy at each step, EgoAllo alternates between two operations:
 
 \begin{enumerate}
 \item \textbf{Prior denoising step.} Apply a DDIM-style update using the head-conditioned denoiser $D_n^{\text{head}}(\cdot;\vec{c})$ to obtain a proposal $\tilde{\vec{x}}_{n-1}$. DDIM (Denoising Diffusion Implicit Models) provides a deterministic sampling procedure that maps noisy samples toward cleaner ones; unlike stochastic samplers, each denoising step is a deterministic function of the current state, which allows for faster sampling with fewer steps.
@@ -239,7 +239,7 @@ where $\gamma_n$ is a step-size parameter. This finds motion close to the prior'
 The proximal optimization is solved using Levenberg-Marquardt, a classic algorithm for nonlinear least-squares problems. It interpolates between gradient descent and Gauss-Newton optimization, adapting its step size based on how well the linearization approximates the true objective. This is well-suited to SMPL-H parameter estimation, where the objective involves differentiable forward kinematics. A few iterations suffice at each denoising step.
 
 \paragraph{Global alignment.}
-The diffusion model operates in a head-relative coordinate frame, predicting body pose relative to the head rather than in absolute world coordinates. After the final denoising step, we place the body in the world by composing with the observed SLAM head poses:
+The diffusion model operates in a head-relative coordinate frame, predicting body pose relative to the head rather than in absolute world coordinates. After the final denoising step, EgoAllo places the body in the world by composing with the observed SLAM head poses:
 \begin{equation}
 \mathbf{T}_{\text{world},\text{root}}^t
 =
@@ -250,7 +250,7 @@ The diffusion model operates in a head-relative coordinate frame, predicting bod
 where $\mathbf{T}_{\text{head},\text{root}}$ is computed via forward kinematics from the estimated pose and shape. This ensures the body is correctly grounded: feet on the floor, head aligned with the camera.
 
 \paragraph{Handling long sequences.}
-The diffusion model is trained on fixed-length sequences (32--128 frames). For longer recordings, we use the MultiDiffusion approach \citep{bar2023multidiffusion}: we divide the sequence into overlapping windows and denoise them in parallel. After each denoising step, we blend the results in overlapping regions by averaging before proceeding to the next step. This per-step blending ensures that windows remain consistent with each other throughout the diffusion process, producing temporally coherent output without discontinuities at window boundaries.
+The diffusion model is trained on fixed-length sequences (32--128 frames). For longer recordings, EgoAllo uses the MultiDiffusion approach \citep{bar2023multidiffusion}: the sequence is divided into overlapping windows and denoised in parallel. After each denoising step, the results in overlapping regions are blended by averaging before proceeding to the next step. This per-step blending ensures that windows remain consistent with each other throughout the diffusion process, producing temporally coherent output without discontinuities at window boundaries.
 
 
 % ==============================================================================
@@ -258,10 +258,10 @@ The diffusion model is trained on fixed-length sequences (32--128 frames). For l
 \label{sub:egoallo_experiments}
 % ==============================================================================
 
-We evaluate on three datasets: AMASS \citep{mahmood2019amass} (motion capture with synthetic head trajectories), RICH \citep{huang2022rich} (motion capture with challenging human-scene interactions), and Aria Digital Twin \citep{pan2023aria} (real recordings from Project Aria glasses with ground-truth body poses). For hand estimation, we additionally use EgoExo4D \citep{grauman2023egoexo4d}.
+EgoAllo is evaluated on three datasets: AMASS \citep{mahmood2019amass} (motion capture with synthetic head trajectories), RICH \citep{huang2022rich} (motion capture with challenging human-scene interactions), and Aria Digital Twin \citep{pan2023aria} (real recordings from Project Aria glasses with ground-truth body poses). For hand estimation, EgoExo4D \citep{grauman2023egoexo4d} is additionally used.
 
 \paragraph{Representation matters.}
-Table~\ref{tab:egoallo_cond_ablation} shows the effect of different conditioning representations on body estimation accuracy. We compare five parameterizations varying in their invariance properties:
+Table~\ref{tab:egoallo_cond_ablation} shows the effect of different conditioning representations on body estimation accuracy, comparing five parameterizations that vary in their invariance properties:
 \begin{itemize}
 \item \textbf{Per-timestep invariant}: The representation described in Section~\ref{sub:egoallo_representation}, with both spatial and temporal invariance.
 \item \textbf{Absolute + relative}: Absolute poses augmented with local-frame relative motion.
