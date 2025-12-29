@@ -4,7 +4,8 @@
 \begin{document}
 
 \chapter{Pursuing Low-Dimensional Distribution via Denoising}
-\label{ch:general-distribution}\label{ch:denoising}
+\label{ch:general-distribution}\label{ch:compression}
+\label{ch:denoising} 
 
 \begin{quote}
 \hfill  ``{\textit{Information is the resolution of uncertainty}}.''
@@ -18,13 +19,13 @@ In \Cref{ch:linear-independent}, we have shown how to learn simple classes of di
 
 In practice, both linearity and independence are rather idealistic assumptions that distributions of real-world high-dimensional data \textit{rarely} satisfy. The only thing that we may assume is that the intrinsic dimension of the distribution is very low compared to the dimension of the ambient space in which the data are embedded. Hence, in this chapter, we show how to learn a more general class of low-dimensional distributions in a high-dimensional space that is \textit{not} necessarily (piecewise) linear.
 
-It is typical that the distribution of real data often contains multiple components or modes, say corresponding to different classes of objects in the case of images. These modes might not be statistically independent and they may even have different intrinsic dimensions. It is also typical that we have access to only a finite number of samples of the distribution. Therefore, in  general, we may assume our data are distributed on a mixture of low-dimensional nonlinear  submanifolds in a high-dimensional space. \Cref{fig:mixture-manifolds} illustrates an example of such a distribution.
+It is typical that the distribution of real data often contains multiple components or modes, say corresponding to different classes of objects in the case of images. These modes might not be statistically independent and they may even have different intrinsic dimensions. It is also typical that we have access to only a finite number of samples of the distribution. Therefore, in  general, we may assume our data are distributed on a mixture of low-dimensional nonlinear submanifolds in a high-dimensional space. \Cref{fig:mixture-manifolds} illustrates an example of such a distribution.
 
 To learn such a distribution under such conditions, there are several fundamental questions that we need to address:
 \begin{itemize}
-	\item What is a general approach to learn a general low-dimensional distribution in a high-dimensional space and represent the learned distribution?
-	\item How do we measure the complexity of the distribution so that we can effectively exploit the low dimensionality to learn?
-	\item How do we make the learning process computationally tractable and even scalable, as the ambient dimension is usually high and the number of samples typically large?
+	\item What is a general approach to learning a general low-dimensional distribution in a high-dimensional space and representing the learned distribution?
+	\item How do we measure the complexity of the distribution so that we can effectively exploit the low dimensionality for learning?
+	\item How do we make the learning process computationally tractable and even scalable, given that the ambient dimension is usually high and the number of samples is typically large?
 \end{itemize}
 As we will see, the fundamental idea of \textit{compression}, or \textit{dimension reduction}, which has been shown to be very effective for the linear/independent case, still serves as a general principle for developing effective computational models and methods for learning general nonlinear low-dimensional distributions.
 
@@ -43,7 +44,7 @@ Due to its theoretical and practical significance, we will study in greater dept
 \subsection{Entropy and Coding Rate}
 In \Cref{ch:intro}, we have mentioned that the goal of learning is to find the simplest way to generate a given set of data. Conceptually, the Kolmogorov complexity was intended to provide such a measure of complexity, but it is not computable and is not associated with any implementable scheme that can actually reproduce the data. Hence, we need an alternative, computable, and realizable measure of complexity. That leads us to the notion of \textit{entropy}, introduced by Shannon in 1948 \cite{Shannon-1948}.
 
-To illustrate the constructive nature of entropy, let us start with the simplest case. Suppose that we have a discrete random variable that takes \(N\) distinct values, or \textit{tokens}, \(\{\vx_{1}, \dots, \vx_{N}\}\) with equal probability \(1/N\). Then we could encode each token \(\vx_{i}\) using the \(\log_2 N\)-bit binary representation of \(i\). This coding scheme could be generalized to encoding arbitrary discrete distributions \cite{Cover-Thomas}: Given a distribution \(p\) such that \(\sum_{i=1}^{N} p(\vx_{i}) = 1\), one could assign each token \(\vx_{i}\) with probability \(p(\vx_{i})\) to a binary code of size \(\log_2 [1/p(\vx_{i})] = - \log_2 p(\vx_{i})\) bits. Hence the average number of bits, or \textit{the coding rate}, needed to encode any sample from the distribution \(p(\cdot)\) is given by the expression:\footnote{By the convention of  Information Theory \cite{Cover-Thomas}, the \(\log\) here has base \(2\). Hence entropy is measured in (binary) bits.}
+To illustrate the constructive nature of entropy, let us start with the simplest case. Suppose that we have a discrete random variable that takes \(N\) distinct values, or \textit{tokens}, \(\{\vx_{1}, \dots, \vx_{N}\}\) with equal probability \(1/N\). Then we could encode each token \(\vx_{i}\) using the \(\log_2 N\)-bit binary representation of \(i\). This coding scheme could be generalized to encoding arbitrary discrete distributions \cite{Cover-Thomas}: Given a distribution \(p\) such that \(\sum_{i=1}^{N} p(\vx_{i}) = 1\), one could assign each token \(\vx_{i}\) with probability \(p(\vx_{i})\) to a binary code of size \(\log_2 [1/p(\vx_{i})] = - \log_2 p(\vx_{i})\) bits. Hence the average number of bits, or \textit{the coding rate}, needed to encode any sample from the distribution \(p(\cdot)\) is given by the expression:\footnote{By the convention of  Information Theory \cite{Cover-Thomas}, the \(\log\) here has base \(2\). Hence, entropy is measured in (binary) bits.}
 \begin{equation}
 	H(\vx) \doteq \Ex_{\vx \sim p}[\log 1/p(\vx)]  = - \sum_{i=1}^{N} p(\vx_{i}) \log  p(\vx_{i}).
 	\label{eqn:entropy-discrete}
@@ -73,13 +74,13 @@ When the random variable \(\vx \in \R^{D}\) is continuous and has a probability 
 	\end{equation}
 \end{example}
 
-Similar to the entropy for a discrete distribution, we would like the differential entropy to be associated with the coding rate of some realizable coding scheme. For example, as above, we may discretize the domain of the distribution with a grid of size \(\epsilon > 0\). The coding rate of the resulting discrete distribution can be viewed as an approximation to the differential entropy \cite{Cover-Thomas}.
+Similar to the entropy of a discrete distribution, we would like the differential entropy to be associated with the coding rate of some realizable coding scheme. For example, as mentioned above, we may discretize the domain of the distribution with a grid of size \(\epsilon > 0\). The coding rate of the resulting discrete distribution can be viewed as an approximation to the differential entropy \cite{Cover-Thomas}.
 
-Be aware that there are some caveats associated with the definition of differential entropy. For a distribution in a high-dimensional space, when its support becomes degenerate (low-dimensional), its differential entropy diverges to \(-\infty\). This fact is proved in \Cref{thm:max_entropy} (we also recall the maximum entropy characterization of the Gaussian distribution mentioned above in \Cref{thm:max_entropy}) but even in the simple explicit case of Gaussian distributions \eqref{eqn:entropy-Gaussian-multi}, when the covariance \(\vSigma\) is singular, we can see that \(\logdet(\vSigma) = -\infty\) so we have \(h(\vx) = -\infty\). In such a situation, it is not obvious how to properly quantize or encode such a distribution. Nevertheless, degenerate (Gaussian) distributions are precisely the simplest possible, and arguably the most important, instances of low-dimensional distributions in a high-dimensional space. In this chapter, we will discuss a complete resolution to this seeming difficulty with degeneracy.
+Be aware that there are some caveats associated with the definition of differential entropy. For a distribution in a high-dimensional space, when its support becomes degenerate (low-dimensional), its differential entropy diverges to \(-\infty\). This fact is proved in \Cref{thm:max_entropy} (we also recall the maximum entropy characterization of the Gaussian distribution mentioned above in \Cref{thm:max_entropy}) but even in the simple explicit case of Gaussian distributions \eqref{eqn:entropy-Gaussian-multi}, when the covariance \(\vSigma\) is singular, we can see that \(\logdet(\vSigma) = -\infty\) so we have \(h(\vx) = -\infty\). In such a situation, it is not obvious how to properly quantize or encode such a distribution. Nevertheless, degenerate (Gaussian) distributions are precisely the simplest possible, and arguably the most important instances of low-dimensional distributions in a high-dimensional space. In this chapter, we will discuss a complete resolution to this seeming difficulty with degeneracy.
 
 
 \subsection{Minimizing Coding Rate}\label{sub:min_entropy}
-Remember that the learning problem entails the recovery of a (potentially continuous)  distribution \(p(\vx)\) from a set of samples \(\{\vx_{1}, \ldots, \vx_{N}\}\) drawn from the distribution. For ease of exposition, we write \(\vX = [\vx_{1}, \ldots, \vx_{N}] \in \R^{D\times N}\) . Given that the distributions of interest here are (nearly) low-dimensional, we should expect that their (differential) entropy is very small. But unlike the situations that we have studied in the previous chapter, in general we do not know the family of (analytical) low-dimensional models to which the distribution \(p(\vx)\) belongs. So checking whether the entropy is small seems to be the only guideline that we can rely on to identify and model the distribution.
+Remember that the learning problem entails the recovery of a (potentially continuous)  distribution \(p(\vx)\) from a set of samples \(\{\vx_{1}, \ldots, \vx_{N}\}\) drawn from the distribution. For ease of exposition, we write \(\vX = [\vx_{1}, \ldots, \vx_{N}] \in \R^{D\times N}\) . Given that the distributions of interest here are (nearly) low-dimensional, we should expect that their (differential) entropy is very small. However, unlike the situations we studied in the previous chapter, in general, we d,o not know the family of (analytical) low-dimensional models to which the distribution \(p(\vx)\) belongs. So checking whether the entropy is small seems to be the only guideline that we can rely on to identify and model the distribution.
 
 Now given the samples alone without knowing what \(p(\vx)\) is, in theory they could be interpreted as samples from any generic distribution. In particular, they could be interpreted as any of the following:
 \begin{enumerate}
@@ -676,12 +677,29 @@ Note that if \(L \to \infty\) and we correctly learn the Bayes optimal denoiser 
 
 %\yima{Qing and Druv, a new section about memorization and generalization probably should go here. It should elucidate the role of quantization error (small noise) introduced by the network capacity... denoising to death means memorizing individual samples, hence leads to the topic of next chapter. } 
 
-Building on the discussion of denoisers that simply memorize the training data, we now turn to a deeper investigation of when diffusion models transition from memorization to generalization. %While an overly expressive network can reproduce the empirical distribution exactly, practical diffusion models often capture the underlying structure of the data, enabling the generation of novel samples. 
-In theory, the training of diffusion models is designed to learn the empirical distribution 
+So far, we have discussed how to learn low-dimensional distributions via denoising by optimizing the population loss \eqref{eq:training loss}. However, in practice, as we only have finite training samples $(\vx^{(i)})_{i=1}^N$, we would minimize an empirical surrogate of \eqref{eq:training loss}, that is
+\begin{equation}\label{eq:training loss-emp}
+	\min_{\bm \theta} \frac{1}{N}\Ex_{t, \bm g \sim \mathcal{N}(\bm 0, \bm I)}\norm{\bar{\vx}_{\bm \theta}(t, \vx^{(i)}_t) - \vx^{(i)}}_{2}^{2},
+\end{equation}
+where $ \vx^{(i)}_t = \alpha_t \bm x^{(i)} + \sigma_t\bm g$ and $\bm g \sim \mathcal{N}(\bm 0, \bm I)$ as defined in \eqref{eq:gen_additive_gaussian_noise_model}.
+Ideally, if our model $\bar{\vx}_{\bm \theta}$ has infinite model capacity, then it would merely memorize the training data itself $(\vx^{(i)})_{i=1}^N$ and thus learn the empirical distribution 
 \begin{align*}
-    p_{\text{emp}}(\vx) = \sum_{i=1}^N \delta(\vx -  \vx^{(i)})
+    p_{\text{emp}}(\vx) = \sum_{i=1}^N \delta(\vx -  \vx^{(i)}).
 \end{align*}
-over the training samples $(\vx^{(i)})_{i=1}^N$ via neural networks (i.e., a summation of delta functions $\delta(\cdot)$ of the training data points), implying that a perfectly learned neural network would simply memorize the training data. But in practice, diffusion models can creatively generate new, sensible examples that differ significantly from the training data. In this section, we analyze the mechanisms and principles that govern when a diffusion model memorizes versus generalizes, providing insights into network design and training strategies. 
+Therefore, it raises a fundamental question regarding memorization vs. generalization. Specifically, \emph{how many training samples are required to learn the true data distribution $p_{\text{data}}$ instead of memorization?}
+
+%sample complexity for learning the data distribution $p_{\text{data}}$. In our previous discussion, $p_{\text{data}}$ could be the mixture of low-rank Gaussians. 
+
+ %While an overly expressive network can reproduce the empirical distribution exactly, practical diffusion models often capture the underlying structure of the data, enabling the generation of novel samples. 
+
+%Building on the discussion of denoisers that simply memorize the training data, 
+
+Based on the above discussion, we now turn to a deeper investigation of when diffusion models transition from memorization to generalization with respect to the number of training samples $N$.
+Hypothetically, if a deep learning model $\bar{\vx}_{\bm \theta}$ has infinite model capacity, a perfectly learned neural network over \eqref{eq:training loss-emp} would simply learn $p_{\text{emp}}$ and memorize the training data without the ability to generate new samples. On the other hand, if we want $p_{\text{emp}}$ to approximate the true distribution $p_{\text{data}}$ to be $\epsilon$-close, in the worst case, the number of samples needed grows exponentially $O( (\frac{L}{\epsilon})^D )$ with respect to the data dimension $D$,\footnote{Here, $L$ denotes the Lipschitz constant of $p_{\text{data}}$.} implying that learning $p_{\text{data}}$ could potentially suffer from the curse of dimensionality.
+
+
+
+However, in practice, real-world diffusion models, when trained on a finite training dataset $(\vx^{(i)})_{i=1}^N$ of natural images, can creatively generate new, sensible examples that differ significantly from the training data. In this section, we investigate the mechanisms and principles that enable the diffusion model to generalize when trained with finite samples and translate these insights into practical guidance for network design and training strategies.
 
 % Despite the remarkable empirical success of diffusion models, their fundamental mechanisms are still poorly understood. In theory, the training of diffusion models is designed to learn the empirical distribution 
 % \begin{align*}
@@ -692,30 +710,28 @@ over the training samples $(\vx^{(i)})_{i=1}^N$ via neural networks (i.e., a sum
 \begin{figure}[t]
 	\centering 
 	\includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/reproducibility.jpg}
-	\caption{\small \textbf{Consistent model reproducibility across different diffusion models.} Visual content generated by three different diffusion models from the same initial noise (i.e., the noise in each row and column is the same) looks nearly identical. All models were trained on the CIFAR-10 dataset. 2a. Result of a denoising diffusion probabilistic model (DDPM). 2b. Result of consistency training (CT). 2c. Result of a vision transformers (ViT)-based architecture called U-ViT.
+	\caption{\small \textbf{Consistent model reproducibility across different diffusion models.} Visual content generated by three different diffusion models from the same initial noise (i.e., the noise in each row and column is the same) looks nearly identical. All models were trained on the CIFAR-10 dataset. 2a. Result of a denoising diffusion probabilistic model (DDPM). 2b. Result of consistency training (CT). 2c. Result of a vision transformer (ViT)-based architecture called U-ViT.
 }
 	\label{fig:vp_gmm_denoising}
 \end{figure}
 
-\paragraph{Model reproducibility provides insight into generalization.}  Recent work \cite{pmlr-v235-zhang24cn} showed a consistent model reproducibility among different diffusion models, which provides deep insight into the mystery of generalizability [10]. In this intriguing, widespread phenomenon, different diffusion models produce remarkably similar outputs when initialized with the same noise and sampled via the same sampling procedure. This outcome holds true across a variety of diffusion model frameworks, architectures, and training procedures (see \Cref{fig:vp_gmm_denoising}).
-
-Quantitatively, we measure the reproducibility (RP) with the following probability metric:
+\subsubsection{Model Reproducibility Provides Insight into Generalization}  
+Recent work \cite{pmlr-v235-zhang24cn} showed consistent model reproducibility among different diffusion models, which provides deep insight into the mystery of generalizability. In this intriguing, widespread phenomenon, different diffusion models produce remarkably similar outputs when initialized with the same noise and sampled via the same sampling procedure. This outcome holds across a variety of diffusion model frameworks, architectures, and training procedures (see \Cref{fig:vp_gmm_denoising}). Quantitatively, we can measure the reproducibility (RP) using the following probability metric:
 \begin{align}
     \text{RP Score} := \mathbb P\left[\mathcal M_{\text{SSCD}}(\vx_1,\vx_2)>\tau\right],
 \end{align}
-where $\tau>0$ is some threshold, $\mathcal M_{\text{SSCD}}(\vx_1,\vx_2)$ measures the cosine similarity between $\vx_1$ and $\vx_2$ in the latent space of a self-supervised copy-detection (SSCD) neural descriptor, and $\vx_1$ and $\vx_2$ are generated by two different diffusion models starting from the same initial noise. Strong model reproducibility implies that different diffusion models learn the same score functions. However, we have not yet answered the critical question: Why are diffusion models able to generalize? To answer this question, we introduce a generalization (GL) score that quantifies the distinction between a generated sample $\vx$ and the training samples $(\vx^{(i)})_{i=1}^N$:
+where $\tau>0$ is some pre-defined threshold,\footnote{In \cite{pmlr-v235-zhang24cn}, the authors empirically set a large threshold $\tau =0.6$.} $\mathcal M_{\text{SSCD}}(\vx_1,\vx_2)$ measures the cosine similarity between $\vx_1$ and $\vx_2$ in the latent space of a self-supervised copy-detection (SSCD) neural descriptor, and $\vx_1$ and $\vx_2$ are generated by two different diffusion models starting from the same initial noise. Strong model reproducibility implies that different diffusion models learn the same score functions. However, we have not yet answered the critical question: Why are diffusion models able to generalize? To answer this question, we introduce a generalization (GL) score that quantifies the distinction between a generated sample $\vx$ and the training samples $(\vx^{(i)})_{i=1}^N$:
 \begin{align}
-    \text{GL Score} := 1- \mathbb P( \max_{i \in [N]} \mathcal M_{\text{SSCD}}(\vx,\vx^{(i)})>\tau),
+    \text{GL Score} := 1- \mathbb P( \max_{i \in [N]} \mathcal M_{\text{SSCD}}(\vx,\vx^{(i)})>\tau).
 \end{align}
-
-\Cref{fig:reproducibility-transition} depicts the RP and GL scores for diffusion models that are trained with varying data sizes and model capacities, implying that these models learn two distinct distributions that correspond to two separate training regimes:
+Under the same setting, \Cref{fig:reproducibility-transition} depicts both the RP and GL scores for diffusion models that are trained with varying data sizes and model capacities, implying that these models learn two distinct distributions corresponding to two separate training regimes:
 \begin{itemize}
-    \item \textbf{Memorization regime:} When model capacity far exceeds training data size, all diffusion models overfit by memorizing the same empirical distribution of training data, ultimately leading to strong model reproducibility without generalizability.
-    \item \textbf{Generalization regime:} When model capacity is insufficient for memorization, diffusion models generate new samples. Here, reproducibility and generalizability co-emerge as all models learn the score function of the true distribution instead of memorizing the training data.
+    \item \textbf{Memorization regime:} When model capacity far exceeds training data size, all diffusion models overfit to the same empirical distribution $p_{\text{emp}}$ and memorize the training data, ultimately leading to strong model reproducibility without generalizability.
+    \item \textbf{Generalization regime:} In contrast, when the model capacity is smaller than the size of the training data, diffusion models fail to memorize and then start to generate new samples. Here, reproducibility and generalizability co-emerge as all models learn the score function of the true distribution $p_{\text{data}}$ instead of memorizing the training data.
 \end{itemize}
+Moreover, within a fixed capacity, diffusion models transition from memorization to generalization as the number of training samples increases. While the seminal work \cite{pmlr-v235-zhang24cn} characterized this phase transition jointly using both the RP and GL scores, more recent work \cite{zhang2025understanding} unifies the metric by introducing the probability flow distance (PFD), which precisely characterizes the phase transition in a teacher-student setup. 
 
-
-Moreover, within a fixed capacity, diffusion models transition from memorization to generalization as the number of training samples increases. Empirically, this phase transition happens with a finite number of samples (e.g., 10,000 samples from the CIFAR-10 dataset). This is fundamentally different from when the empirical distribution merely interpolates the underlying distribution, where the required sample size grows exponentially with data dimensions in the worst case.
+Empirically, this phase transition occurs with a finite number of samples (e.g., 10,000 samples from the CIFAR-10 dataset), without the curse of dimensionality. This is fundamentally different from the setting where the empirical distribution $p_{\text{emp}}$ interpolates the true data distribution $p_{\text{data}}$, in which case the required sample size can grow exponentially with the data dimension $D$.
 
 \begin{figure}[t]
 	\centering 
@@ -725,11 +741,23 @@ Moreover, within a fixed capacity, diffusion models transition from memorization
 	\label{fig:reproducibility-transition}
 \end{figure}
 
-\paragraph{Towards a mathematical theory of generalization}
+\subsubsection{Towards a Mathematical Theory of Generalization}
 
-Diffusion models avoid the curse of dimensionality because they effectively learn low-dimensional distributions, where the required sample size for generalization scales linearly with the intrinsic dimension in high-dimensional space. While real-world image datasets are high-dimensional in terms of pixel count and data volume, extensive empirical evidence implies that they have a significantly lower intrinsic dimension and reside on the union of low-dimensional manifolds \cite{brown2023verifying,gong2019intrinsic}.
+To explain why diffusion models can generalize without suffering from the curse of dimensionality, recent work by Wang et al. \cite{wang2024diffusion} argues that they typically learn low-dimensional distributions rather than arbitrary ones. While real-world image datasets are high-dimensional in terms of raw pixel count and volume, extensive empirical evidence suggests they possess a significantly lower intrinsic dimension and reside on a union of low-dimensional manifolds \cite{brown2023verifying,gong2019intrinsic}. Specifically, Wang et al. \cite{wang2024diffusion} demonstrated that the required sample size for generalization scales linearly with this intrinsic dimension, even in high-dimensional ambient spaces.
 
-However, the complexity of real-world image distributions makes it difficult to rigorously verify our claims on image datasets. To mathematically understand generalization behavior, we therefore consider a simplified setting: a low-rank Gaussian distribution, i.e., 
+%Diffusion models avoid the curse of dimensionality because they effectively learn low-dimensional distributions, where the required sample size for generalization scales linearly with the intrinsic dimension in high-dimensional space. While real-world image datasets are high-dimensional in terms of pixel count and data volume, extensive empirical evidence implies that they have a significantly lower intrinsic dimension and reside on the union of low-dimensional manifolds \cite{brown2023verifying,gong2019intrinsic}.
+
+
+\begin{figure}[t]
+\begin{center}
+    \includegraphics[width = 1\linewidth]{\toplevelprefix/chapters/chapter3/figs/MoLRG_verify1.jpg}\vspace{-0.1in}
+    \caption{\textbf{Comparison of images generated from the Gaussian, a mixture of low-rank Gaussians, and the distribution learned by diffusion models across different datasets.} Each row displays images generated from different distributions using the reverse-time ODE sampler, including the Gaussian, a mixture of low-rank Gaussians, and the distribution learned by U-Net. The columns represent images generated from the same initial noise. The results are shown for four datasets: FashionMNIST (top left ), MNIST (top right), CIFAR-10 (bottom left), and FFHQ (bottom right ).\label{fig:MoLRG_data_model_verfication}}%\qq{I feel we should remove the closest point in the training data, the 2nd row}  
+\end{center}
+\end{figure} 
+
+Because the complexity of real-world image distributions makes it difficult to rigorously verify our claims on image datasets, Wang et al. \cite{wang2024diffusion} therefore consider a simplified setting of a mixture of low-rank Gaussians, as introduced in \eqref{eq:MoG1}, to mathematically characterize the generalization behavior.  As demonstrated in \Cref{fig:MoLRG_data_model_verfication}, the mixture of low-rank Gaussian distribution captures the essential low-dimensional structure of image distribution.
+
+For simplicity, let us first introduce the result based a single low-rank Gaussian distribution, i.e., 
 \begin{equation} 
 	\vx \sim \dNorm(\vzero, \vU^*\vU^{*\top}),
 \end{equation}
@@ -737,25 +765,43 @@ where $\bm U^* \in \O(D, P)$ denotes the ground-truth orthonormal basis. Accordi
 \begin{align}\label{eq:Ua+e} 
       \vx^{(i)} = \bm U^* \bm a_i + \bm e_i, 
 \end{align}
-where $\bm a_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm 0, \bm I)$ is coefficients for each $i \in [N]$, and $\bm e_i \in \R^D$ is noise for each $i \in [N]$. Note that the noise $\bm e_i$ captures variability arising from real-world factors---such as measurement error, modeling mismatch, or deviations from an ideal low-rank structure. According to \eqref{eq:training loss}, the empirical training loss of diffusion models is 
-\begin{equation}\label{eq:loss}
-	\min_{\theta} \frac{1}{N}\Ex_{t, \bm g \sim \mathcal{N}(\bm 0, \bm I)}\norm{\bar{\vx}_{\theta}(t, \vx^{(i)}_t) - \vx^{(i)}}_{2}^{2},
-\end{equation}
-where $ \vx^{(i)}_t = \alpha_t \bm x^{(i)} + \sigma_t\bm g$ and $\bm g \sim \mathcal{N}(\bm 0, \bm I)$ as defined in \eqref{eq:gen_additive_gaussian_noise_model}.  Using \eqref{eq:gen_additive_gaussian_noise_model} and the same calculation in \eqref{eq:optimal denoiser}--\eqref{eq:gaussian_lowrank_denoiser_simplified}, the optimal denoiser is  
+where $\bm a_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm 0, \bm I)$ is coefficients for each $i \in [N]$, and $\bm e_i \in \R^D$ is noise for each $i \in [N]$. Note that the noise $\bm e_i$ captures variability arising from real-world factors---such as measurement error, modeling mismatch, or deviations from an ideal low-rank structure. 
+
+%According to \eqref{eq:training loss}, the empirical training loss of diffusion models is 
+%\begin{equation}\label{eq:loss}
+%	\min_{\theta} \frac{1}{N}\Ex_{t, \bm g \sim \mathcal{N}(\bm 0, \bm I)}\norm{\bar{\vx}_{\theta}(t, \vx^{(i)}_t) - \vx^{(i)}}_{2}^{2},
+%\end{equation}
+%where $ \vx^{(i)}_t = \alpha_t \bm x^{(i)} + \sigma_t\bm g$ and $\bm g \sim \mathcal{N}(\bm 0, \bm I)$ as defined in \eqref{eq:gen_additive_gaussian_noise_model}.  
+Using \eqref{eq:gen_additive_gaussian_noise_model} and the same calculation in \eqref{eq:optimal denoiser}--\eqref{eq:gaussian_lowrank_denoiser_simplified}, we know that the optimal denoiser is  
 \begin{align}
     \bar{\vx}^{\ast}(t, \vx_{t}) = \frac{\alpha_t}{\alpha_t^2 + \sigma_t^2}\bm U^*\bm U^{*T}\bm x_t.
 \end{align}
-Therefore, the optimal network parameterization is
-\begin{align}
+Accordingly, we parameterize the network $\bar{\vx}_{\theta}$ as
+\begin{align}\label{eqn:network-Gaussian}
     \bar{\vx}_{\theta}(t, \vx^{(i)}_t) = \frac{\alpha_t}{\alpha_t^2 + \sigma_t^2}\bm U\bm U^T\bm x_t,
 \end{align}
-where $\bm U \in \O(D, P)$. Using similar arguments in \eqref{eq:optimal nn}--\eqref{eq:PCA}, we can show that Problem \eqref{eq:loss} is equivalent to the following PCA problem: 
+where $\bm U \in \O(D, P)$ is learnable. By plugging \eqref{eqn:network-Gaussian} into \eqref{eq:training loss-emp} and using similar arguments in \eqref{eq:optimal nn}--\eqref{eq:PCA}, we can show that Problem \eqref{eq:training loss-emp} is equivalent to the classical PCA problem of the following form: 
     \begin{align}\label{eq:em loss}
         \max_{\bm U \in \O(D, P)} \sum_{i=1}^N \|\bm U^T \bm x^{(i)}\|^2. 
     \end{align}
 This theorem shows that training diffusion models is equivalent to performing PCA on the training samples. Note that PCA is a classical and well-studied method for learning low-dimensional subspaces, whose optimal solution can be computed via singular value decomposition (SVD). This closed-form solution allows us to leverage existing results, such as Wedin's Theorem \cite{wedin1972perturbation}, to facilitate our analysis. Leveraging this equivalence and using the concentration inequalities, we can precisely determine the minimal number of samples required to learn a single low-rank Gaussian as follows: 
+
+\begin{figure}[t]
+\begin{center}
+    \begin{subfigure}{0.43\textwidth}
+        \includegraphics[width=1\textwidth]{\toplevelprefix/chapters/chapter3/figs//PCA.eps} 
+    \caption{\bf\footnotesize PCA} 
+    \end{subfigure}  \hfill
+    \begin{subfigure}{0.43\textwidth}
+    	\includegraphics[width = 1\linewidth]{\toplevelprefix/chapters/chapter3/figs//PCA_diffusion.eps} 
+    \caption{\bf\footnotesize Diffusion Model} 
+    \end{subfigure} \vspace{-0.1in}
+    \caption{\textbf{Phase transition of learning a single low-rank Gaussian distribution with $K = 1$.} The $x$-axis is the number of training samples and $y$-axis is the dimension of subspaces. Darker pixels represent a lower empirical probability of success. We apply SVD and stochastic gradient descent to solve Problems \eqref{eq:PCA} and \eqref{eq:training loss-emp}, visualizing the results in (a) and (b), respectively.}  \label{fig:phase-transition-MoG-k=1} 
+\end{center}
+\end{figure}
+
 \begin{theorem}\label{thm:2}
-    Suppose that the training samples $\{\bm x^{(i)}\}_{i=1}^N$ are generated according to \eqref{eq:Ua+e}. Let $\hat{\bm U}$ denote an optimal solution of Problem (\ref{eq:em loss}). The following statements hold: 
+    Suppose that the training samples $\{\bm x^{(i)}\}_{i=1}^N$ are generated according to \eqref{eq:Ua+e}. Let $\hat{\bm U}$ denote an optimal solution of Problem (\ref{eq:training loss-emp}). The following statements hold: 
     \begin{itemize} 
         \item[i)] If $N \ge P$, it holds with probability at least $1 - 1/2^{N-P+1} - \exp\left(-c_2N\right) $ that any optimal solution $\hat{\bm U}$ satisfies
    \begin{align}\label{rst1:thm 2}
@@ -771,6 +817,54 @@ This theorem shows that training diffusion models is equivalent to performing PC
     \end{itemize}
 \end{theorem} 
 This theorem demonstrates a phase transition from failure to success of diffusion models for learning the underlying distribution as the number of training samples increases. More precisely, when the number of training samples is larger than the intrinsic dimension of the subspace, i.e., $N \geq P$, any optimal solution $\hat{\bm U}$ recovers the basis of the underlying subspace with an approximation error depending on the noise level. Conversely, when $N < P$, optimizing the training loss fails to learn the underlying distribution. Please refer to \citep{wang2024diffusion} for the formal proof. 
+
+
+
+
+
+Moreover, such insights can be generalized to learning a mixture of low-rank Gaussians \eqref{eq:MoG1}. Specifically, for simplicity, we consider a hard-max counterpart of \eqref{eq:gen_gmm_bayes_optimal_denoiser} for parameterizing the neural network $\bar{\vx}_{\bm \theta}$ as
+    \begin{align}\label{eq:para MoG}
+     \bar{\vx}_{\bm \theta}(\bm x_t, t)  = \dfrac{s_t}{s_t^2 + \gamma_t^2} \sum_{k=1}^K \hat{w}_k(\bm \theta; \bm x_0) \bm U_k\bm U_k^T\bm x_t, 
+    \end{align}
+where $\bm \theta = \{\bm U_k\}_{k=1}^K$, $\bm U = [\bm U_1,\dots,\bm U_K] \in \mathcal{O}^{D \times KP }$, and $\{ \hat{w}_k(\bm \theta; \bm x_0) \}_{k=1}^K$ are set as the following hard-max weights: 
+\begin{align}\label{eq:wk1}
+\hat{w}_k(\bm \theta; \bm x_0) = \begin{cases}
+1,\ & \text{if}\ k=k_0, \\
+0,\ & \text{otherwise},
+\end{cases}
+\end{align}
+where $k_0 \in [K]$ is an index satisfying $\|\bm U_{k_0}^T\bm x_0\| \ge  \|\bm U_l^T\bm x_0\|$ for all $l \neq k_0 \in [K]$. 
+
+\begin{theorem}\label{thm:3}
+    Suppose that the neural network $\bar{\vx}_{\bm \theta}(\cdot,t)$ in Problem (\ref{eq:training loss-emp}) is parameterized into \eqref{eq:para MoG} for each $t \in [0,1]$, where $\hat{w}_k(\bm \theta, \bm x_0)$ is defined in \eqref{eq:wk1} for each $k \in [K]$. Then Problem (\ref{eq:training loss-emp}) is equivalent to the following subspace clustering problem: 
+    \begin{align}\label{eq:SC}
+        \max_{\bm \theta} \frac{1}{N} \sum_{k=1}^K \sum_{ i \in C_k(\bm \theta)} \|\bm U_k^T\bm x^{(i)}\|^2\qquad \mathrm{s.t.}\ \left[
+            \bm U_1, \dots, \bm U_K \right] \in \mathcal{O}^{D \times KP}, 
+    \end{align}
+    where $C_k(\bm \theta) := \left\{ i\in [N]: \|\bm U_k^T\bm x^{(i)}\| \ge \|\bm U_l^T\bm x^{(i)}\|,\ \forall l \neq k \right\}$ for each $k \in [K]$.
+\end{theorem} 
+In this theorem, the constraint set $C_k(\bm \theta)$ ensures that each data point is assigned to the correct subspace—that is, the one onto which the norm of its projection is largest. Problem (\ref{eq:SC}) seeks to maximize the sum of squared norms of the projections of data points onto their respective assigned subspaces. With the network parameterization in \eqref{eq:para MoG}, \Cref{thm:3} shows that optimizing the training loss of diffusion models is equivalent to solving the subspace clustering problem \citep{vidal2011subspace,wang2022convergence}.  Notably, subspace clustering is a fundamental problem in unsupervised learning that aims to identify and group data points that lie in a union of low-dimensional subspaces in a high-dimensional space \citep{vidal2011subspace,lerman2018overview}. By showing an equivalence between training diffusion models and subspace clustering in \Cref{thm:3}, similar to \Cref{thm:2}, we can show that the minimum number of samples required for learning the underlying mixture of Gaussians depends linearly on the intrinsic subspace dimension for each Gaussian model. Similar to $K=1$ case, we can show the phase transition in \Cref{fig:phase-transition-MoG-k=2} that demonstrates our claim. For more details of the result, we refer readers to \cite{wang2024diffusion}.
+
+\begin{figure}[t]
+\begin{center}
+    \begin{subfigure}{0.43\textwidth}
+    	\includegraphics[width=1\textwidth]{\toplevelprefix/chapters/chapter3/figs/SC.eps} 
+    \caption{\bf\footnotesize Subspace Clustering} 
+    \end{subfigure}  
+    \begin{subfigure}{0.43\textwidth}
+    	\includegraphics[width = 1\linewidth]{\toplevelprefix/chapters/chapter3/figs/SC_diffusion.eps} 
+    \caption{\bf\footnotesize Diffusion Model} 
+    \end{subfigure}
+    \caption{\textbf{Phase transition of learning a mixture of low-rank Gaussians with $K = 2$.} The $x$-axis is the number of training samples and $y$-axis is the dimension of subspaces. Darker pixels represent a lower empirical probability of success. We apply a subspace clustering method and stochastic gradient descent to solve Problems \eqref{eq:SC} and \eqref{eq:training loss-emp}, visualizing the results in (a) and (b), respectively. }  \label{fig:phase-transition-MoG-k=2} 
+\end{center}
+\end{figure}
+
+
+\begin{remark}
+Finally, we want to mention that the theoretical results we presented here are based on linear models. The simplified linear models provide the right intuition for characterizing the learning data distribution $p_{\text{data}}$, but they cannot fully characterize memorization. To deal with this, more recent work \cite{zhang2025generalization} considered the two-layer ReLU denoising autoencoder (DAE), which provides a unified understanding of memorization and generalization. Under the mixture of low-rank Gaussian distributions, the work characterized the global optimal solutions for training the two-layer ReLU network, showing that (i) memorization corresponds to the model storing raw training samples in the learned weights for encoding and decoding, whereas (ii) generalization arises when the model captures local data statistics. For more details of the result, we refer readers to \cite{zhang2025generalization}.    
+\end{remark}
+
+
 % According to \eqref{eq:optimal nn}-\eqref{eq:PCA}, seeking the optimal denoiser under the parameterization 
 
 
