@@ -324,16 +324,16 @@ While it is easy to reason about \eqref{eq:dino_loss_teacherstudent}, it is impo
     \end{align}
     as well as its gradients with respect to \(\theta_{\student}\) and \(\vW_{\student}\), which should be computed under the assumption that \(\theta_{\teacher}\), \(\vW_{\teacher}\), and \(\vmu\) are constants --- namely that they are \textit{detached from the computational graph} and not dependent on \(\theta_{\student}\) and \(\vW_{\student}\).
     \item Update the student parameters \(\theta_{\student}\) and \(\vW_{\student}\) via an iterative gradient-based optimization algorithm, and update \(\theta_{\teacher}\), \(\vW_{\teacher}\), and \(\vmu\) via exponential moving averages with decay parameters \(\nu^{(k)}\), \(\nu^{(k)}\), and \(\rho^{(k)}\) respectively, i.e., 
-    \begin{align}
-        (\theta_{\student}^{(k + 1)}, \vW_{\student}^{(k + 1)})
-        &= \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}, \vW_{\student}^{(k)}; \nabla_{(\theta_{\student}, \vW_{\student})}\hat{\cL}_{\dino-\student\teacher}^{(k)}) \\
-        \theta_{\teacher}^{(k + 1)}
-        &= \nu^{(k)}\theta_{\teacher}^{(k)} + (1 - \nu^{(k)})\theta_{\student}^{(k + 1)} \\
-        \vW_{\teacher}^{(k + 1)}
-        &= \nu^{(k)}\vW_{\teacher}^{(k)} + (1 - \nu^{(k)})\vW_{\student}^{(k + 1)} \\
-        \vmu^{(k + 1)}
-        &= \rho^{(k)}\vmu^{(k)} + (1 - \rho^{(k)})\cdot\frac{1}{BM_{\glo}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\vW^{(k)}\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}),
-    \end{align}
+    \begin{eqnarray}
+        &&(\theta_{\student}^{(k + 1)}, \vW_{\student}^{(k + 1)})
+        = \textsc{OptUpdate}^{(k)}(\theta_{\student}^{(k)}, \vW_{\student}^{(k)}; \nabla_{(\theta_{\student}, \vW_{\student})}\hat{\cL}_{\dino-\student\teacher}^{(k)}) \\
+        &&\theta_{\teacher}^{(k + 1)}
+        = \nu^{(k)}\theta_{\teacher}^{(k)} + (1 - \nu^{(k)})\theta_{\student}^{(k + 1)} \\
+        &&\vW_{\teacher}^{(k + 1)}
+        = \nu^{(k)}\vW_{\teacher}^{(k)} + (1 - \nu^{(k)})\vW_{\student}^{(k + 1)} \\
+        &&\vmu^{(k + 1)}
+        = \rho^{(k)}\vmu^{(k)} + (1 - \rho^{(k)})\cdot\frac{1}{BM_{\glo}}\sum_{b = 1}^{B}\sum_{i = 1}^{M_{\glo}}\vW^{(k)}\vz_{\theta_{\teacher}}(\vX_{b, g}^{(k), i}),
+    \end{eqnarray}
     For example, if the chosen optimization algorithm were stochastic gradient descent, we would have the update \(\theta_{\student}^{(k + 1)} \doteq \theta_{\student}^{(k)} - \delta^{(k)}\nabla_{\theta_{\student}}\hat{\cL}_{\dino{}-\student\teacher}^{(k)}\), and so on.
 \end{itemize}
 Notice that the optimization procedure is rather irregular: although all four parameters change at each iteration, only two of them are directly updated from a gradient-based method. The other two are updated from exponential moving averages, and indeed treated as constants when computing any gradients. After training, we discard the student weights and use the teacher weights for our trained network \(f\), as this exponentially moving average has been empirically shown to stabilize the resulting model (this idea is known as Polyak averaging or iterate averaging). 
@@ -448,6 +448,8 @@ For linear probing, the linear probe is usually trained using the AdamW optimize
 
 
 \begin{table}
+\caption{\small\textbf{Classification performance} on hold-out test data for DINO and SimDINO, using both \(k\)-nearest neighbor accuracy (\(k = 20\)) and linear probing. At the same number of iterations (\(100\)), SimDINO is clearly better in terms of performance, and is more stable (the DINO training running on ViT-L backbone with the provided settings has very unstable optimization and obtains NaN loss in short order). We also compare to other standout methods, namely SwAV and MoCov3, which DINO was built on.}
+    
     \centering
     \begin{tabular}{@{}lcccc@{}} %
         \toprule
@@ -463,7 +465,6 @@ For linear probing, the linear probe is usually trained using the AdamW optimize
         \color{gray} MoCov3 & \color{gray} ViT-B & \color{gray} 300  & \color{gray} -- & \color{gray} 76.7 \\
         \bottomrule
     \end{tabular}
-    \caption{\small\textbf{Classification performance} on hold-out test data for DINO and SimDINO, using both \(k\)-nearest neighbor accuracy (\(k = 20\)) and linear probing. At the same number of iterations (\(100\)), SimDINO is clearly better in terms of performance, and is more stable (the DINO training running on ViT-L backbone with the provided settings has very unstable optimization and obtains NaN loss in short order). We also compare to other standout methods, namely SwAV and MoCov3, which DINO was built on.}
     \label{tab:dino_imagenet_linear_probing}
 \end{table}
 
@@ -937,6 +938,7 @@ In this section, we extend the flow matching framework to \textit{conditioned ge
 
 \subsection{Formulation of Conditional Flow Matching}
 \label{subsec:cond_formulation}
+\yima{No need to introduce general generative methods that were already introduced in earlier chapters, say Chapter 3 or 7. Here to make reference to those sections and describe specific implementation for the data and task here.}
 
 To achieve controllable generation, we extend the unconditional flow matching framework introduced in Section 8.7 to the conditional setting. Let $x \in \mathcal{X}$ denote a data sample (e.g., an image or latent representation) and $c \in \mathcal{C}$ denote a conditioning signal (e.g., a text embedding or class label). Our goal is to approximate the conditional data distribution $p_1(x|c)$ by learning a time-dependent vector field $v_t(\cdot|c)$ that pushes a simple prior distribution $p_0(x) = \mathcal{N}(x; 0, I)$ toward $p_1(x|c)$.
 
@@ -1042,8 +1044,7 @@ Then, the task, architecture, and objectives are introduced. Finally, the experi
 Unlike before, 3D data is discussed relatively less extensively in this book. Therefore, this subsection provides a brief description to facilitate the reader's understanding of the subsequent text. 
 Readers wishing to learn more details are advised to consult the sources via the cited references.
 
-3D data digitizes continuous signals from real physical space into discrete, computable forms in digital space. Its representation approaches stand as one of the core problems in the fields of computer vision and computer graphics. 
-The four most common types of 3D representations are: point clouds, voxels, polygon meshes, and implicit functions, as shown in Figure~\ref{fig:3d_representations}~\footnote{Images in the first three columns came from \cite{shi2022deep}, and the last column image came from https://medium.com/@sunil7545/implicit-vs-parametric-3d-shape-representation-9d4c01c8c60c}.
+3D data to which we refer here are digitized approximation to continuous real physical 3D shapes into discrete, computable forms in a certain digital space. Representation of 3D shapes stands as one of the core problems in the fields of computer vision and computer graphics. The four most commonly used, and largely equivalent, types of 3D shape representations are: point clouds, voxels, polygon meshes, and implicit functions, as shown in Figure~\ref{fig:3d_representations}~\footnote{Images in the first three columns came from \cite{shi2022deep}, and the last column image came from https://medium.com/@sunil7545/implicit-vs-parametric-3d-shape-representation-9d4c01c8c60c}.
 
 \begin{figure}[h]
     \centering 
@@ -1052,9 +1053,8 @@ The four most common types of 3D representations are: point clouds, voxels, poly
     \label{fig:3d_representations}
 \end{figure}
 
-\textbf{Point Clouds}
-precisely characterize the surface features of objects through discrete sampling points.
-They directly record spatial coordinates $(x,y,z)$ and other information on object surfaces within 3D coordinate systems, as illustrated in Figure~\ref{fig:3d_representations}(a).
+\textbf{Point clouds} precisely characterize the 3D shape of an object through discretely sampled points on the surface.
+They directly record 3D spatial coordinates $(x,y,z)$ of points on the object surface (and maybe some additional photometric information at those points), as illustrated in Figure~\ref{fig:3d_representations}(a).
 A point cloud is defined as a set of discrete coordinates in 3D Euclidean space:
 \begin{equation}
 \label{eq:pointcloud}
@@ -1089,8 +1089,7 @@ where $(x,y,z)$ denote the coordinates of a query point, and $d$ denotes the dis
 The conversion from an implicit function representation of 3D geometry to a polygon mesh can generally be achieved through iso-surface extraction methods such as marching cubes~\cite{10.1145/280811.281026}.
 
 \paragraph{3D Datasets.}
-The Michelangelo approach utilizes ShapeNet~\cite{chang2015shapenet} to investigate shape-image-text representation and its generation performance.
-ShapeNet provides approximately 55,000 manufactured meshes across 55 categories.
+In this section, we use the  ShapeNet~\cite{chang2015shapenet} to study a joint shape-image-text representation and its generation performance. ShapeNet provides approximately 55,000 manufactured meshes across 55 categories.
 Each mesh has a category tag and corresponding texts, such as fine-grained categories or brief descriptions given by the creator.
 To prepare the triplet data (3D shape, image, text), the provided texts are augmented in two ways.
 First, the shape tag and corresponding description are combined in the format "a 3D model of (shape tag), in the style of (description)" or "a 3D model of (shape tag), (description)".
@@ -1112,7 +1111,7 @@ Inspired by CLIP~\cite{pmlr-v139-radford21a}, the Michelangelo approach injects 
 % Introduce network and loss func
 \subsection{Architecture and Objective}
 
-\subsubsection{Shape-Image-Text Aligned Variational Auto-Encoder}
+\paragraph{Shape-Image-Text Aligned Variational Auto-Encoder.}
 
 \begin{figure}
     \centering
@@ -1174,8 +1173,7 @@ where BCE is binary cross-entropy loss, and the total loss for training Shape-Im
     \label{eq:sita_vae}
 \end{equation}
 
-\subsubsection{Aligned Shape Latent Diffusion Model}
-
+\paragraph{Aligned Shape Latent Diffusion Model.}
 After training the SITA-VAE, an alignment space among 3D shapes, images, and texts is obtained, as well as a 3D shape encoder and decoder that compress the 3D shape into low-dimensional shape latent embeddings and reconstruct shape latent embeddings to a neural field with high quality. Building on the success of the Latent Diffusion Model (LDM)~\cite{rombach2022high} in text-to-image generation, which strikes a balance between computational overhead and generation quality, a shape latent diffusion model is proposed on the aligned space to learn a better probabilistic mapping from 2D images or texts to 3D shape latent embeddings. By leveraging the alignment space and the shape latent diffusion model, it is possible to generate high-quality 3D shapes that better conform to the visual or textual conditional inputs.
 
 The Aligned Shape Latent Diffusion Model (ASLDM) builds on a UNet-like transformer~\cite{10203178}, aiming to fit a distribution of the shape latent embeddings, accompanied by an auto-encoder for encoding data samples into the latent space and reconstructing the data samples given the sampled latent. By learning in the latent space, the latent diffusion model is computationally efficient, and leveraging such a compact representation enables the model to fit the target distribution faster. Specifically, the model $\epsilon_{\theta}$ focuses on generating shape latent embeddings $\vE_{\mathrm{s}}$ conditioned on $\vC$, which is represented by the CLIP image or text encoder. Following LDM~\cite{rombach2022high}, the objective is
@@ -1200,7 +1198,7 @@ The Intersection of Union (IoU) is used to reflect the accuracy of reconstructio
 \textbf{Baselines.}
 In the representation stage, the Michelangelo approach is compared with OccNet~\cite{8953655}, ConvOcc~\cite{10.1007/978-3-030-58580-8_31}, IF-Net~\cite{9156292}, 3DILG~\cite{NEURIPS2022_894ca1c4}, and Learnable Query Version of 3DS2V~\cite{10.1145/3592442} on reconstruction tasks to validate the ability of the model to recover a neural field given shape embeddings on the ShapeNet dataset~\cite{chang2015shapenet}. For the conditional generation stage, two recent powerful 3D generation methods, 3DILG and 3DS2V, are chosen as baselines. Their shape representation modules are first fine-tuned on a mixture dataset of ShapeNet and the 3D Cartoon Monster. Then, the text and image conditional generative models of 3DILG and 3DS2V are retrained with the same protocols.
 
-\textbf{Numerical Comparison}.
+\textbf{Numerical comparison}.
 The numerical results are reported in Table~\ref{tab:michelangelo_recon} and Table~\ref{tab:michelangelo_gen}.
 Table~\ref{tab:michelangelo_recon} shows that Michelangelo has the best reconstruction performance on 55 overall categories, surpassing the rest. Results of the selected categories further demonstrate that the model can faithfully reconstruct 3D shapes in each of the 55 categories.
 Table~\ref{tab:michelangelo_gen} reports the numerical results for conditional 3D shape generation.
