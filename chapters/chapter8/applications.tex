@@ -4,7 +4,7 @@
 
 \begin{document}
 
-\chapter{Learning Representations for Real-World Data}
+\chapter{Learning Representations for Real-World Data and Tasks}
 \label{ch:applications}
 
 \begin{quote}
@@ -14,19 +14,28 @@ $~$ \hfill --- Donald Knuth
 \end{quote}
 \vspace{5mm}
 
+\section{Introduction and Outline}
 The previous chapters have presented a systematic introduction to mathematical problems, computational frameworks, and practical algorithms associated with learning low-dimensional distributions from high-dimensional data. Although most theoretical justifications of these methods have been established for idealistic models of data such as (mixtures of) subspaces and/or Gaussians, the principles and ideas behind these computational methods are nevertheless powerful and general, and they are in fact meant to be applicable for real-world datasets and tasks. 
 
-To help readers understand the material in this book better and learn how to apply what you have learned so far to real-world data, toward the end of the book, we provide some demonstrations and vignettes of several representative applications. Each application proposes a solution to a real-world task with a real-world dataset (such as visual data and text data), using the methods we have introduced in this book. The results presented in this chapter are meant to serve the following two purposes: 
+To help readers understand the material in this book better and learn how to apply what you have learned so far to real-world data, toward the end of the book, we provide some demonstrations and vignettes of several representative applications. Each application proposes a solution to a real-world task with a real-world dataset (such as visual data, motion data, and text data), using the methods we have introduced in this book. The results presented in this chapter are meant to serve the following two purposes: 
 \begin{itemize}
     \item firstly, to provide additional experimental details and empirical evidence which validate the methods presented earlier in the book, and demonstrate their significant potential in real-world contexts;
     \item secondly, to introduce the reader to certain modern empirical methods and tasks in deep learning which are not well-documented outside of research or production codebases.
 \end{itemize}
-However, in our honest opinion, the solutions and results given here are designed simply to verify that the methodology works. As such, there is great room for future improvement, both in engineering and theoretical understanding, to potentially improve the state-of-the-art. We will discuss some future directions in \Cref{ch:future}.  
+However, in our honest opinion, the solutions and results given here are designed simply to verify that the methodology works. As such, there is great room for future improvement, both in engineering and theoretical understanding, to potentially improve the state-of-the-art. We will showcase some immediate and obvious improvements in the last Section \ref{sec:scalable} of the chapter. We discuss potentially much more significant improvements as open problems for future study in \Cref{ch:future}.  
 
+\paragraph{Outline of the Chapter.}
+For natural intelligence, it is arguably true that the three most important types of data with which our brain builds our memory and knowledge are the visual data, our body motion, and the languages. Hence, in this chapter, we will show how to  apply the book's principles to learn good representations of these real-world data and show how such representations facilitate some important practical tasks. 
 
+Firstly, from Section \ref{sec:contrastive_learning} to \ref{sec:CUPID}, we will start with the visual data and show how to learn the distributions of 2D images to 3D objects since the visual memory serves as the low-level but foundation model for us (and animals) to store knowledge of the physical world and perceive new environments. We will then, in Section \ref{sec:egoallo}, show how to learn the distribution of body motions as it is crucial for us (and animals) to interact swiftly and accurately with the environments based on past skills. Finally, in Section \ref{sec:clm_text}, we will show how to model and learn the distribution of natural languages. 
 
+Evidently, compared to the natural languages, our coverage of modeling physical data, visual and motion, will be much more extensive. Although in the past few years, the AI industry has invested mostly in modeling natural languages,\footnote{Including their derivatives such as programming languages, logical deductions, and mathematical proofs.} people have started to realize the importance of modeling our knowledge about the physical world. There has been a fast growing interest and effort to develop the so-called ``world model,'' ``spatial intelligence,'' ``physical intelligence,'' or ``embodied intelligence'', as they are crucial for AI systems or agents whose tasks require them to interact with an open physical world, say an intelligent robot.  
 
-\section{Technical Setup and Outline of the Chapter}\label{sec:experiment_setup}
+From  \Cref{sec:contrastive_learning} to \Cref{sec:image_classification}, we will show how to use principles introduced in this book to learn good representations of imagery data in unsupervised, weakly supervised, and supervised settings. This will serve as both an introduction to image data, data augmentation techniques, and the common architecture known as the Transformer, \textit{as well as} a first demonstration of the drastic kinds of simplifications we can make using the demonstrated principles. We will continue with modifications to the \textit{transformer network architecture} in \Cref{sec:image_classification} for images and \Cref{sec:clm_text} or texts respectively, which demonstrate the capabilities of simplified white-box architectures for \textit{encoding} within the image and text domains. We will also demonstrate the capabilities of the simplified architectures for \textit{autoencoding} in \Cref{sec:image_completion}. %
+
+The primary reason why we learn a good representation of a data distribution is to allow us to sample the distribution (as a prior) to regenerate, estimate or predict given current observations or information. We demonstrate the generative capabilities of the learned representations for 2D images in \Cref{sec:RAE-implement} and \Cref{sec:image-generation}; for 3D objects in \Cref{sec:Michelangelo} and \Cref{sec:shape-and-pose}; for human motions in \Cref{sec:egoallo}; and for texts in \Cref{sec:clm_text}.
+
+\section{Overall Technical Setup}\label{sec:experiment_setup}
 
 In previous chapters, we alluded to different setups in which we used representation-learning techniques to process real data at scale. In this chapter, we will describe such setups in great detail. The objective of this section is to get you, the reader, to be able to reproduce any experiment discussed in this section (or indeed the book) using just the description we will give in the book, the principles introduced in previous chapters and expanded on in this chapter, and hyperparameters taken from a smattering of papers whose results are discussed in this chapter. To this end, we will \textit{precisely} describe all procedures in a detailed language, pseudocode, or mathematical notation that can be directly implemented in code. Wherever possible, we will discuss how the concrete implementations connect to the principles presented earlier in the book.
 
@@ -42,6 +51,7 @@ In previous chapters, we alluded to different setups in which we used representa
     \label{fig:overall_autoencoder_pipeline}
 \end{figure}
 
+\paragraph{Technical Setup.}
 Let us define the set of possible data as \(\cD\) (eventually this will be the set of images \(\cI\), for example, or the set of text \(\cT\)), and the set of finite sequences of tokens in \(\R^{d}\) (i.e., the set of matrices with \(d\) rows) as \((\R^{d})^{*} \doteq \bigcup_{T = 1}^{\infty}\R^{d \times T}\). In order to discuss the wealth of applications we introduce in this chapter, we first recall that in the rest of the book, we discuss two different types of model architectures.
 \begin{itemize}
     \item An \textit{encoder} architecture, parameterized by \(\theta\), which is composed of several components:
@@ -63,9 +73,6 @@ Let us define the set of possible data as \(\cD\) (eventually this will be the s
 \end{itemize}
 
 We will repeatedly use this notation many times in this chapter, so please feel free to refer back to it if something doesn't make sense. This decomposition of our networks also closely mirrors most code implementations, and you can start your coding projects by defining these networks.
-
-\yima{This paragraph needs to be updated.}
-In this chapter, we will discuss applications of the book's principles to contrastive learning in \Cref{sec:contrastive_learning}. This will serve as both an introduction to image data, data augmentation techniques, and the common architecture known as the transformer, \textit{as well as} a first demonstration of the drastic kinds of simplifications we can make using the demonstrated principles. We will continue with modifications to the \textit{network architecture} in \Cref{sec:image_classification,sec:clm_text}, which demonstrate the capabilities of simplified architectures for \textit{encoding} within the image and text domains. We then demonstrate simplified architectures for \textit{autoencoding} in \Cref{sec:image_completion}. %
 
 
 \section{Unsupervised Learning of Imagery Representations}\label{sec:contrastive_learning}
@@ -101,7 +108,7 @@ The data that we will use to explore and simplify the DINO methodology are all 2
 On a slightly more formal level, our data \(\vX\) will be images; we let \(\cI\) be the set of all images. Since an image is a rectangular array of pixels, and each pixel has a color given by RGB, CMYK, or another color format, we say that an image is an element of \(\R^{c \times h \times w}\) --- here \(c\) is the number of channels (i.e., \(3\) for RGB and \(4\) for CMYK), \(h\) is the image height, and \(w\) is the image width. Consequently, the set of all images \(\cI \doteq \bigcup_{c, h, w = 1}^{\infty}\R^{c \times h \times w}\) is the set of all possible such data. Again, we will use this notation repeatedly.
 
 
-\subsection{The Simplified DINO Objective} \label{sub:contrastive_learning_objective}
+\subsection{The Simplified DINO Task and Objective} \label{sub:contrastive_learning_objective}
 
 Our task is to learn a good representation of the data. Contrastive learning, by and large, does this by defining what properties of the input image we wish the features to reflect, constructing images which share these properties but vary others, and setting up a loss which promotes that the features of images with shared properties are close and images with different properties are different. The naturally optimal solution to this learning problem is that the learned features preserve the desired properties of the input. However, there are many practical and empirical complications that arise in the course of training contrastive models.
 
@@ -496,6 +503,7 @@ For linear probing, the linear probe is usually trained using the AdamW optimize
 \paragraph{Evaluation results.} In terms of downstream classification performance, we obtain the performance in \Cref{tab:dino_imagenet_linear_probing}. We observe that the performance of SimDINO is much higher than that of DINO under fair comparison. Also, it is much more stable: the prescribed settings of DINO cannot train a ViT-L(arge) model. On the other hand, \Cref{fig:dino_attention_maps_saliency} shows visualizations of the average saliency maps in DINO and our simplified DINO, observing that the saliency maps look quite similar across models, indicating that the models learn features which are at least as good at capturing fine-grained details. The segmentation and object detection performances in \Cref{tab:dino_segmentation} confirm this claim quantitatively, where SimDINO features show substantive improvement over those of DINO.
 
 \section{Weakly Supervised Image and Text Binding}\label{sec:CLIP}
+\yima{Robin, please provide a vignette about CLIP or its simplified version. Sam will give a general description of concepts and methods for joint image/text embedding and related work in Chapter 7. }
 
 \section{Supervised Image Classification}\label{sec:image_classification}
 
@@ -926,6 +934,8 @@ Once we have trained the denoiser, we can use it to generate new samples from th
 
 
 \section{Conditioned 2D Image/Video Generation}
+\label{sec:image-generation}
+\label{sec:video-generation}
 \yima{From the above latent diffusion model for images, it is natural to transition to conditioned image generation. Text condition via CLIP or SimCLIP... and DPS implementation, classifier-free, or cross-attention etc. (Robin, Jingfeng, Daniel, and Peter, decide what to feature...)}
 
 
@@ -1025,36 +1035,36 @@ where $a_t$ represents the action taken at time $t$. In frameworks like Genie \c
 
 
 \section{Image and Text Conditioned 3D Object Generation}
+\label{sec:Michelangelo}\label{sec:object-generation}
 %\yima{Zibo and Sam, please move the image-text conditioned 3D shape generation material (Michelangelo) to this section. Try to be self-contained and consistent with the rest of the book for notation and terminologies, especially with the next Section for generation-based 3D reconstruction. }
 
 So far, in previous sections, we have mainly shown how to learn representations of the distribution of {\em two-dimensional} (2D) images, as well as many image-based applications or tasks such representations facilitate: such as image based object recognition, image segmentation or completion, and image generation.\footnote{Based on techniques introduced earlier: the vision transformer (ViT)~\cite{NIPS2017_3f5ee243}, the language-image contrastive learning (CLIP)~\cite{pmlr-v139-radford21a}, and latent diffusion models (VAE-SD)~\cite{rombach2022high}.\yima{Probably should introduce CLIP and VAE-SD in earlier chapter or section.}} 
 
-However, our world is three-dimensional (3D).\footnote{or four-dimensional (4D) if we consider time as an extra dimension as the world is dynamical.} Although our eyes perceive only  2D projections of the world -- stereo pairs through our two eyes, we are able to develop a visual memory that represents a full 3D world model for our living environment and objects in it. 
+However, our world is three-dimensional (3D).\footnote{or four-dimensional (4D) if we consider time as an extra dimension as the world is dynamical.} Although our eyes perceive only  2D projections of the world -- stereo pairs through our two eyes, we are able to develop a visual memory that represents a full 3D world model for our living environment and objects within. 
 
-This section demonstrates that, using the methods introduced in this book, it is possible to learn the distribution of 3D shapes of natural objects and then generate new 3D object shapes from this distribution, conditioned on either an input 2D image or a text description of the object. In particular, this section presents the work of the Michelangelo project~\cite{NEURIPS2023_ea1a7f7b}, which applies the techniques for 2D image generation to the representation and generation of 3D shape data~\footnote{Generally speaking, polygon meshes and video data can all be referred to as ``3D data''; however, in this section, the term 3D data refers to polygon meshes or their equivalent representations, explicit or implicit.}.
+This section demonstrates that, using the methods introduced in this book, it is possible to learn the distribution of 3D shapes of natural objects and then generate new 3D object shapes from this distribution, conditioned on either an input 2D image or a text description of the object. In particular, the work featured here is based on the Michelangelo project~\cite{NEURIPS2023_ea1a7f7b}, which very much generalizes the techniques that we have introduced for 2D image representation and generation to 3D shape data\footnote{Generally speaking, polygon meshes and video data can all be referred to as ``3D data''; however, in this section, the term 3D data refers to polygon meshes or their equivalent representations, explicit or implicit.}.
 
-As the preceding sections provide limited descriptions about 3D data, this section first provides some concepts of 3D shape data and datasets.
-Then, the task, architecture, and objectives are introduced. Finally, the experiments and analysis are presented.
+We first give a brief introduction to commonly used data forms that represent 3D shapes and corresponding datasets. Then, we formulate the task and the associated objectives. Following the work of the Michelangelo project~\cite{NEURIPS2023_ea1a7f7b}, we present a computational framework and associated network architectures that attempt to solve this task. Finally, we present experimental results and analysis to verify the proposed solution, as well as discussion for further improvements.
 
 % Introduce basic 3D representations and common used 3D dataset.
-\subsection{3D Data Representations and Datasets}
+\subsection{3D Shape Representations and Datasets}
 
-\paragraph{3D Data Representations}
+\paragraph{3D Shape Representations}
 
-Unlike before, 3D data is discussed relatively less extensively in this book. Therefore, this subsection provides a brief description to facilitate the reader's understanding of the subsequent text. 
+Unlike 3D images, 3D shapes and data have not been formally introduced before in this book. Therefore, this subsection provides a brief introduction to 3D data. 
 Readers wishing to learn more details are advised to consult the sources via the cited references.
 
-3D data to which we refer here are digitized approximation to continuous real physical 3D shapes into discrete, computable forms in a certain digital space. Representation of 3D shapes stands as one of the core problems in the fields of computer vision and computer graphics. The four most commonly used, and largely equivalent, types of 3D shape representations are: point clouds, voxels, polygon meshes, and implicit functions, as shown in Figure~\ref{fig:3d_representations}~\footnote{Images in the first three columns came from \cite{shi2022deep}, and the last column image came from https://medium.com/@sunil7545/implicit-vs-parametric-3d-shape-representation-9d4c01c8c60c}.
+3D data to which we refer here mainly mean continuous real physical 3D shapes that are typically digitized into discrete, computable forms in a certain representation space. Finding good representations of 3D shapes stands as one of the central problems in the fields of computer vision and computer graphics. The four most commonly used, and largely mathematically equivalent, types of 3D shape representations are: point clouds, voxels, polygon meshes, and implicit  functions,\footnote{such as the distance-sign function (DSF).} as shown in Figure~\ref{fig:3d_representations}~\footnote{Images in the first three columns came from \cite{shi2022deep}, and the last column image came from https://medium.com/@sunil7545/implicit-vs-parametric-3d-shape-representation-9d4c01c8c60c}.
 
 \begin{figure}[h]
     \centering 
-    \includegraphics[width=0.95\textwidth]{\toplevelprefix/chapters/chapter8/figs/3drep.pdf}
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/3drep.pdf}
     \caption{\textbf{Illustrations of different 3D representations for Stanford Bunny.} (a) the point cloud; (b) the voxel; (c) the polygon mesh; (d) the implicit function.}
     \label{fig:3d_representations}
 \end{figure}
 
-\textbf{Point clouds} precisely characterize the 3D shape of an object through discretely sampled points on the surface.
-They directly record 3D spatial coordinates $(x,y,z)$ of points on the object surface (and maybe some additional photometric information at those points), as illustrated in Figure~\ref{fig:3d_representations}(a).
+\textbf{Point clouds} precisely characterize the 3D shape of an object through discretely sampled points on the object's surface.
+They directly record 3D spatial coordinates $(x,y,z)$ of points on the surface (and maybe some additional photometric information at those points), as illustrated in Figure~\ref{fig:3d_representations}(a) Point Cloud.
 A point cloud is defined as a set of discrete coordinates in 3D Euclidean space:
 \begin{equation}
 \label{eq:pointcloud}
@@ -1064,49 +1074,47 @@ where $d \geq 3$ denotes the feature dimensionality, potentially including
 (concatenations of) coordinates $(x_i,y_i,z_i)$, colors $(r_i,g_i,b_i)$, and surface normals $(n_{xi},n_{yi},n_{zi})$.
 
 \textbf{Voxels}
-represent volumetric units in 3D space, constituting a natural extension of the 2D pixel concept to three dimensions. 
-This paradigm operates by discretizing 3D space into structured grids. 
-Typical voxel models partition 3D space into uniform cubic cells, where each voxel is indexed spatially and stores region-specific attributes such as density, material, or color, as shown in Fig.~\ref{fig:3d_representations}(b) Voxel. 
+represent volumetric units in 3D space, constituting a natural extension of the concept of 2D pixels to three dimension. Such a representation is obtained by discretizing a 3D space into a structured grid. 
+Typical voxel models partition 3D space into uniform cubic cells, where each voxel is indexed spatially and stores region-specific attributes such as occupancy, density, material, or color, as shown in Fig.~\ref{fig:3d_representations}(b) Voxel. 
 
 \textbf{Polygon meshes}
-serve as the primary representation for 3D assets in computer graphics and physical simulation domains. It approximates continuous surfaces through discrete combinations of vertices, edges, and polygonal faces, with triangle meshes being the predominant variant, as depicted in Fig.~\ref{fig:3d_representations}(c) Polygon Mesh.
+serve as arguably the most commonly used representation for 3D shapes in computer graphics and physical simulation domains. It approximates continuous surfaces through discrete  vertices, edges, and polygonal faces, with triangle meshes being the predominant variant, as depicted in Fig.~\ref{fig:3d_representations}(c) Polygon Mesh.
 Geometrically, polygon meshes consist of vertex coordinates in $\mathbb{R}^3$,
-complemented by topological connectivity. Formally, a mesh $M$ is a tuple
+complemented by their topological connectivity. Formally, a mesh $M$ is a tuple
 $(V,F)$, where vertex set $V=\{\vv_i\in\mathbb{R}^3\}_{i=1}^n$ denotes the vertex coordinates and face set $F=\{f_j\}_{j=1}^m$ defines topology.
 
 \textbf{Implicit functions}
-represent surfaces via scalar field level sets. This approach provides a unified framework for the mathematical description of complex surfaces (Fig.~\ref{fig:3d_representations}(d) Implicit Function).
+represent surfaces via level sets of a scalar function. This approach provides a unified framework for the mathematical description of complex surfaces (Fig.~\ref{fig:3d_representations}(d) Implicit Function).
 The standard implicit formulation is:
 \begin{equation}
 \label{eq:implicit_function}
     F: \mathbb{R}^3 \rightarrow \mathbb{R}, \quad F(x,y,z) = d
 \end{equation}
-where $(x,y,z)$ denote the coordinates of a query point, and $d$ denotes the distance between the query point and surface. The continuous implicit surface is:
+where $(x,y,z)$ denote the coordinates of a query point, and $d$ denotes the distance between the query point and a surface of interest.\footnote{Notice that we have used the same concept to describe the low-dimensional support of a distribution in a high-dimensional space, in \Cref{sec:manifold-distance}.} Hence the surface of interest is implicitly defined as:
 \begin{equation}
 \label{eq:implicit_function_surface}
     \mathcal{S} = \{ (x,y,z) \in \mathbb{R}^3 \mid F(x,y,z)=0 \}
 \end{equation}
-The conversion from an implicit function representation of 3D geometry to a polygon mesh can generally be achieved through iso-surface extraction methods such as marching cubes~\cite{10.1145/280811.281026}.
+The conversion from an implicit function representation of 3D shape to a polygon mesh can generally be achieved through iso-surface extraction methods such as marching cubes~\cite{10.1145/280811.281026}.
 
 \paragraph{3D Datasets.}
-In this section, we use the  ShapeNet~\cite{chang2015shapenet} to study a joint shape-image-text representation and its generation performance. ShapeNet provides approximately 55,000 manufactured meshes across 55 categories.
+There have been many publicly available datasets for each of the above representations mentioned above. They come with varying quantities and qualities. In this section, we will use the  ShapeNet~\cite{chang2015shapenet} to study a joint shape-image-text representation and its generation performance. ShapeNet provides approximately 55,000 manufactured meshes across 55 categories.
 Each mesh has a category tag and corresponding texts, such as fine-grained categories or brief descriptions given by the creator.
 To prepare the triplet data (3D shape, image, text), the provided texts are augmented in two ways.
-First, the shape tag and corresponding description are combined in the format "a 3D model of (shape tag), in the style of (description)" or "a 3D model of (shape tag), (description)".
+First, the shape tag and corresponding description are combined in the format ``a 3D model of (shape tag), in the style of (description)'' or ``a 3D model of (shape tag), (description).''
 Then, inspired by ULIP~\cite{10203465}, multiple templates containing 65 predefined phrases are leveraged to provide more text information during training.
 As for the image data, each mesh is rendered under four camera poses, augmenting and improving the rendering diversity via the depth-conditioned ControlNet~\cite{10377881}.
 
 % Introduce task and challenges
 \subsection{Task}
-
-The goal is to learn a conditional 3D shape generative model capable of sampling 3D shapes similar to a given condition, such as an image or text.
+Our goal here is to learn a conditional 3D shape generative model capable of sampling 3D shapes from the learned distribution, subject to a given condition, such as a given image or some texts.
 
 Following the Latent Diffusion Model~\cite{rombach2022high}, to fully leverage the capabilities of the generative model, a VAE is first trained to compress 3D data samples into a latent space.
 Generally, a good latent representation should possess two key characteristics: it must be both highly compressible yet faithfully reconstructible for 3D data samples, and conducive to generative model training.
 However, compared to 2D image data, 3D data remains scarce~\footnote{The situation persists even after the releases of Objaverse-XL~\cite{10.5555/3666122.3667676}.}.
 Consequently, learning an effective latent representation for 3D data is highly challenging.
 
-Inspired by CLIP~\cite{pmlr-v139-radford21a}, the Michelangelo approach injects semantic information into the latent space via a contrastive loss to alleviate problems observed when training VAEs exclusively from 3D data, which forms the Shape-Image-Text-Aligned Variational Auto-Encoder (SITA-VAE).
+Inspired by CLIP~\cite{pmlr-v139-radford21a}, the approach adopted by the Michelangelo project injects semantic information into the latent space via a contrastive loss to alleviate problems observed when training VAEs exclusively from 3D data, which forms the Shape-Image-Text-Aligned Variational Auto-Encoder (SITA-VAE).
 
 % Introduce network and loss func
 \subsection{Architecture and Objective}
@@ -1196,7 +1204,7 @@ where $\lambda$ is the guidance scale for trading off the sampling fidelity and 
 The Intersection of Union (IoU) is used to reflect the accuracy of reconstructions. Two new metrics are proposed for evaluating 3D shape generation methods. The first is a shape-image score (SI-S), which uses a 3D shape encoder and image encoder to extract corresponding shape and image embeddings and compute the Cosine Similarity of these two modalities. Another is a shape-text score (ST-S), which computes the similarity between the generated 3D shape and the conditional text input in the aligned shape embedding and text embedding space. Both metrics evaluate the similarity between results and their corresponding conditions. Moreover, both the pre-trained ULIP~\cite{10203465} and SITA are used to compute SI-S and ST-S, in terms of SI-S (ULIP), ST-S (ULIP), SI-S (SITA) and ST-S (SITA), respectively. Besides, the metrics of P-IS and P-FID as introduced in Point-E~\cite{nichol2022point} are followed, using a pre-trained PointNet++~\cite{NIPS2017_d8bf84be} to compute the point cloud analogous Inception Score~\cite{NIPS2016_8a3363ab} and FID~\cite{NIPS2017_8a1d6947} to evaluate the diversity and quality of the generated 3D shapes.
 
 \textbf{Baselines.}
-In the representation stage, the Michelangelo approach is compared with OccNet~\cite{8953655}, ConvOcc~\cite{10.1007/978-3-030-58580-8_31}, IF-Net~\cite{9156292}, 3DILG~\cite{NEURIPS2022_894ca1c4}, and Learnable Query Version of 3DS2V~\cite{10.1145/3592442} on reconstruction tasks to validate the ability of the model to recover a neural field given shape embeddings on the ShapeNet dataset~\cite{chang2015shapenet}. For the conditional generation stage, two recent powerful 3D generation methods, 3DILG and 3DS2V, are chosen as baselines. Their shape representation modules are first fine-tuned on a mixture dataset of ShapeNet and the 3D Cartoon Monster. Then, the text and image conditional generative models of 3DILG and 3DS2V are retrained with the same protocols.
+We compare the Michelangelo approach to other methods, including OccNet~\cite{8953655}, ConvOcc~\cite{10.1007/978-3-030-58580-8_31}, IF-Net~\cite{9156292}, 3DILG~\cite{NEURIPS2022_894ca1c4}, and Learnable Query Version of 3DS2V~\cite{10.1145/3592442},  on reconstruction tasks to validate the ability of the model to recover a neural field given shape embeddings on the ShapeNet dataset~\cite{chang2015shapenet}. For the conditional generation stage, two recent powerful 3D generation methods, 3DILG and 3DS2V, are chosen as baselines. Their shape representation modules are first fine-tuned on a mixture dataset of ShapeNet and the 3D Cartoon Monster. Then, the text and image conditional generative models of 3DILG and 3DS2V are retrained with the same protocols.
 
 \textbf{Numerical comparison}.
 The numerical results are reported in Table~\ref{tab:michelangelo_recon} and Table~\ref{tab:michelangelo_gen}.
@@ -1313,7 +1321,7 @@ Though Michelangelo has achieved excellent results, it still has some limitation
 Learning the shape representation with a 3D shape-image-text aligned space from only 2D (multi-view) images via differentiable rendering is a promising direction. 
 Furthermore, since we represent each 3D shape as an occupancy field, it needs to convert the 3D mesh into a watertight one, which will inevitably degrade the original quality of the 3D mesh.
 
-\section{Generation-Based 3D Object Shape and Pose Reconstruction}
+\section{Generation-Based 3D Shape and Pose Reconstruction}\label{sec:CUPID}\label{sec:shape-and-pose}
 
 % refactor
 \newcommand{\pose}{\boldsymbol{\theta}}
@@ -1352,13 +1360,13 @@ Furthermore, since we represent each 3D shape as an occupancy field, it needs to
 \newcommand{\high}{\mathrm{h}}
 
 \paragraph{Generation-based 3D Reconstruction}
-The fundamental reason why we develop the sense of vision is to learn to perceive our three-dimensional (3D) environment. Our brain has dedicated a significant portion of it, {\em the visual cortex}, to perform this task. It enables us to accurately and efficiently reconstruct shapes of 3D objects and their spatial  relationships (relative poses) from the 2D images perceived through our eyes. 
+The fundamental reason why we develop the sense of vision is to learn to perceive our three-dimensional (3D) environment. Our brain has dedicated a significant portion of it, {\em the visual cortex}, to perform this task. It enables us to accurately and efficiently reconstruct shapes of 3D objects and their spatial  relationships\footnote{say relative poses relative to our viewpoint or between the objects themselves.} from the 2D images perceived through our eyes. 
 
-There has been a rich and long history of understanding mathematically how, in principle, we can fully reconstruct 3D geometry from (multiple) 2D images. Interested readers may refer to the book \cite{MaY2003} for a detailed account of this important topic. However, as we have alluded to in the Section \ref{sec:3D-visual-model} in the previous Chapter \ref{ch:conditional-inference}, ideally, 3D reconstruction should be done in a Bayesian manner as our brain does. Our perception of the 3D environment seems effortless is mainly because we reconstruct a 3D scene and recognize 3D objects based on a rich ``visual memory.'' More precisely, we have learned through our years of accumulated experience the distribution of our 3D environment. The distribution is rather low-dimensional and structured hence we can correctly and efficiently complete 3D geometry of a scene and objects in it even if we have seen only small part of it, say from a single view. Conceptually, this abilit to ``complete'' missing information is very similar to how natural images can be completed from a small fraction of patches, as we have seen in Section \ref{sec:image_completion}. 
+There has been a rich and long history of understanding mathematically how, in principle, we can fully reconstruct 3D geometry from (multiple) 2D images. Interested readers may refer to the textbook \cite{MaY2003} for a detailed account of this important topic. However, as we have alluded to in the Section \ref{sec:3D-visual-model} in the previous Chapter \ref{ch:conditional-inference}, ideally, 3D reconstruction should be done in a Bayesian manner as our brain does so too. Our perception of the 3D environment seems effortless is mainly because we reconstruct a 3D scene and recognize 3D objects based on a rich ``visual memory.'' More precisely, we have learned through our years of accumulated experience the distribution of out 3D environment and objects within. The distribution is rather low-dimensional and structured hence we can correctly and efficiently complete 3D geometry of a scene and objects in it even if we have seen only small part of it, say from a single view. Conceptually, this ability to ``complete'' missing information is very similar to how natural images can be completed from a small fraction of patches, as we have seen in Section \ref{sec:image_completion}. 
 
-As a distribution, our 3D visual memory is not only low-dimensional but also highly structured. For instance, it seems that our brain stores semantics (identity of objects) of a scene in the {\em inferior temporal} cortex (IT cortex) and the 3D spatial information of the scene in the {\em hippocampus}. Our brain  not only reconstructs the 3D geometry of the scene,\footnote{Say 3D geometry that is represented in different but largely equivalent forms: point clouds, meshes, signed distance functions, neural radiane fields, or Gaussian splatters.} but also parses its content into individual objects and their spatial relationships among the objects and with the observer. Such a structured representation enables us to conduct spatial inference within the scene from either an egocentric, object-centric, or allocentric perspective. These abilities are necessary and crucial for tasks such as navigating in the scene, interacting and manipulating with objects in it. 
+As a distribution, our 3D visual memory is not only low-dimensional but also highly structured. For instance, it seems that our brain stores semantics (identity of objects) of a scene in the {\em inferior temporal} cortex (IT cortex) and the 3D spatial information of the scene in the {\em hippocampus}. Our brain  not only reconstructs the 3D geometry of the scene,\footnote{Say 3D geometry that is represented in different but largely equivalent forms: point clouds, meshes, signed distance functions, neural radiance fields, or Gaussian splatters.} but also parses its content into individual objects and their spatial relationships among the objects and with the observer. Such a structured representation enables us to conduct spatial inference within the scene from either an {\em egocentric, object-centric, or allocentric} perspective. These abilities are necessary and crucial for tasks such as navigating in the scene, interacting and manipulating with objects in it. 
 
-Hence, if the goal of learning a model of the 3D scene is to support intelligent robots to interact with its environment,\footnote{as part of the objectives of the Embodied AI movement.} it must learn a representation of the 3D environment that shares the same characteristics as our visual memory as above. 
+Hence, if the goal of learning a model of the 3D scene is to support physical interaction with an  environment and objects within,\footnote{as the objective of Embodied AI for intelligent agents or robots.} we must learn a representation of the 3D environment that shares the same characteristics as our visual memory mentioned above. 
 
 \paragraph{Object 3D Shape and Poses from a Single 2D View}
 In this section, we takes a first step to show how this can be achieved by illustrating with a challenging and seemingly ill-posed problem: {\em inferring the complete 3D shape and and pose, including both ego-centric and object-centric pose, of an object from a single 2D image.} This problem, by its own, lies at the heart of computer vision, aiming to reverse the physics of image formation. An image $\image$ is the result of a rendering process,
@@ -1373,12 +1381,11 @@ Previous approaches have typically addressed this ambiguity by simplifying the p
 \begin{figure}
     \centering
     \includegraphics[width=0.8\linewidth]{chapters/chapter8/figs/cupid_definition.pdf}
-    \caption{\textbf{Cupid jointly infer a canonical 3D model and camera pose from a single image.} Left: Input image. 
-    Middle: Our method recovers a canonical 3D model (intrinsic properties such as shape and texture) along with the exact camera pose (extrinsic property) that generated the input.
+    \caption{\textbf{Task: to infer the 3D shape of an object with a canonical pose relative to the camera pose from a single image.} Left: Input image. Middle: Output recovers a canonical 3D model of the object (with intrinsic properties such as shape and texture) along with the exact camera pose (extrinsic property) that generates the input.
     Right: Re-rendering the 3D model from the estimated pose faithfully reproduces the input.}
     \label{fig:cupid_teaser}
 \end{figure}
-In this section, we introduce a unified probabilistic framework, which we call \textbf{Cupid}, that bridges this gap by jointly modeling the distribution over both the 3D object and the camera pose, as figure~\ref{fig:cupid_teaser} shows. The central idea is that an ideal system should be able to simultaneously generate a complete 3D model and reason about the precise camera viewpoint that produced the given 2D observation. In the way, the genereated 3D object can be \textit{pasted} into the original image. This approach recasts single-view 3D reconstruction as a conditional sampling problem, aiming to achieve both the geometric fidelity of reconstruction and the rich priors of a generative model.
+In this section, we feature a solution to this problem based on the work of the  \textbf{Cupid} project \url{https://cupid3d.github.io}. It approaches the above task by jointly modeling and learning the distribution over both the 3D object and the camera pose, as figure~\ref{fig:cupid_teaser} shows. The central idea is that an ideal system should be able to simultaneously generate a complete 3D model and reason about the precise camera viewpoint that has produced the given 2D observation. In the way, the generated 3D object can be \textit{pasted} into the original image. This approach recasts single-view 3D reconstruction as a conditional generation/sampling problem, aiming to achieve geometric fidelity of reconstruction through combining information from the given observation and the strong prior from the learned distribution.
 
 
 \subsection{Task and Objective}
@@ -1552,6 +1559,7 @@ Applying these transformations places each independently reconstructed object in
 \yima{Bingbing, try to work with Zibo and make sure notation, terminology, experiments etc are consistent with or complementary to the previous section, as much as possible. }
 
 \section{Conditioned Human Motion Generation}
+\label{sec:egoallo}
 % \yima{EgoAllo (Brent, Annie and Chen), move the stuff from Chapter 6 to here and elaborate on the methods and implementation more.}
 % \subsection{Body Pose Generation Conditioned on Head and Hands}\label{sub:ego-allo}
 
