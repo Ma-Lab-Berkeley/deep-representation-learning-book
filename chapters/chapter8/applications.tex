@@ -1044,7 +1044,9 @@ However, our world is three-dimensional (3D).\footnote{or four-dimensional (4D) 
 
 This section demonstrates that, using the methods introduced in this book, it is possible to learn the distribution of 3D shapes of natural objects and then generate new 3D object shapes from this distribution, conditioned on either an input 2D image or a text description of the object. In particular, the work featured here is based on the Michelangelo project~\cite{NEURIPS2023_ea1a7f7b}, which very much generalizes the techniques that we have introduced for 2D image representation and generation to 3D shape data\footnote{Generally speaking, polygon meshes and video data can all be referred to as ``3D data''; however, in this section, the term 3D data refers to polygon meshes or their equivalent representations, explicit or implicit.}.
 
-We first give a brief introduction to commonly used data forms that represent 3D shapes and corresponding datasets. Then, we formulate the task and the associated objectives. Following the work of the Michelangelo project~\cite{NEURIPS2023_ea1a7f7b}, we present a computational framework and associated network architectures that attempt to solve this task. Finally, we present experimental results and analysis to verify the proposed solution, as well as discussion for further improvements.
+We first give a brief introduction to commonly used data forms that represent 3D shapes and corresponding datasets. Then, following the open-sourced project named \textbf{Michelangelo}  \cite{NEURIPS2023_ea1a7f7b}:\\
+\centerline{\url{https://github.com/NeuralCarver/Michelangelo},}\\ 
+we present a computational framework, objectives, and associated network architectures that attempt to solve the task of image and text conditioned 3D object generation. Finally, we present experimental results and analysis to verify the proposed solution, as well as discussion for further improvements.
 
 % Introduce basic 3D representations and common used 3D dataset.
 \subsection{3D Shape Representations and Datasets}
@@ -1071,7 +1073,7 @@ A point cloud is defined as a set of discrete coordinates in 3D Euclidean space:
 P = \{ \vp_i \in \mathbb{R}^d\ |\ i=1,2,\dots,N \}
 \end{equation}
 where $d \geq 3$ denotes the feature dimensionality, potentially including
-(concatenations of) coordinates $(x_i,y_i,z_i)$, colors $(r_i,g_i,b_i)$, and surface normals $(n_{xi},n_{yi},n_{zi})$.
+(concatenations of) coordinates $(x_i,y_i,z_i)$, colors $(r_i,g_i,b_i)$, and surface normals $(n_{xi},n_{yi},n_{zi})$. 
 
 \textbf{Voxels}
 represent volumetric units in 3D space, constituting a natural extension of the concept of 2D pixels to three dimension. Such a representation is obtained by discretizing a 3D space into a structured grid. 
@@ -1097,6 +1099,8 @@ where $(x,y,z)$ denote the coordinates of a query point, and $d$ denotes the dis
 \end{equation}
 The conversion from an implicit function representation of 3D shape to a polygon mesh can generally be achieved through iso-surface extraction methods such as marching cubes~\cite{10.1145/280811.281026}.
 
+Mathematically speaking, all four shape representations are largely equivalent in terms of their representation capabilities. Nevertheless, each data form may come with different computational advantages or limitations. Hence, some representation is often preferred for different tasks. In this section, we will adopt the traditional point clouds representation and show how to learn the distribution of 3D shapes based on this form of data. In the next section, we will show how to use a (generalized) voxel representation for learning the distribution of 3D shapes and poses. 
+
 \paragraph{3D Datasets.}
 There have been many publicly available datasets for each of the above representations mentioned above. They come with varying quantities and qualities. In this section, we will use the  ShapeNet~\cite{chang2015shapenet} to study a joint shape-image-text representation and its generation performance. ShapeNet provides approximately 55,000 manufactured meshes across 55 categories.
 Each mesh has a category tag and corresponding texts, such as fine-grained categories or brief descriptions given by the creator.
@@ -1114,14 +1118,14 @@ Generally, a good latent representation should possess two key characteristics: 
 However, compared to 2D image data, 3D data remains scarce~\footnote{The situation persists even after the releases of Objaverse-XL~\cite{10.5555/3666122.3667676}.}.
 Consequently, learning an effective latent representation for 3D data is highly challenging.
 
-Inspired by CLIP~\cite{pmlr-v139-radford21a}, the approach adopted by the Michelangelo project injects semantic information into the latent space via a contrastive loss to alleviate problems observed when training VAEs exclusively from 3D data, which forms the Shape-Image-Text-Aligned Variational Auto-Encoder (SITA-VAE).
+Inspired by CLIP~\cite{pmlr-v139-radford21a}, the approach adopted by the Michelangelo project injects semantic information into the latent space via a contrastive loss to alleviate problems observed when training VAEs exclusively from 3D data, which forms the Shape-Image-Text-Aligned Variational Auto-Encoder (SITA-VAE). Figure \ref{fig:michelangelo_network} shows the overall diagram of the Michelangelo framework. We will explain implementation details for each component below.x
 
 % Introduce network and loss func
 \subsection{Architecture and Objective}
 
 \paragraph{Shape-Image-Text Aligned Variational Auto-Encoder.}
 
-\begin{figure}
+\begin{figure}[t]
     \centering
     \includegraphics[trim=0cm 0cm 0cm 0cm, clip=true,width=.99\linewidth]{\toplevelprefix/chapters/chapter8/figs/michelangelo_network.pdf}
     \caption{
@@ -1140,7 +1144,7 @@ W \times 3}$ and tokenized texts $\vT \in \R^{d_{{\mathrm{t}}} \times L_{\mathrm
 The approach takes advantage of the pre-trained image encoder and text encoder from CLIP. These two encoders are trained on large-scale image-text pairs and are robust enough to capture a well-aligned vision-language space, which enriches the semantics of the 3D shape representation after multi-modal alignment via contrastive learning.
 
 % 3D shape encoder
-\textbf{3D shape encoder} aims to extract powerful feature representations to characterize each 3D shape effectively. To achieve this, point clouds $\vP \in \R^{(3 + C) \times N}$ are first sampled from the surface of 3D shapes, where $N$ represents the number of points, and $C$ denotes additional point features such as normal or color. Next, a linear layer is used to project the concatenation of the Fourier positional encoded point clouds $\vP$ to the 3D shape encoder input $\vX \in \R^{d \times N}$. Drawing inspiration from previous transformer-based architectures for point cloud understanding~\cite{pmlr-v139-jaegle21a}, the 3D shape encoder is built on a perceiver-based transformer. Specifically, a cross-attention layer is used to inject the 3D shape information from the input $\vX$ into a series of learnable query tokens $\vQ \in \R^{d \times (1+L_{\mathrm{s}})}$, where $1 + L_{\mathrm{s}}$ is the length of query tokens $\vQ$, consisting of one global head token $\vQ_g \in \R^{d}$ with high-level semantics and $L_{\mathrm{s}}$ local tokens $\vQ_l \in \R^{d \times L_{\mathrm{s}}}$ containing low-level geometric structure information. Then, several self-attention blocks are used to iteratively improve the feature representation and obtain the final shape embeddings, $\vE_{\mathrm{s}} \in \R^{d \times (1+L_{\mathrm{s}})}$.
+\textbf{3D shape encoder} aims to extract powerful feature representations to characterize each 3D shape effectively. To achieve this, point clouds $\vP \in \R^{(3 + C) \times N}$ are first sampled from the surface of 3D shapes, where $N$ represents the number of points, and $C$ denotes additional point features such as normal or color. Next, a linear layer is used to project the concatenation of the Fourier positional encoded point clouds $\vP$ to the 3D shape encoder input $\vX \in \R^{d \times N}$. Drawing inspiration from previous transformer-based architectures for point cloud understanding~\cite{pmlr-v139-jaegle21a}, the 3D shape encoder is built on a perceiver-based transformer. Specifically, a cross-attention layer is used to inject the 3D shape information from the input $\vX$ into a series of learnable query tokens $\vQ \in \R^{d \times (1+L_{\mathrm{s}})}$, where $1 + L_{\mathrm{s}}$ is the length of query tokens $\vQ$, consisting of one global head token $\vQ_g \in \R^{d}$ with high-level semantics and $L_{\mathrm{s}}$ local tokens $\vQ_l \in \R^{d \times L_{\mathrm{s}}}$ containing low-level geometric structure information. Then, several self-attention blocks are used to iteratively improve the feature representation and obtain the final shape embeddings, $\vE_{\mathrm{s}} \in \R^{d \times (1+L_{\mathrm{s}})}$. \yima{Probably more detail or illustration for the above description about how to tokenize 3D shape data, say point clouds, through a  perceiver. How is it trained, separately or jointly, with what architecture and data etc.?}
 
 % Learn aligned latent
 \textbf{Alignment among 3D shapes, images, and texts} plays a crucial role in SITA-VAE and the conditional generative models. Since 3D data is an order of magnitude smaller than images and text data, to learn a better-aligned representation among 3D shapes, images, and texts, the 3D shape encoder is constrained to be close to a pre-aligned vision-language space, which is pre-trained on large-scale image-text pairs with rich image and text representations by leveraging the contrastive learning strategy. Consider an input triplet of 3D shapes $\vX$, images $\vI$ and tokenized texts $\vT$. The triplet encoders generate the corresponding shape embedding $\ve_{\mathrm{s}}$, image embedding $\ve_{\mathrm{i}}$ and text-embedding $\ve_{\mathrm{t}}$ by projecting the extracted shape tokens $\vE_{\mathrm{s}}$, image tokens $\vE_{\mathrm{i}}$ and text tokens $\vE_{\mathrm{t}}$ as three vectors with the same dimension, which is expressed as: $\ve_{\mathrm{s}} = \mathcal{F}_{\mathrm{s}}(\vE_{\mathrm{s}}), \ve_{\mathrm{i}} = \mathcal{F}_{\mathrm{i}}(\vE_{\mathrm{i}})$, and $\ve_{\mathrm{t}} = \mathcal{F}_{\mathrm{t}}(\vE_{\mathrm{t}})$, where $\mathcal{F}_{\mathrm{s}}$ is a learnable shape embedding projector, image embedding projector $\mathcal{F}_{\mathrm{i}}$ and text embedding projector $\mathcal{F}_{\mathrm{t}}$ are pre-trained and frozen during training and inference. The contrastive loss is:
@@ -1316,9 +1320,8 @@ To verify whether the model learns to generate results based on the given condit
     \label{fig:michelangelo_nearestneighbor}
 \end{figure}
 
-\paragraph{Conclusion.}
-Though Michelangelo has achieved excellent results, it still has some limitations. First, it requires ground truth 3D shapes from training, whereas 3D data is typically an order of magnitude smaller than 2D data. 
-Learning the shape representation with a 3D shape-image-text aligned space from only 2D (multi-view) images via differentiable rendering is a promising direction. 
+\paragraph{Discussion.}
+Though the Michelangelo project has shown that we can achieve excellent results in generating 3D objects, it still has some limitations. First, it requires a large number of samples of ground truth 3D shapes for training and learning the distribution, whereas such 3D shape data are much more expensive to obtain and available datasets are typically orders of magnitude smaller than those for 2D images. As we have alluded to in \Cref{sec:3D-visual-model} at the end of the previous chapter, our brain is able to learn a full 3D (or 4D) visual model by having only 2D images as such data are much natural and economic to acquire. Hence, ultimately, to truly scale up the generative 3D model, we have to develop more advanced methods that would enable us to learn the shape representation (within a 3D shape-image-text aligned space) from only (multi-view) 2D images, say via differentiable rendering. 
 Furthermore, since we represent each 3D shape as an occupancy field, it needs to convert the 3D mesh into a watertight one, which will inevitably degrade the original quality of the 3D mesh.
 
 \section{Generation-Based 3D Shape and Pose Reconstruction}\label{sec:CUPID}\label{sec:shape-and-pose}
@@ -1368,7 +1371,16 @@ As a distribution, our 3D visual memory is not only low-dimensional but also hig
 
 Hence, if the goal of learning a model of the 3D scene is to support physical interaction with an  environment and objects within,\footnote{as the objective of Embodied AI for intelligent agents or robots.} we must learn a representation of the 3D environment that shares the same characteristics as our visual memory mentioned above. 
 
+
+\subsection{Task and Objective}
+\label{sub:cupid_objective}
+
 \paragraph{Object 3D Shape and Poses from a Single 2D View}
+% VAE auto Encoder
+% 3D representation
+% add citations
+% why we need an explicit representations? What is the difference with 3D ShapeVAE in michealangelo?
+
 In this section, we takes a first step to show how this can be achieved by illustrating with a challenging and seemingly ill-posed problem: {\em inferring the complete 3D shape and and pose, including both ego-centric and object-centric pose, of an object from a single 2D image.} This problem, by its own, lies at the heart of computer vision, aiming to reverse the physics of image formation. An image $\image$ is the result of a rendering process,
 \[
 \image = \render(\object, \pose),
@@ -1385,12 +1397,13 @@ Previous approaches have typically addressed this ambiguity by simplifying the p
     Right: Re-rendering the 3D model from the estimated pose faithfully reproduces the input.}
     \label{fig:cupid_teaser}
 \end{figure}
-In this section, we feature a solution to this problem based on the work of the  \textbf{Cupid} project \url{https://cupid3d.github.io}. It approaches the above task by jointly modeling and learning the distribution over both the 3D object and the camera pose, as figure~\ref{fig:cupid_teaser} shows. The central idea is that an ideal system should be able to simultaneously generate a complete 3D model and reason about the precise camera viewpoint that has produced the given 2D observation. In the way, the generated 3D object can be \textit{pasted} into the original image. This approach recasts single-view 3D reconstruction as a conditional generation/sampling problem, aiming to achieve geometric fidelity of reconstruction through combining information from the given observation and the strong prior from the learned distribution.
+In this section, we feature a solution to this problem based on an open-sourced project named  \textbf{Cupid}:
+\\
+\centerline{\url{https://cupid3d.github.io}}\\
+It approaches the above task by jointly modeling and learning the distribution over both the 3D object and the camera pose, as figure~\ref{fig:cupid_teaser} shows. The central idea is that an ideal system should be able to simultaneously generate a complete 3D model and reason about the precise camera viewpoint that has produced the given 2D observation. In the way, the generated 3D object can be \textit{pasted} into the original image. This approach recasts single-view 3D reconstruction as a conditional generation/sampling problem, aiming to achieve geometric fidelity of reconstruction through combining information from the given observation and the strong prior from the learned distribution.
 
 
-\subsection{Task and Objective}
-\label{sub:cupid_objective}
-
+\paragraph{Task Formulation and Objective.}
 We formulate generative 3D reconstruction as the task of estimating the joint posterior distribution
 \[
 p(\object, \pose \mid \image)
@@ -1414,7 +1427,7 @@ that transports noisy samples towards the data manifold, conditioned on the inpu
 By sampling from this learned model, we can generate a latent code $\latent$ which can then be decoded into the final 3D object and camera pose.
 
 
-\subsection{Architecture}
+\subsection{Architecture and Implementation}
 \label{sub:3d_reconstruction_architecture}
 
 
@@ -1426,16 +1439,16 @@ By sampling from this learned model, we can generate a latent code $\latent$ whi
 \end{figure*}
 
 
-The \textbf{Cupid} architecture is designed as a cascaded, two-stage flow model that progressively refines the 3D reconstruction~\citep{bib}. The first stage generates a coarse geometry and camera pose, which the second stage uses to generate high-fidelity geometry and appearance. A key innovation lies in the representation of the camera pose and its integration into the generative process. The overall pipeline is depicted in \Cref{fig:cupid_architecture}.
+The \textbf{Cupid} architecture is designed as a cascaded, two-stage flow model that progressively refines the 3D reconstruction~\citep{bib}. The first stage generates a coarse shape geometry and camera pose, whereas the second stage uses to generate high-fidelity geometry and appearance. A key innovation lies in the representation of the camera pose and its integration into the generative process. The overall pipeline is depicted in \Cref{fig:cupid_architecture}.
 
 
-\paragraph{Object and Pose Representation.}
+\paragraph{Decoupled Object and Pose Representation.}
 
 To be processed by the network, the 3D object $\object$ is tensorized into a voxel-based representation
 \[
 \object \triangleq \{\point_i, \feat_i\}_{i=1}^{\numpts},
 \]
-where $\point_i \in \mathbb{R}^3$ is the coordinate of an active voxel and $\feat_i$ is a feature vector encoding local geometry and appearance, compressed from multi-view features using a 3D VAE.
+where $\point_i \in \mathbb{R}^3$ is the coordinate of an active voxel and $\feat_i$ is a feature vector encoding local geometry and appearance, compressed from multi-view features using a 3D VAE. This corresponds to the top of the blue block in the middle of Figure \ref{fig:cupid_architecture}.
 
 The camera pose $\pose$, represented by its projection matrix $\mathbf{P} = \mathbf{K}[\mathbf{R}|\mathbf{t}]$, is reparameterized in a novel way to facilitate joint generation. Instead of a compact vector, we represent the pose as a dense field of 3D-to-2D correspondences, which we term an \textit{in-cube pixel distribution}:
 \[
@@ -1445,14 +1458,19 @@ where $\pixcoord_i = (u_i, v_i) \in [0,1]^2$ are the normalized 2D pixel coordin
 \[
 \pixcoord_i = \pi(\mathbf{P}, \point_i).
 \]
-This set of correspondences can be visualized as a 3D UV cube, where the $(u,v)$ values act like view-dependent colors on a 3D grid.
+This set of correspondences can be visualized as a 3D UV cube, where the $(u,v)$ values act like view-dependent colors on a 3D grid. This is illustrated at the bottom of the blue block in the middle of Figure \ref{fig:cupid_architecture}.
 
-Given a generated set of correspondences, the global camera matrix $\mathbf{P}^{*}$ is recovered by solving a Perspective-n-Point (PnP) problem using a least-squares solver:
+Given a generated set of correspondences, the global camera matrix $\mathbf{P}^{*}$ is recovered by solving a {\em Perspective-n-Point} (PnP) problem using a least-squares solver:
 \begin{equation}
 \mathbf{P}^{*} = \argmin_{\mathbf{P}} \sum_{i=1}^{\numpts} \big\|\pi(\mathbf{P},\point_i) - \pixcoord_i\big\|^2.
 \label{eq:pnp_solve}
 \end{equation}
-This formulation elegantly transforms the joint object-pose generation problem into one of generating a 3D object with associated view-dependent ``colors'' (the UV coordinates).
+This formulation elegantly transforms the joint object-pose generation problem into one of generating an object-centered 3D shape/appearance with an associated observer/camera centered pose of the object (via the UV coordinates). This is illustrated at the bottom left corner of the the red block on the right of Figure \ref{fig:cupid_architecture}.
+
+\begin{remark}[Structured 3D Modeling]
+Notice that the voxel-type representations chosen here for shape and pose are different from the point cloud type representations adopted in the conditioned shape generation task studied in the preceding \Cref{sec:Michelangelo}. In that task, the goal is to generate an object that only needs to be strongly correlated to the given image (or text). It does not require an accurate alignment between the generated object and the given image. For the task considered here, however, we want to ``reconstruct'' an object whose shape, appearance, and pose faithfully agrees with the given image. Therefore, it is necessary for the internal representation to explicitly model the object's canonical shape and relative pose simultaneously. Note that such a ``decoupling'' of an object (canonical) shape/appearance and a pose from which it being observed closely imitates the aforementioned roles of the IT cortex and Hippocampus in our brain, respectively. As we will see later, such a decoupled representation will enable us to obtain a structured and consistent 3D model of a scene that may contain multiple objects from multiple views. We contend that a so-structured 3D model is necessary for us to conduct view-centric or object-centric reasoning,\footnote{For example, answering questions such as ``which object is in front of, behind, to the left or right of, or on top of which object.} generation, and interaction with the scene.    
+\end{remark}
+
 
 \paragraph{Stage 1: Occupancy and Pose Generation.}
 
@@ -1462,6 +1480,8 @@ The first stage, driven by a flow model we denote $\sflow$, takes the input imag
 \item A \textbf{UV cube} $\mathbf{G}_{uv} \in [0,1]^{r \times r \times r \times 2}$, which stores the normalized pixel coordinates $(u,v)$ for each voxel, effectively encoding the camera pose.
 \end{itemize}
 From these two cubes, we extract the set of active voxels and their corresponding pixel coordinates $\{(\point_i, \pixcoord_i)\}_{i=1}^{\numpts}$ and solve for the camera pose $\mathbf{P}^{*}$ using \Cref{eq:pnp_solve}.
+
+\yima{How these voxel-type 3D data are tokenized. Discuss relationship or difference from the Perceiver for tokenizing point clouds in the Michelangelo project. Also, describe basic deep architectures used for the two flow-matching based generative models learned. }
 
 \paragraph{Stage 2: Pose-Aligned Geometry and Appearance Generation.}
 
@@ -1474,6 +1494,9 @@ Using the camera pose $\mathbf{P}^{*}$ recovered from the first stage, we projec
 \end{enumerate}
 These pixel-aligned features, $\feat_i^\high$ and $\feat_i^\low$, are then concatenated with the current noisy voxel feature $\feat_i^{t}$ at timestep $t$ and fused into the flow transformer via a linear layer. This mechanism ensures that the generative process is strongly guided by the visual evidence in the input image, preventing the color drift and shape inconsistencies common in pure 3D generative models.
 
+\begin{remark}[Decoupled Generative Processes]
+Notice that the above two-stage framework decouples the distribution of 3D objects into several related components, shape, pose, and appearance and learn them separately. Although this means we have to learn two generative denoising models together, the resulting learned representations are much better structured and enable much more precise and flexible spatial reasoning and generation.
+\end{remark}
 
 \subsection{Evaluation}
 \label{sub:cupid_evaluation}
@@ -1540,8 +1563,8 @@ We compare CUPID against leading methods in three families: (1) point-map regres
 \label{fig:cupid_scene_reconstruction}
 \end{figure*}
 
-\subsection{Application: Component-Aligned Scene Reconstruction}\label{sub:cupid_application}
-
+\subsection{Application: Compositional Scene Reconstruction}\label{sub:cupid_application}
+% refine figure
 A significant advantage of explicitly modeling object-centric pose is the natural extension to compositional scene reconstruction. As illustrated in \Cref{fig:cupid_scene_reconstruction}, the \textbf{Cupid} framework can be applied to reconstruct complex scenes with multiple objects. The process involves:
 \begin{enumerate}
 \item \textbf{Object Segmentation:} A foundation model (e.g., SAM) is used to segment individual objects in the input scene.
@@ -1553,7 +1576,7 @@ Applying these transformations places each independently reconstructed object in
 
 
 
-\subsection{Application: Multi-view Reconstruction}\label{sub:cupid_application_mv}
+\subsection{Application: Multi-view Consistent Reconstruction}\label{sub:cupid_application_mv}
 
 
 \yima{Bingbing, try to work with Zibo and make sure notation, terminology, experiments etc are consistent with or complementary to the previous section, as much as possible. }
@@ -1639,9 +1662,9 @@ Applying these transformations places each independently reconstructed object in
 
 
 \section{Natural Language Modeling}\label{sec:clm_text}
-So far, we have shown how to learn deep structured representations for the distributions of data associated with visual perception and body motions. To a large extent, the so learned structured representations can be viewed as the visual and motor memory stored in the brain, or often referred to as a ``model of the world'', or simply a ``world model.'' Notice that both human and animal have the ability to learn and develop such a model for their world and body, which records what is predictable about the world and motions skills crucial for their survival within.
+So far, we have shown how to learn deep structured representations for the distributions of data associated with visual perception and body motions. To a large extent, the so learned structured representations can be viewed as memories stored in the visual cortex and motor cortex of the brain. These memories together can be loosely referred to as a ``model of the world'', or simply a ``world model'' -- enable us to both perceive the world and take actions. Notice that both human and animal have the ability to learn and develop such memories for the world and their body, which record what can be predicted from the perceived as well as motor skills crucial for their survival within the environment.
 
-On top of the model of the physical world and body, human has developed spoken and written languages so that we are able to communicate knowledge learned about the world to others. To a large extent, languages record a small, but important, fraction of our world models that are worth sharing among ourselves. Hence, natural languages, as a very special type of data, must have very special structures that encode very rich information. If machines were able to learn the structures of natural languages, they may be able to communicate better with humans.   
+On top of such a world model for the physical environment and body motion, human has developed (spoken and written) languages so that we are able to communicate knowledge learned about the world to others -- the Broca's area and Wernicke's area in our brain are known for speech processing and language comprehension, respectively. To a large extent, languages record a small, but important, fraction of our world models that are worth sharing among ourselves. Hence, natural languages, as a very special type of data, must have very special structures that encode very rich information. If machines were able to learn the structures of natural languages, they may be able to communicate better with humans.   
 
 Therefore, in this section, we show how to apply methods introduced in this book to the task of \textit{language modeling}. Or more specifically, how to train large language models (LLMs) to learn the distribution of natural languages and then generate them. The task and its setup is very much the same as that used to train GPT-2 and many other language models. 
 
