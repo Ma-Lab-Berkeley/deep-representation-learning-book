@@ -25,10 +25,10 @@ which incorporates additional measurements like hand detections and ground conta
 \label{sub:egoallo_body_models}
 % ==============================================================================
 
-Before formulating the estimation problem, we need a mathematical representation for human bodies. The skeleton is a kinematic tree: rigid bones connected by joints, with the pelvis as root and chains extending to the head, hands, and feet. Each joint has rotational degrees of freedom: the shoulder rotates in three axes, the elbow primarily in one.
+Before formulating the estimation problem, we need a mathematical representation for human bodies. The skeleton of our body is a kinematic tree: rigid bones connected by joints, with the pelvis as root and chains extending to the head, hands, and feet. Each joint has rotational degrees of freedom: the shoulder rotates in three axes, the elbow primarily in one. For a more formal and detailed introduction to kinematic representation of linked rigid bodies like the human body, interested readers may refer to the classic textbook \cite{MurrayR1994}.
 
 \paragraph{The SMPL body model.}
-SMPL (Skinned Multi-Person Linear model) \citep{loper2015smpl} provides a compact, differentiable representation of the human body. It separates body configuration into two components:
+SMPL (Skinned Multi-Person Linear model) \citep{loper2015smpl} provides a compact, differentiable representation of the human body, for both its (kinematic) pose and shape. It separates a body configuration into two components:
 \begin{itemize}
 \item \textbf{Pose parameters} $\theta$: Joint rotations specifying the body's articulation. SMPL uses 23 joints (plus the root), each parameterized by a 3D rotation. Together, these determine whether a person is standing, sitting, reaching, walking, etc.
 \item \textbf{Shape parameters} $\beta$: A low-dimensional vector, typically 10 coefficients, controlling body proportions such as height, weight, limb lengths, and torso width. These are derived from principal component analysis of a large corpus of 3D body scans.
@@ -53,7 +53,7 @@ Why use SMPL-H rather than, say, directly regressing joint positions or mesh ver
 \paragraph{Inputs.}
 The inputs consist of two streams from a head-mounted device:
 \begin{itemize}
-\item \textbf{Head poses} $\mathbf{h}_{1:T} \in SE(3)^T$: Position and orientation of the device in world coordinates at each timestep, from visual-inertial SLAM. Here $SE(3)$ denotes the group of rigid transformations in 3D, comprising rotations and translations. These poses have metric scale, meaning we know actual distances in meters rather than just relative geometry, and are gravity-aligned so we know which direction is up.
+\item \textbf{Head poses} $\mathbf{h}_{1:T} \in SE(3)^T$: Position and orientation of the device in world coordinates at each timestep, from visual-inertial SLAM. Here $SE(3)$ denotes the group of rigid transformations in 3D, comprising rotations and translations.\footnote{Interested readers may refer to \cite{MaY2003} for a formal introduction to rigid body motion and its representation and properties.} These poses have metric scale, meaning we know actual distances in meters rather than just relative geometry, and are gravity-aligned so we know which direction is up.
 \item \textbf{Egocentric images} $I_{1:T}$: Forward-facing video. The wearer's body is mostly not visible, but hands frequently appear when reaching or manipulating objects.
 \end{itemize}
 
@@ -75,13 +75,13 @@ Here $\theta^t$ are body joint rotations, $\phi^t$ hand rotations, $\beta$ shape
 EgoAllo estimates height in addition to pose, which is essential for grounding. Without it, the body floats at an arbitrary vertical position; with it, feet contact the floor and the head aligns with the camera.
 
 \paragraph{Posterior formulation.}
-Following the Bayesian framework from Chapter~\ref{ch:conditional-inference}, estimation is formulated as sampling from a posterior. Let $\mathbf{y}$ denote all observations and $\vec{c} = g(\mathbf{h}_{1:T})$ a processed representation of head poses (Section~\ref{sub:egoallo_representation}). The posterior factorizes as:
+Following the Bayesian framework from Chapter~\ref{ch:conditional-inference}, estimation is formulated as sampling from a posterior. Let $\mathbf{y}$ denote all observations and $\vec{c} = g(\mathbf{h}_{1:T})$ be a processed representation of head poses (to be explained soon in Section~\ref{sub:egoallo_representation}). The posterior factorizes as:\footnote{For this factorization to be valid, we essentially assume that given $\vec{x}_0$, $\mathbf{y}^{\text{hand}}, \mathbf{y}^{\text{phys}}$ is conditionally independent of the head pose $\vec{c}$.}
 \begin{equation}
 p(\vec{x}_0 \mid \mathbf{y}) \;\propto\; p_\theta(\vec{x}_0 \mid \vec{c}) \cdot p(\mathbf{y}^{\text{hand}}, \mathbf{y}^{\text{phys}} \mid \vec{x}_0),
 \end{equation}
 where:
 \begin{itemize}
-\item $p_\theta(\vec{x}_0 \mid \vec{c})$ is a learned conditional prior, specifically a diffusion model that generates plausible body motion given head motion.
+\item $p_\theta(\vec{x}_0 \mid \vec{c})$ is a learned conditional prior, specifically a diffusion-denoising model that generates plausible body motion given head motion.
 \item $p(\mathbf{y}^{\text{hand}}, \mathbf{y}^{\text{phys}} \mid \vec{x}_0)$ is the likelihood of hand observations and physical constraints such as ground contact and no foot skating, given the body motion.
 \end{itemize}
 
