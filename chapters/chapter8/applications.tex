@@ -940,7 +940,13 @@ Once we have trained the denoiser, we can use it to generate new samples from th
 
 
 % --- draft by Daniel Yeh ---
-In the previous sections, we established the fundamental machinery for generative modeling: a Representation Engine (RE) to compress data into latents $z$, and a Flow Matching or Diffusion backbone to model the distribution $p(z)$. In this section, we shift our focus from \textit{generation} to \textit{control}. We assume the underlying distribution learning capability is already established (as detailed in Chapter 7); our specific task here is to strictly steer the sampling process using a user-provided signal $c$.
+In the previous sections, we established the fundamental machinery for generative modeling: a Representation Engine (RE), usually an autoencoder, to encode the data $\x$ into a (usually compressed and more structured) latent $\z$:
+\begin{equation}
+\x\xrightarrow{\hspace{1mm} \mathcal{E} = f \hspace{1mm}} \z
+\xrightarrow{\hspace{1mm} \mathcal{D} = g \hspace{1mm}} \hat{\x}.
+\end{equation}
+
+Then one learns a diffusion/denoising process to model and access the distribution of $\z$: $p(\z)$. In this section, we shift our focus from \textit{generation} to \textit{control}. We assume the representation and distribution of the data are already learned (by methods detailed in Chapter \ref{ch:autoencoding}); our specific task here is to study how to steer the sampling process using a user-provided ``control'' signal $\vc$. That is we want to sample from the conditional distribution $p(\z\mid \vc)$. In practice, $\vc$ could represent partial attributes of the image that one wants to complete or a caption that describes the desired content of the image to be generated.
 
 
 
@@ -950,23 +956,29 @@ In the previous sections, we established the fundamental machinery for generativ
 
 
 %\paragraph{Task Definition.}
-Formally, the goal of conditioned generation is to learn a mapping that transforms a source distribution (typically Gaussian noise) into a target conditional distribution $p(x|c)$. As illustrated in Figure \ref{fig:task_formulation}, the system is defined by its inputs and outputs:
+Formally, the goal of conditioned generation is to learn a mapping that transforms a source distribution (typically Gaussian noise) into a target conditional distribution $p(\z|\vc)$. The so generated feature $\z$ is subsequently decoded to a corresponding image $\x$. As illustrated in Figure \ref{fig:task_formulation}, the system is defined by its inputs and outputs:
 \begin{enumerate}
-    \item \textbf{Stochastic Input ($z$):} A latent variable sampled from a standard normal prior $z \sim \mathcal{N}(0, I)$. This provides the "seed" for diversity, ensuring that we can generate multiple variations of the same concept.
-    \item \textbf{Control Signal ($c$):} A structured input defining the desired semantic or spatial content. This can be a text caption (e.g., "a red car"), a semantic mask (segmentation), or a low-resolution image (for super-resolution tasks).
-    \item \textbf{Output ($\hat{x}$):} A high-fidelity data sample $\hat{x} = F_\theta(z, c)$ that aligns with the user's intent $c$ while remaining on the natural image manifold defined by the training data.
+    \item \textbf{Stochastic Input ($\z$):} A latent variable sampled from a standard normal prior $\z \sim \mathcal{N}(\bm{0}, \I)$. This provides the "seed" for diversity, ensuring that we can generate multiple variations of the same concept.
+    \item \textbf{Control Signal ($
+    \vc$):} A structured input defining the desired semantic or spatial content. This can be a text caption (e.g., "a red car"), a semantic mask (segmentation), or a low-resolution image (for super-resolution tasks).
+    \item \textbf{Output ($\hat{\x}$):} A high-fidelity data sample $\hat{\x} = F_\theta(\z, \vc)$ that aligns with the user's intent $\vc$ while remaining on the natural image manifold learned from the training data.
 \end{enumerate}
+Hence the overall controlled generation process can be described as:
+\begin{equation}
+F_(\theta): \z \sim \mathcal{N}(\bm{0}, \I), \vc \longrightarrow \hat{\z} \sim p(\z\mid \vc) \longrightarrow \hat{\x} \sim p(\x \mid \vc).  
+\end{equation}
 
 \paragraph{The Modality Gap.}
-While the task is conceptually straightforward—mapping $(z, c) \to x$—which requires bridging disjoint topological spaces.
-In text-to-image generation, the visual data $x$ lies in a continuous, high-dimensional pixel space $\mathbb{R}^{H \times W \times 3}$, whereas the condition $c$ typically resides in a discrete symbolic space (language). There is no natural Euclidean metric to measure the distance $\| x - c \|$ directly.
-Therefore, a critical component of any conditional system is the \textbf{Condition Encoder} $\tau_\phi(c)$. As discussed in Chapter 7, we rely on pretrained contrastive encoders (like CLIP) or large language models (like T5) to map discrete tokens into a continuous semantic embedding space $\mathbb{R}^{d}$. The generative backbone must then learn to align the visual flow vector $v_t$ with these semantic embeddings via a specific fusion mechanism, such as Cross-Attention.
+While the task is conceptually straightforward—mapping $(\z, \cc) \to \x$—which requires bridging disjoint topological spaces in the text-to-image generation case: the visual data $\x$ lies in a continuous, high-dimensional pixel space $\mathbb{R}^{H \times W \times 3}$, whereas the condition $\vc$ typically resides in a discrete symbolic space (language). There is no natural Euclidean metric to measure the distance $\| \x - \vc \|$ directly.
+Therefore, a critical component of any conditional system is a \textbf{Condition Encoder} $\tau_\phi(\vc)$ that tends to align an image $\x$ with its caption $\vc$, usually through a joint embedding of $\x$ and $\vc$ into a common feature space in which the mutual information, or its surrogate, is easier to compute and maximize:
+\begin{equation}
+    \max I(f_1(\x), f_2(\vc)).
+\end{equation}
+As discussed in Chapter 7, we rely on pretrained contrastive encoders (like CLIP) or large language models (like T5) to map discrete tokens into a continuous semantic embedding space $\mathbb{R}^{d}$. The generative backbone must then learn to align the visual flow vector path $\vv_t$ with these semantic embeddings via a specific fusion mechanism, such as a Cross-Attention.
 
 \paragraph{The One-to-Many Inverse Problem.}
-Conditioning is inherently ill-posed because the control signal is usually \textit{underspecified}. A text prompt $c=$ "a dog" provides semantic category information but omits the dog's pose, lighting, background, and fur pattern. Consequently, the inverse mapping $c \to x$ is not a single point, but a complex multimodal distribution.
-If we were to train a simple deterministic regression model minimizing $\| x - f(c) \|^2$, the model would converge to the conditional mean—an average of all possible dogs—resulting in a blurry, unrealistic output. To generate high-fidelity results, we must utilize the Flow Matching framework (Eq. 8.7) to model the full conditional distribution $p(z|c)$, allowing us to sample diverse, sharp instances that satisfy the condition.
-
-
+Conditioning is inherently ill-posed because the control signal is usually \textit{under-determined}. A text prompt $\vc=$ "a dog" provides semantic category information but omits the dog's pose, lighting, background, and fur pattern. Consequently, the inverse mapping $\vc \to \x$ is not a single point, but potentially a complex multi-modal distribution.
+If we were to train a simple deterministic regression model minimizing $\| \x - F(\vc) \|^2$, the model would converge to the conditional mean—an average of all possible dogs—resulting in a blurry, unrealistic output. To generate high-fidelity results, we must utilize the Flow Matching framework (Eq. 8.7) to model the full conditional distribution $p(\z|\vc)$, allowing us to sample diverse, sharp instances that satisfy the condition.
 
 
 
