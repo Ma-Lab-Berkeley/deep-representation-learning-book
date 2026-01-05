@@ -940,40 +940,43 @@ Once we have trained the denoiser, we can use it to generate new samples from th
 
 
 % --- draft by Daniel Yeh ---
-While Section 8.7 demonstrated that we can effectively sample from the learned representation distribution $p(z)$ to generate high-quality images via the RAE decoder, this process remains unguided. In practical applications, we rarely desire a random sample from the entire distribution; rather, we seek to generate samples that satisfy specific criteria or semantic descriptions.
-
-In this section, we extend the flow matching framework to \textit{conditioned generation}. Formally, we seek to model the conditional distribution $p(z|c)$, where $c$ represents a control signal such as a class label, a text description, or another image. By conditioning the vector field $\bar{z}_\theta(t, z_t, c)$, we can steer the generation trajectory within the latent space $\mathcal{Z}$ to align with the user's intent.
+In the previous sections, we established the fundamental machinery for generative modeling: a Representation Engine (RE) to compress data into latents $z$, and a Flow Matching or Diffusion backbone to model the distribution $p(z)$. In this section, we shift our focus from \textit{generation} to \textit{control}. We assume the underlying distribution learning capability is already established (as detailed in Chapter 7); our specific task here is to strictly steer the sampling process using a user-provided signal $c$.
 
 
 
-\subsection{Problem Formulation and Challenges}
+\subsection{Problem Formulation}
 \label{subsec:cond_problem}
 
-The goal of conditioned generation is to learn the conditional distribution $p(x|c)$, where $x \in \mathcal{X} \subset \mathbb{R}^{H \times W \times C}$ represents the high-dimensional data (image or video) and $c \in \mathcal{C}$ represents a control signal (e.g., text, layout, or class label). While conceptually similar to the unconditional case, the introduction of $c$ transforms the generative task into an ill-posed inverse problem characterized by two fundamental mathematical challenges: the \textit{modality gap} and \textit{one-to-many ambiguity}.
+
+
+%\paragraph{Task Definition.}
+Formally, the goal of conditioned generation is to learn a mapping that transforms a source distribution (typically Gaussian noise) into a target conditional distribution $p(x|c)$. As illustrated in Figure \ref{fig:task_formulation}, the system is defined by its inputs and outputs:
+\begin{enumerate}
+    \item \textbf{Stochastic Input ($z$):} A latent variable sampled from a standard normal prior $z \sim \mathcal{N}(0, I)$. This provides the "seed" for diversity, ensuring that we can generate multiple variations of the same concept.
+    \item \textbf{Control Signal ($c$):} A structured input defining the desired semantic or spatial content. This can be a text caption (e.g., "a red car"), a semantic mask (segmentation), or a low-resolution image (for super-resolution tasks).
+    \item \textbf{Output ($\hat{x}$):} A high-fidelity data sample $\hat{x} = F_\theta(z, c)$ that aligns with the user's intent $c$ while remaining on the natural image manifold defined by the training data.
+\end{enumerate}
 
 \paragraph{The Modality Gap.}
-The data $x$ and the condition $c$ typically reside in disjoint topological spaces with distinct metrics. For instance, in text-to-image generation, the visual data lies in a continuous pixel space $\mathcal{X}$, while the text condition $c$ is a sequence of discrete tokens from a vocabulary $\mathcal{V}$. There exists no natural distance metric $d(x, c)$ to directly align these modalities.
-To resolve this, as discussed in Chapter 7, we rely on a domain-specific encoder $\tau_\phi: \mathcal{C} \to \mathbb{R}^{d_\tau}$ (e.g., a pretrained CLIP or T5 encoder) to map the condition into a semantic embedding space. The generative model must then learn a parametric mapping $\mathcal{F}_\theta$ that aligns the latent visual features $z = f(x)$ with the condition embeddings:
-\begin{equation}
-    \min_\theta \mathbb{E}_{(x, c) \sim \mathcal{D}} \left[ \mathcal{L}_{\text{align}}( \mathcal{F}_\theta(z), \tau_\phi(c) ) \right].
-\end{equation}
-In diffusion and flow matching models, this alignment is implicitly handled via the cross-attention mechanisms in the denoising network, which we detail in Section \ref{subsec:basic_realization}.
+While the task is conceptually straightforward—mapping $(z, c) \to x$—which requires bridging disjoint topological spaces.
+In text-to-image generation, the visual data $x$ lies in a continuous, high-dimensional pixel space $\mathbb{R}^{H \times W \times 3}$, whereas the condition $c$ typically resides in a discrete symbolic space (language). There is no natural Euclidean metric to measure the distance $\| x - c \|$ directly.
+Therefore, a critical component of any conditional system is the \textbf{Condition Encoder} $\tau_\phi(c)$. As discussed in Chapter 7, we rely on pretrained contrastive encoders (like CLIP) or large language models (like T5) to map discrete tokens into a continuous semantic embedding space $\mathbb{R}^{d}$. The generative backbone must then learn to align the visual flow vector $v_t$ with these semantic embeddings via a specific fusion mechanism, such as Cross-Attention.
 
-\paragraph{The One-to-Many Ambiguity.}
-Conditioning is inherently ill-posed because the mapping from condition to data is non-injective. Consider the "captioning" function $\mathcal{H}: \mathcal{X} \to \mathcal{C}$ that describes an image. This function is lossy; a prompt like "a dog" ($c$) discards the animal's pose, breed, and background. Consequently, the inverse mapping $\mathcal{H}^{-1}(c)$ is not a single point, but a complex multimodal distribution over the data manifold.
-Mathematically, the conditional entropy $H(x|c)$ remains high. A simple deterministic regression model trained to minimize $\| x - G(c) \|^2$ would converge to the conditional mean $\mathbb{E}[x|c]$, resulting in blurry, averaged outputs. To generate high-fidelity samples, we must strictly model the full distribution $p(z|c)$ rather than a point estimate. This necessitates the stochastic flow matching objective defined in Section 8.7, modified here to condition the vector field on $c$:
-\begin{equation}
-    \mathcal{L}_{\text{CFM}}(\theta) = \mathbb{E}_{t, x_1 \sim p(x|c), x_0 \sim p_0} \left[ \left\| v_\theta(x_t, t, c) - (x_1 - x_0) \right\|^2 \right].
-\end{equation}
-This ensures the model can sample diverse modes (e.g., different dog breeds) consistent with the conditioning constraint.
+\paragraph{The One-to-Many Inverse Problem.}
+Conditioning is inherently ill-posed because the control signal is usually \textit{underspecified}. A text prompt $c=$ "a dog" provides semantic category information but omits the dog's pose, lighting, background, and fur pattern. Consequently, the inverse mapping $c \to x$ is not a single point, but a complex multimodal distribution.
+If we were to train a simple deterministic regression model minimizing $\| x - f(c) \|^2$, the model would converge to the conditional mean—an average of all possible dogs—resulting in a blurry, unrealistic output. To generate high-fidelity results, we must utilize the Flow Matching framework (Eq. 8.7) to model the full conditional distribution $p(z|c)$, allowing us to sample diverse, sharp instances that satisfy the condition.
+
+
+
+
 
 \subsection{The Basic Realization: Text-to-Image Generation}
 \label{subsec:basic_realization}
 
-To realize the conditional framework defined above, we require a concrete architecture that can process image-text pairs and synthesize high-fidelity pixels. The field has converged on a standard "Text-to-Image Pipeline" consisting of three decoupled components: a pretrained \textit{text encoder} to handle the condition $c$, a \textit{generative backbone} to model the vector field, and a \textit{VAE decoder} to map latents back to pixels. We first detail the foundational implementation—Stable Diffusion—before discussing its modern evolutions.
+To realize the conditional framework defined in Section \ref{subsec:cond_problem}, we require a concrete architecture capable of bridging the modality gap between discrete text tokens and continuous pixel arrays. The field has converged on a standard "Text-to-Image Pipeline" consisting of three decoupled components: a pretrained \textit{text encoder} to handle the condition $c$, a \textit{generative backbone} to model the vector field, and a \textit{VAE decoder} to map latents back to pixels. We first detail the foundational implementation—Stable Diffusion—as the baseline method.
 
 \paragraph{The Canonical Architecture (Stable Diffusion).}
-Proposed by Rombach et al. \cite{rombach2022high}, the Latent Diffusion Model (LDM), widely known as Stable Diffusion, solves the computational intractability of pixel-space generation by operating in a compressed latent space. The pipeline processes a sample $(x, c)$ as follows:
+Proposed by Rombach et al. \cite{rombach2022high}, the Latent Diffusion Model (LDM), widely known as Stable Diffusion, solves the computational intractability of high-resolution synthesis by operating in a compressed latent space. The pipeline processes a sample $(x, c)$ as follows:
 \begin{enumerate}
     \item \textbf{Text Encoding:} The caption $c$ is processed by a frozen CLIP text encoder $\tau_\theta$ (introduced in Chapter 7), producing a sequence of semantically rich token embeddings $\tau_\theta(c) \in \mathbb{R}^{M \times d_\tau}$.
     \item \textbf{Latent Compression:} The image $x$ is encoded by a VAE encoder into a spatial latent map $z_0 = \mathcal{E}(x) \in \mathbb{R}^{h \times w \times d}$, reducing the spatial dimension by a factor of 8 (e.g., $512 \to 64$).
@@ -981,17 +984,34 @@ Proposed by Rombach et al. \cite{rombach2022high}, the Latent Diffusion Model (L
 \end{enumerate}
 
 
-\paragraph{Training Methodology and Data.}
-Training a robust text-to-image model such as Stable Diffusion follows a distinct **two-stage curriculum**, explicitly designed to separate "perceptual compression" from "semantic generation" \cite{rombach2022high}.
+\paragraph{Training Methodology and Data Implementation.}
+Implementing a robust text-to-image model requires a strict two-stage curriculum to separate "perceptual compression" from "semantic generation" \cite{rombach2022high}.
 
+\textit{Stage 1: Perceptual Compression.}
+First, we train the autoencoder (VAE) to learn a low-dimensional manifold $z = \mathcal{E}(x)$. To ensure the latents retain high-frequency details (e.g., fur texture) that are often lost in standard MSE training, we employ a compound objective of perceptual loss and patch-based adversarial loss (see Section 3.1 of \cite{rombach2022high}). This stage acts as a fixed "sensor" that compresses the data.
 
-First, an autoencoder is trained to learn a low-dimensional latent space $z = \mathcal{E}(x)$. To avoid the blurring characteristic of standard pixel-wise losses, the authors employ a combination of a \textbf{perceptual loss} and a \textbf{patch-based adversarial objective} (see Section 3.1 of \cite{rombach2022high}). This forces the reconstructions to respect high-frequency texture and local realism. This model is trained until convergence and then frozen, effectively acting as a fixed "sensor" that compresses the data manifold.
-
-In the second phase, the generative backbone (U-Net) is trained on the \textit{fixed} latents produced by Stage 1. Using a dataset of image-text pairs (e.g., LAION-5B), the image is encoded to $z_0$, and the U-Net minimizes the standard reweighted diffusion objective:
+\textit{Stage 2: Generative Modeling on Latents.}
+In the second phase, we train the U-Net on the \textit{fixed} latents. A typical training instance from a dataset like LAION-5B consists of:
+\begin{itemize}
+    \item \textbf{Input Image $x$:} A tensor $\mathbb{R}^{512 \times 512 \times 3}$ (e.g., a photo of a cat).
+    \item \textbf{Text Condition $c$:} A raw string (e.g., "A tabby cat on grass").
+\end{itemize}
+The image is encoded to $z_0$, and the text is embedded to $\tau_\theta(c)$. The U-Net then minimizes the standard reweighted objective:
 \begin{equation}
     \mathcal{L}_{\text{LDM}} = \mathbb{E}_{z_0, c, \epsilon \sim \mathcal{N}(0,1), t} \left[ \| \epsilon - \epsilon_\theta(z_t, t, \tau_\theta(c)) \|^2 \right].
 \end{equation}
-Crucially, because the complex pixel-level details are handled by the frozen Stage 1 model, the U-Net in Stage 2 can focus its entire capacity on semantic alignment and composition.
+This separation allows the generative model to focus entirely on semantic alignment (learning that the word "cat" corresponds to the visual pattern of a cat) without spending capacity on pixel-level reconstruction.
+
+
+\paragraph{Bridging the Modality Gap: Cross-Attention.}
+The core mechanism that resolves the "Modality Gap" (Section \ref{subsec:cond_problem}) is \textit{Cross-Attention}. It allows the spatial visual features to dynamically query the semantic text features.
+Mathematically, let $\phi_i(z_t)$ denote the intermediate visual features of the U-Net (acting as \textbf{Query} $Q$), and let the text embeddings $\tau_\theta(c)$ act as \textbf{Key} ($K$) and \textbf{Value} ($V$):
+\begin{equation}
+    Q = W_Q^{(i)} \cdot \phi_i(z_t), \quad K = W_K^{(i)} \cdot \tau_\theta(c), \quad V = W_V^{(i)} \cdot \tau_\theta(c).
+\end{equation}
+\textbf{Why this assignment?} We assign visual features to $Q$ because each pixel is effectively "asking": \textit{"Which word in the prompt describes me?"}. The attention map $\text{Softmax}(QK^T / \sqrt{d})$ computes this alignment score. If a latent patch corresponds to a "cat's eye," it will have high similarity with the text token "eye," allowing the model to inject the semantic information ($V$) into that specific spatial location.
+
+
 
 % \subsection{Formulation of Conditional Flow Matching}
 % \label{subsec:cond_formulation}
