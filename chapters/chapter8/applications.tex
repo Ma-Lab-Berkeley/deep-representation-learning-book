@@ -1131,7 +1131,7 @@ we present a computational framework, objectives, and associated network archite
 \subsection{3D Shape Representations and Datasets}
 
 \paragraph{3D Shape Representations}
-
+\label{sec:3D representation}
 Unlike 3D images, 3D shapes and data have not been formally introduced before in this book. Therefore, this subsection provides a brief introduction to 3D data. 
 Readers wishing to learn more details are advised to consult the sources via the cited references.
 
@@ -1506,16 +1506,28 @@ that transports noisy samples towards the data manifold, conditioned on the inpu
 By sampling from this learned model, we can generate a latent code $\latent$ which can then be decoded into the final 3D object and camera pose.
 
 
+\subsection{3D Shape Representation and Tokenizations}
+% {\color{red} maybe we should move this to michealangelo}
+As discussed in Section~\ref{sec:3D representation}, 3D data manifests in various forms, including point clouds, voxels, polygon meshes, and implicit neural representations. Fundamentally, point clouds, voxels, and meshes serve as discrete approximations of continuous 3D manifolds. In computer graphics and engineering, polygon meshes are particularly ubiquitous because they explicitly preserve surface topology, offering an efficient balance between visual fidelity and geometric structure.
+
+However, directly applying modern deep learning architectures—specifically Transformers—to these raw representations presents significant challenges. Unlike 2D images, which possess a regular grid structure easily split into patches, 3D data is often sparse, unstructured, and irregular. To leverage the power of sequence modeling and self-attention mechanisms in 3D, we must bridge the gap between raw geometric data and the discrete, ordered sequences required by Transformers. This process is known as \textit{3D Tokenization}.
+
+\begin{itemize}
+    \item \textbf{Voxel Tokenization:} Similar to 2D image patches, voxel grids can be partitioned into 3D sub-grids or ``cublets." While straightforward, this method often suffers from the cubic complexity of voxel resolution (the $O(N^3)$ memory bottleneck).
+    
+    \item \textbf{Point Tokenization:} Point clouds are typically tokenized using grouping techniques such as Farthest Point Sampling (FPS) followed by k-Nearest Neighbors (k-NN). Each cluster of points is treated as a token, often processed by a permutation-invariant networkwork (such as PointNet) to extract a feature vector.
+    
+    \item \textbf{Mesh Tokenization:} Tokenizing meshes presents unique challenges due to their irregular connectivity and graph-like structure. Common approaches involve traversing the surface to serialize faces or vertices into sequences, or decomposing the mesh into discrete primitives. These methods are particularly prevalent in autoregressive mesh generation, where the objective is to generate not just the 3D geometry, but also a valid, clean topology.
+    
+    \item \textbf{Learned Latent Set:} This approach encodes a 3D shape into a set of continuous latent vectors. It utilizes a attention mechanism to aggregate input geometry (such as point clouds) into a fixed number of permutation-invariant latent slots. These continuous vectors condition an Implicit Neural Representation (INR) decoder, creating a compact, high-fidelity latent space that is highly effective for training generative Latent Diffusion Models.
+\end{itemize}
+
+A central challenge in 3D shape generation is finding a tokenization that is both compact and expressive, capable of high-fidelity reconstruction. While \textbf{Michelangelo} utilizes a learned latent vector representation—encoding shapes into a sequence of 1024 tokens—these vectors lack explicit 3D spatial coordinates. In this project, we seek a latent representation that retains explicit 3D positional information, allowing us to align shape tokens directly with image pixels. By establishing this spatial correspondence, we can leverage local pixel information to enhance generation details. Consequently, \textbf{Cupid} adopts a 3D voxel-based latent representation. {\color{blue} TODO: add a comparison figure for 1d latent and 3d latent.}
+
+
 \subsection{Architecture and Implementation}
 \label{sub:3d_reconstruction_architecture}
 
-
-\begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{chapters/chapter8/figs/cupid_method.pdf}
-\caption{\textbf{The Cupid Two-Stage Generative Reconstruction Pipeline.} Given an input image, the first stage ($\sflow$) generates a coarse occupancy cube and a UV cube, which encodes 3D-to-2D correspondences. A PnP solver recovers the camera pose $\mathbf{P}^{*}$ from these correspondences. The second stage ($\lflow$) is conditioned on this recovered pose. It injects pixel-aligned features (sampled from DINOv2 and low-level feature maps) into the generative process to synthesize high-fidelity geometry and appearance for the final 3D object.}
-\label{fig:cupid_architecture}
-\end{figure*}
 
 
 The \textbf{Cupid} architecture is designed as a cascaded, two-stage flow model that progressively refines the 3D reconstruction~\citep{bib}. The first stage generates a coarse shape geometry and camera pose, whereas the second stage uses to generate high-fidelity geometry and appearance. A key innovation lies in the representation of the camera pose and its integration into the generative process. The overall pipeline is depicted in \Cref{fig:cupid_architecture}.
@@ -1549,6 +1561,14 @@ This formulation elegantly transforms the joint object-pose generation problem i
 \begin{remark}[Structured 3D Modeling]
 Notice that the voxel-type representations chosen here for shape and pose are different from the point cloud type representations adopted in the conditioned shape generation task studied in the preceding \Cref{sec:Michelangelo}. In that task, the goal is to generate an object that only needs to be strongly correlated to the given image (or text). It does not require an accurate pose alignment between the object (in its canonical pose) and the given image (viewpoint). For the task considered here, however, we want to ``reconstruct'' an object whose shape, appearance, and pose faithfully agrees with the given image. Therefore, it is necessary for the internal representation to explicitly model the object's canonical shape and relative pose simultaneously. Note that such a ``decoupling'' of an object (canonical) shape/appearance and a pose from which it being observed closely imitates the aforementioned roles of the IT cortex and Hippocampus in our brain, respectively. As we will see later, such a decoupled representation will enable us to obtain a structured and consistent 3D model of a scene that may contain multiple objects from multiple views. We contend that a so-structured 3D model is necessary for us to conduct view-centric or object-centric reasoning,\footnote{For example, answering questions such as ``which object is in front of, behind, to the left or right of, or on top of which object.} generation, and interaction with the scene.    
 \end{remark}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{chapters/chapter8/figs/cupid_method.pdf}
+\caption{\textbf{The Cupid Two-Stage Generative Reconstruction Pipeline.} Given an input image, the first stage ($\sflow$) generates a coarse occupancy cube and a UV cube, which encodes 3D-to-2D correspondences. A PnP solver recovers the camera pose $\mathbf{P}^{*}$ from these correspondences. The second stage ($\lflow$) is conditioned on this recovered pose. It injects pixel-aligned features (sampled from DINOv2 and low-level feature maps) into the generative process to synthesize high-fidelity geometry and appearance for the final 3D object.}
+\label{fig:cupid_architecture}
+\end{figure*}
+
 
 
 \paragraph{Stage 1: Occupancy and Pose Generation.}
