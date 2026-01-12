@@ -1843,16 +1843,21 @@ with $\vg \sim \cN(\Zero, \vI)$ independent of $(\vx, \vy)$, as in
 and we will repeatedly use the notation $\vxi$ to denote realizations of $\vx$
 and $\vx_t$.
 
-To proceed, we note that our development of conditional sampling under
-measurements $\vy = h(\vx) + \vw$ only explicitly used the
-forward model $h$ in making the DPS approximation
-\eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}.
-In particular, the conditional posterior denoiser decomposition
-\eqref{eq:posterior-sampling-denoiser-decomposition} \textit{still holds in the
-paired data setting}, by virtue of Bayes' rule
+\subsubsection{Classifier Guidance: Consistency via a Pretrained Classifier}
+
+% To proceed, we note that our development of conditional sampling under
+% measurements $\vy = h(\vx) + \vw$ only explicitly used the
+% forward model $h$ in making the DPS approximation
+% \eqref{eq:conditional-posterior-measurementmatching-gaussian-case-dps-approx}.
+Recall from \Cref{sec:conditioned-decoding}
+that the following decomposition of the optimal conditional posterior denoiser
+holds,
+% In particular, the conditional posterior denoiser decomposition
+% \eqref{eq:posterior-sampling-denoiser-decomposition} \textit{still holds in the
+% paired data setting},
+by virtue of Bayes' rule
 and conditional independence of $\vy$ and $\vx_t$ given $\vx$ (recall
-\Cref{fig:posterior-sampling-cds}). Thus we can still write in the paired
-data setting
+\Cref{fig:posterior-sampling-cds}):
 \begin{equation}\label{eq:conditional-denoising-mmse-denoiser-paired-data}
     \bE[ \vx \mid \vx_t=\vxi, y=\nu]
     =
@@ -1860,6 +1865,14 @@ data setting
     + \frac{\sigma_t^2}{\alpha_t}
     \nabla_{\vxi}\log p_{y \mid \vx_t}(\nu\mid \vxi).
 \end{equation}
+In other words,  the representation \eqref{eq:conditional-denoising-mmse-denoiser-paired-data}
+for the optimal conditional denoiser holds regardless of whether the explicit
+observation model $\vy = h(\vx) + \vw$ is valid.
+This means that if we can learn such a denoiser
+\eqref{eq:conditional-denoising-mmse-denoiser-paired-data} in the paired data
+setting, we can follow the denoising-diffusion methodology we have developed in
+\Cref{ch:denoising} to perform class-conditional sampling.
+
 A natural ideal is then to directly implement the likelihood correction term in
 \eqref{eq:conditional-denoising-mmse-denoiser-paired-data} using a deep network
 $f_{\theta_{\mathrm{c}}}$ with parameters $\theta_{\mathrm{c}}$, as in
@@ -1928,7 +1941,8 @@ hyperparameter $\gamma > 0$
 into the definition of the naive conditional denoiser
 \eqref{eq:conditional-denoising-mmse-denoiser-paired-data-approx},
 referring to the
-resulting conditional denoiser as having incorporated ``classifier guidance''
+resulting conditional denoiser as having incorporated \textbf{``classifier
+guidance''}
 (CG):
 \begin{equation}\label{eq:conditional-denoising-mmse-denoiser-paired-data-approx-cg}
     \bar{\vx}_{\theta}^{\mathrm{CG}}(t, \vx_t, y)
@@ -1944,6 +1958,7 @@ resulting conditional denoiser as having incorporated ``classifier guidance''
 \end{equation}
 with the case $\gamma = 1$ coinciding with
 \eqref{eq:conditional-denoising-mmse-denoiser-paired-data-approx}.
+
 \citet{Dhariwal2021-hg} found that a setting $\gamma > 1$ performed
 best empirically.
 One possible interpretation for this is as follows: note that, in the context of
@@ -1976,6 +1991,9 @@ $f_{\theta_{\mathrm{c}}}(t, \vx_t)$ \textit{relative to} smaller ones,
 which effectively amplifies the guidance signal provided in cases where the deep
 network $f$ assigns it the largest probability among the $K$ classes.
 
+
+\subsubsection{Simplifications and Improvements via Classifier-Free Guidance}
+
 Nevertheless, classifier guidance does not address the second key drawback of
 the naive methodology: it is both cumbersome and wasteful to have to
 train an auxiliary classifier $f_{\theta_{\mathrm{c}}}$ in addition
@@ -1984,9 +2002,10 @@ denoiser $\bar{\vx}_{\theta_{\mathrm{d}}}$, given
 that it is not possible to directly adapt a pretrained classifier
 due to the need for it to work well on noisy inputs $\vx_t$ and incorporate
 other empirically-motivated architecture modifications.
-In particular, \citet{Dhariwal2021-hg} found that it was necessary to explicitly
+In particular, \citet{Dhariwal2021-hg} found that it was necessary to \textit{explicitly
 design the architecture of the deep network implementing the classifier to match
-that of the denoiser.
+that of the denoiser}.
+
 Moreover, from a purely practical perspective---trying to obtain the best
 possible performance from the resulting sampler---the best-performing
 configuration of classifier guidance-based sampling departs even further from
@@ -2004,7 +2023,7 @@ additional guidance signal from an auxiliary classifier!
 
 This state of affairs, empirically motivated as it is, led \citet{Ho2022-ry} in
 subsequent work to propose a more empirically pragmatic methodology, known as
-classifier-free guidance (CFG). Instead of representing the conditional denoiser
+\textbf{classifier-free guidance (CFG)}. Instead of representing the conditional denoiser
 \eqref{eq:conditional-denoising-mmse-denoiser-paired-data} as a weighted sum
 of an unconditional denoiser for $\vx_t$ with a log-likelihood correction term
 (with possibly modified weights, as in classifier guidance), they accept the
@@ -2020,7 +2039,9 @@ $\vx_t$.\footnote{That said, \textcite{Ho2022-ry} actually proposed to use
     a conditional denoiser. In fact, the weighting we derive and present here
     reflects modern practice, and in particular is used in state-of-the-art
     diffusion models such as Stable Diffusion 3.5
-\cite{DBLP:conf/icml/EsserKBEMSLLSBP24}.} To see how this structure arises, we
+\cite{DBLP:conf/icml/EsserKBEMSLLSBP24}.} 
+
+\paragraph{Deriving Classifier-Free Guidance.} To see how this structure arises, we
 begin with an `idealized' version of the classifier guidance denoiser
 $\bar{\vx}_{\theta}^{\mathrm{CG}}$ defined in
 \eqref{eq:conditional-denoising-mmse-denoiser-paired-data-approx-cg},
@@ -2155,18 +2176,22 @@ class-conditioned sampling with classifier-free guidance in
 image generation with classifier-free guidance, and it has become a mainstay of
 the largest-scale practical diffusion models, such as Stable Diffusion
 \cite{rombach2022high} and its derivatives.
-At the same time, its derivation is rather opaque and empirically motivated,
+
+
+\paragraph{What Denoisers Does Classifier-Free Guidance Promote Learning?}
+As we have seen, the derivation of classifier-free guidance is rather opaque and
+empirically motivated,
 giving little insight into the mechanisms behind its strong performance.
-A number of theoretical works have studied this, providing explanations for some
-parts of the overall CFG methodology
-\cite{Bradley2024-jg,Li2025-li,Wu2024-js}---itself encompassing denoiser
+A number of theoretical works have attempted to address this
+\cite{Bradley2024-jg,Li2025-li,Wu2024-js}.
+They provide explanations for some parts of the overall CFG methodology---itself encompassing denoiser
 parameterization and training, as well as configuration of the guidance strength
 and performance at sampling time.
-Below, we will give an interpretation in the simplifying setting
-of a Gaussian mixture model data distribution and denoiser, which will
-demonstrate an insight into the \textit{parameterization} of the
-denoiser in the presence of
-such low-dimensional structures.
+Below, following our running theme in the book, we will give an interpretation
+in the simplifying setting of a Gaussian mixture model data distribution and
+denoiser.
+First, we consider \textit{the effect of CFG}: what does a large weight $\gamma
+\gg 1$ promote?
 
 \yima{Please make messages that the example below try to convey some
 what more modular. Probably break it into two related parts?}
@@ -2184,6 +2209,7 @@ what more modular. Probably break it into two related parts?}
     orthogonal columns, and $P \ll D$.
     Moreover, we assume that the class label $y \in [K]$ is a deterministic
     function of $\vx$ mapping an example to its corresponding mixture component.
+
     Applying the analysis in \Cref{example:denoising_gaussian_mixture} (and the
         subsequent analysis of the low-rank case, culminating in
     \Cref{eq:gmm_lowrank_denoiser}), we obtain for the class-conditional optimal
@@ -2206,31 +2232,39 @@ what more modular. Probably break it into two related parts?}
     As a result, we can express the CFG denoiser with guidance strength $\gamma
     > 1$ as
     \begin{equation}\label{eq:cfg-denoiser-mog-low-rank}
+        \begin{split}
         \bar{\vx}^{\mathrm{CFG,\,ideal}}(t, \vx_t, y)
         =
         \frac{1}{1 + t^{2}}
-        \left(
-            (1 - \gamma)
+            \Biggl(
+            &(1 - \gamma)
             \sum_{k = 1}^{K}\frac{\exp\rp{\frac{1}{2t^{2}(1
             + t^{2})}\norm{\vU_{k}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
                 = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
             + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}\vU_{k}\vU_{k}^{\top}
-            +
+            \\
+            &\qquad+
             \gamma
             \vU_{y}\vU_{y}^{\top}
-        \right)
+        \Biggr)
         \vx_t.
+        \end{split}
     \end{equation}
-    This denoiser has a simple, interpretable form. The first term,
-    corresponding
-    to the unconditional denoiser, performs denoising of the signal $\vx_t$
-    against an average of the denoisers associated with each
-    subspace, weighted by
-    how correlated $\vx_t$ is with each subspace. The second term,
-    corresponding to
-    the conditional denoiser, simply performs denoising with the conditioning
-    class's denoiser. The CFG scheme further averages these two denoisers:
-    the effect can be gleaned from the refactoring
+
+    This denoiser has a simple, interpretable form:
+    \begin{enumerate}
+        \item The first term, corresponding to \textit{the unconditional
+            denoiser},
+            performs denoising of the signal $\vx_t$ against an average of the
+            denoisers associated with each subspace, weighted by how correlated
+            $\vx_t$ is with each subspace. 
+        \item The second term, corresponding to \textit{the conditional
+            denoiser}, simply performs denoising with the conditioning class's
+            denoiser. 
+    \end{enumerate}
+
+    The CFG scheme averages these two denoisers.
+    The effect of this averaging can be gleaned from the refactoring
     \begin{equation}\label{eq:cfg-denoiser-mog-low-rank-2}
         \begin{split}
             \bar{\vx}^{\mathrm{CFG,\,ideal}}(t, \vx_t, y)
@@ -2253,9 +2287,11 @@ what more modular. Probably break it into two related parts?}
                                 +
                 t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}\vU_{k}\vU_{k}^{\top}
             \Biggr)
-            \vx_t.
+            \vx_t,
         \end{split}
     \end{equation}
+    where we combined the conditional denoiser with the corresponding $k=y$ term
+    in the sum over $k \in [K]$.
     We have
     \begin{equation}
         \sum_{k=1}^K
@@ -2269,10 +2305,11 @@ what more modular. Probably break it into two related parts?}
     So we can conclude two regimes for the terms in
     \Cref{eq:cfg-denoiser-mog-low-rank-2}:
     \begin{enumerate}
-        \item \textbf{Well-correlated regime:} If $\vx_t$ correlates well with
+        \item \textbf{Well-correlated regime:} In this case, suppose the noisy
+            input $\vx_t$ correlates well with one of the subspaces $\vU_y$.
+            If $\vx_t$ correlates well with
             $\vU_y$, then the normalized weight corresponding to the
-            $k=y$ summand in
-            the unconditional denoiser is near to $1$.
+            $k=y$ summand in the unconditional denoiser is near to $1$.
             Then
             \begin{equation}
                 \gamma + (1 - \gamma)
@@ -2286,6 +2323,11 @@ what more modular. Probably break it into two related parts?}
             is approximately equal to the denoiser associated to the
             conditioning
             class $y$.
+
+            This implies: \textit{if the CFG denoiser's input is highly
+            correlated with one of the class subspaces, the denoiser is
+            approximately equal to the corresponding class-conditional
+            denoiser}! Hence, we expect the CFG denoising sampler to converge.
         \item \textbf{Poorly-correlated regime:} In contrast, if $\vx_t$
             \textit{does not} correlate well with $\vU_y$ (say
             because $t$ is large),
@@ -2302,6 +2344,7 @@ what more modular. Probably break it into two related parts?}
             and thus the guidance strength $\gamma \gg 1$ places a
             large positive
             weight on the denoiser associated to $y$.
+
             Meanwhile, in the second term of
             \Cref{eq:cfg-denoiser-mog-low-rank-2},
             any classes $k \neq y$ that are well-correlated with $\vx_t$
@@ -2313,76 +2356,124 @@ what more modular. Probably break it into two related parts?}
             making it negatively
             correlated with the previous iterate (i.e., the iterate
             before denoising).
-            In other words, CFG steers the iterative denoising
-            process towards the
-            conditioning class and away from the previous iterate, a different
-            dynamics from purely conditional sampling (i.e., the case
-            $\gamma = 1$).
-    \end{enumerate}
 
-    We now perform a further analysis of the form of this guided denoiser in
-    order to make some inferences about the role of CFG. Many of these insights
-    will be relevant to \textit{general} data distributions with low-dimensional
-    geometric structure, as well.
-    First, notice that the CFG denoiser \eqref{eq:cfg-denoiser-mog-low-rank}
-    takes a simple form in the setting where $\vx_t$ correlates
-    significantly more
-    strongly with a single subspace $\vU_y$ than any other $\vU_{y'}$. Indeed,
-    because the ratio of weights in the class-conditional denoiser is given by
+            In other words, \textit{CFG steers the iterative denoising
+            process towards the conditioning class and away from the previous
+            iterate}, a different dynamics from purely conditional sampling
+            (i.e., the case $\gamma = 1$).
+    \end{enumerate}
+\end{example}
+
+\Cref{example:denoising-gaussian-mixture-cfg} shows that in the mixture of
+Gaussians setting, the CFG denoiser provides a strong bias towards the
+conditioning class, while preserving local correctness (hence convergence of
+sampling) when the noise level $t$ is small.
+This is suggestive of why a large weight $\gamma \gg 1$ has been found essential
+in practice.
+
+Next, the following example will demonstrate an insight into the
+\textit{parameterization} of the denoiser in the presence of
+low-dimensional structure, again in the Gaussian mixture model.
+
+\begin{example}\label{example:denoising-gaussian-mixture-cfg-parameterization}
+    Consider again the mixture of Gaussians model studied in
+    \Cref{example:denoising-gaussian-mixture-cfg}:
     \begin{equation}
-        \frac{
-            \exp\rp{\frac{1}{2t^{2}(1 +
-            t^{2})}\norm{\vU_{y}^{\top}\vx_t}_{2}^{2}}
-        }{
-            \exp\rp{\frac{1}{2t^{2}(1 +
-            t^{2})}\norm{\vU_{y'}^{\top}\vx_t}_{2}^{2}}
-        }
-        =
-        \exp\rp{
-            \frac{1}{2t^{2}(1 + t^{2})}\left(
-                \norm{\vU_{y}^{\top}\vx_t}_{2}^{2}
-                -
-                \norm{\vU_{y'}^{\top}\vx_t}_{2}^{2}
-            \right)
-        },
+        \vx \sim \frac{1}{K}\sum_{k = 1}^{K}\dNorm(\vzero,
+        \vU_{k}\vU_{k}^{\top}),
     \end{equation}
-    a large separation between the correlation of $\vx_t$ with
-    $\vU_{y}$ and other
-    subspaces $\vU_{y'}$ implies that the sum over $k$ concentrates on the $k=y$
-    summand, giving that \textit{the CFG denoiser remains equal to the
-    class-conditioned denoiser}. Moreover, when $t \approx 0$, the magnitude of
-    any such gap is amplified in the exponential, making this
-    concentration on the
-    $k=y$ summand even stronger. In particular, for small times $t$
-    (i.e., near to
-    the support of the data distribution), CFG denoising is no different from
-    standard class-conditional denoising---implying that it will converge stably
-    once it has reached such a configuration.
-    Thus, the empirical benefits of CFG should be due to its behavior in cases
-    where $\vx_t$ is not unambiguously from a single class.
+    where each \(\vU_{k} \in \O(D, P) \subseteq \R^{D \times P}\) is
+    a matrix with
+    orthogonal columns, and $P \ll D$.
+    The class label $y \in [K]$ is a deterministic function of $\vx$ mapping an
+    example to its corresponding mixture component.
+    For this distribution, we saw in \Cref{example:denoising-gaussian-mixture-cfg}
+    that the ideal CFG denoiser takes the form
+    \begin{equation}\label{eq:cfg-denoiser-mog-low-rank-3}
+        \begin{split}
+        \bar{\vx}^{\mathrm{CFG,\,ideal}}(t, \vx_t, y)
+        =
+        \frac{1}{1 + t^{2}}
+            \Biggl(
+            &(1 - \gamma)
+            \sum_{k = 1}^{K}\frac{\exp\rp{\frac{1}{2t^{2}(1
+            + t^{2})}\norm{\vU_{k}^{\top}\vx_t}_{2}^{2}}}{\sum_{i
+                = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
+            + t^{2})}\norm{\vU_{i}^{\top}\vx_t}_{2}^{2}}}\vU_{k}\vU_{k}^{\top}
+            \\
+            &\qquad+
+            \gamma
+            \vU_{y}\vU_{y}^{\top}
+        \Biggr)
+        \vx_t.
+        \end{split}
+    \end{equation}
+
+    % We now perform a further analysis of the form of this guided denoiser in
+    % order to make some inferences about the role of CFG. 
+    % % Many of these insights
+    % % will be relevant to \textit{general} data distributions with low-dimensional
+    % % geometric structure, as well.
+    % First, notice that the CFG denoiser \eqref{eq:cfg-denoiser-mog-low-rank-3}
+    % takes a simple form in the setting where $\vx_t$ correlates
+    % significantly more
+    % strongly with a single subspace $\vU_y$ than any other $\vU_{y'}$. Indeed,
+    % because the ratio of weights in the class-conditional denoiser is given by
+    % \begin{equation}
+    %     \frac{
+    %         \exp\rp{\frac{1}{2t^{2}(1 +
+    %         t^{2})}\norm{\vU_{y}^{\top}\vx_t}_{2}^{2}}
+    %     }{
+    %         \exp\rp{\frac{1}{2t^{2}(1 +
+    %         t^{2})}\norm{\vU_{y'}^{\top}\vx_t}_{2}^{2}}
+    %     }
+    %     =
+    %     \exp\rp{
+    %         \frac{1}{2t^{2}(1 + t^{2})}\left(
+    %             \norm{\vU_{y}^{\top}\vx_t}_{2}^{2}
+    %             -
+    %             \norm{\vU_{y'}^{\top}\vx_t}_{2}^{2}
+    %         \right)
+    %     },
+    % \end{equation}
+    % a large separation between the correlation of $\vx_t$ with
+    % $\vU_{y}$ and other
+    % subspaces $\vU_{y'}$ implies that the sum over $k$ concentrates on the $k=y$
+    % summand, giving that \textit{the CFG denoiser remains equal to the
+    % class-conditioned denoiser}. Moreover, when $t \approx 0$, the magnitude of
+    % any such gap is amplified in the exponential, making this
+    % concentration on the
+    % $k=y$ summand even stronger. In particular, for small times $t$
+    % (i.e., near to
+    % the support of the data distribution), CFG denoising is no different from
+    % standard class-conditional denoising---implying that it will converge stably
+    % once it has reached such a configuration.
+    % Thus, the empirical benefits of CFG should be due to its behavior in cases
+    % where $\vx_t$ is not unambiguously from a single class.
 
     Next, we consider the problem of parameterizing a learnable denoiser
     $\vx_{\theta}^{\mathrm{CFG}}$ to represent the optimal denoiser
-    \eqref{eq:cfg-denoiser-mog-low-rank}.
-    Here, it may initially seem that the setting of classification of a mixture
-    distribution is too much of a special case relative to learning
-    practical data
-    distributions, as the ideal denoiser
-    \eqref{eq:cfg-denoiser-mog-low-rank} has
-    in this setting the simple form of a \textit{hard assignment} of the
-    noisy signal $\vx_t$ to the (denoiser associated to) the subspace $\vU_y$
-    corresponding to the true class label $y$ of $\vx$, averaged with the
-    \textit{soft assignment} denoiser associated to all subspaces $\vU_k$, with
-    weights given by the correlations of $\vx_t$ with these different subspaces.
-    However, we can extract a more general form for the
-    class-conditional denoiser
-    in this example which is relevant for practical parameterization using the
-    geometric structure of the mixture of Gaussians distribution, which actually
-    parallels the kinds of geometric structure common in real-world data.
-    More precisely, we add an additional assumption associated to the subspaces
+    \eqref{eq:cfg-denoiser-mog-low-rank-3}.
+    % Here, it may initially seem that the setting of classification of a mixture
+    % distribution is too much of a special case relative to learning
+    % practical data
+    % distributions, as the ideal denoiser
+    % \eqref{eq:cfg-denoiser-mog-low-rank-3} has
+    % in this setting the simple form of a \textit{hard assignment} of the
+    % noisy signal $\vx_t$ to the (denoiser associated to) the subspace $\vU_y$
+    % corresponding to the true class label $y$ of $\vx$, averaged with the
+    % \textit{soft assignment} denoiser associated to all subspaces $\vU_k$, with
+    % weights given by the correlations of $\vx_t$ with these different subspaces.
+    % However, we can extract a more general form for the
+    % class-conditional denoiser
+    % in this example which is relevant for practical parameterization using the
+    % geometric structure of the mixture of Gaussians distribution, which actually
+    % parallels the kinds of geometric structure common in real-world data.
+    % More precisely, 
+    For tractability, we add an additional assumption associated to the subspaces
     $\vU_k$ being `distinguishable' from one another, which is natural in
     practice: specifically, we assume that for any pair of indices $k, k' \in
-    [K]$ with $k \neq k'$, we can find a set of $K$ directions
+    [K]$ with $k \neq k'$, we can find a set of $K$ nonzero directions
     $\vv_{k} \in \bR^D$ such
     that
     \begin{equation}
@@ -2396,8 +2487,9 @@ what more modular. Probably break it into two related parts?}
     another.\footnote{ More generally, this assumption is naturally
         formulated as an
         \textit{incoherence condition} between the subspaces
-        $\vU_{[K]}$, a familiar
-    notion from the theory of compressive sensing.}
+        $\vU_{[K]}$, familiar from the theory of compressive sensing
+        \cite{Wright-Ma-2022}.}
+
     These vectors $\vv_k$ can then be thought of as \textit{embeddings} of the
     class label $y \in [K]$, and we can use them to define a more
     general operator
@@ -2407,36 +2499,43 @@ what more modular. Probably break it into two related parts?}
         (\vx_t, \vv) \mapsto
         \sum_{k = 1}^{K}\frac{
             \exp\rp{\frac{1}{2t^{2}(1
-            + t^{2})}\vx_t^\top \vU_k \vU_k^\top \vv}
+            + t^{2})} \abs{\vx_t^\top \vU_k \vU_k^\top \vv}}
         }
         {
             \sum_{i
             = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
-            + t^{2})}\vx_t^\top \vU_i \vU_i^\top \vv}
+            + t^{2})}\abs{\vx_t^\top \vU_i \vU_i^\top \vv}}
         }
         \vU_{k}\vU_{k}^{\top}\vx_t.
     \end{equation}
-    If we substitute $\vv = \vv_y$ for some $y \in [K]$, we get
+    Then if we plug in $\vv = \vx_t$ to the operator
+    \eqref{eq:mog-conditional-denoising-unified-operator}, we obtain a result
+    proportional to the first term in
+    \eqref{eq:gmm_lowrank_denoiser-ch6-uncond}, corresponding to the
+    optimal unconditional denoiser for $\vx_t$.
+    On the other hand,
+    if we substitute $\vv = \vv_y$ for some $y \in [K]$, we get
+    by construction of the embedding vectors $\vv_k$
     \begin{eqnarray}
         &&\sum_{k = 1}^{K}
         \frac{
             \exp\rp{\frac{1}{2t^{2}(1
-            + t^{2})}\vx_t^\top \vU_k \vU_k^\top \vv_y}
+            + t^{2})}\abs{\vx_t^\top \vU_k \vU_k^\top \vv_y}}
         }
         {
             \sum_{i
             = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1
-            + t^{2})}\vx_t^\top \vU_i \vU_i^\top \vv_y}
+            + t^{2})}\abs{\vx_t^\top \vU_i \vU_i^\top \vv_y}}
         }
         \vU_{k}\vU_{k}^{\top}\vx_t \nonumber \\
         &=&
         \frac{
             \exp\rp{\frac{1}{2t^{2}(1
-            + t^{2})}\vx_t^\top \vv_y}
+            + t^{2})}\abs{\vx_t^\top \vv_y}}
         }
         {
             \exp\rp{\frac{1}{2t^{2}(1
-            + t^{2})}\vx_t^\top \vv_y}
+            + t^{2})}\abs{\vx_t^\top \vv_y}}
             + K-1
         }
         \vU_{y}\vU_{y}^{\top}\vx_t
@@ -2448,12 +2547,19 @@ what more modular. Probably break it into two related parts?}
         }
         {
             \exp\rp{\frac{1}{2t^{2}(1
-            + t^{2})}\vx_t^\top \vv_y}
+            + t^{2})}\abs{\vx_t^\top \vv_y}}
             + K-1
         }
         \vU_{k}\vU_{k}^{\top}\vx_t.
     \end{eqnarray}
-    Now, because $\vx_t = \alpha_t \vx + \sigma_t \vg$, if the
+    Now, consider specifically the setting of interest (sampling) where
+    $\vx_t = \alpha_t \vx + \sigma_t \vg$, with $y$ denoting the label of $\vx$. 
+    In other words, conditioned on $y$, we have that $\vx_t = \alpha_t \vU_y \vz
+    + \sigma_t \vg$, where $\vz$ is an independent $P$-dimensional Gaussian
+    noise vector with zero mean and identity covariance.
+    %Then we get $\vx_t^\top \vv_y = $
+    Then by the previous expression, 
+    if the
     subspace dimension
     $P$ is sufficiently large---for example, if we consider a large-scale,
     asymptotic regime where $P, D \to \infty$ with their ratio $P/D$
@@ -2481,6 +2587,7 @@ what more modular. Probably break it into two related parts?}
         \approx
         \vU_{y}\vU_{y}^{\top}\vx_t.
     \end{equation}
+
     This argument shows that the operator
     \eqref{eq:mog-conditional-denoising-unified-operator} is, with overwhelming
     probability, \textit{equal to the optimal class-conditional denoiser
@@ -2492,11 +2599,7 @@ what more modular. Probably break it into two related parts?}
     \eqref{eq:mog-conditional-denoising-unified-operator}
     leads the resulting function of $\vx_t$ to well-approximate the optimal
     class-conditional denoiser \eqref{eq:gmm_lowrank_denoiser-ch6-classcond} for
-    $y$. Moreover, it is evident that plugging in $\vv = \vx_t$ to the operator
-    \eqref{eq:mog-conditional-denoising-unified-operator} yields (exactly) the
-    optimal unconditional denoiser
-    \eqref{eq:gmm_lowrank_denoiser-ch6-uncond} for $\vx_t$.
-    Thus, this operator provides a unified way to parameterize the constituent
+    $y$.     Thus, this operator provides a unified way to parameterize the constituent
     operators in the optimal denoiser for $\vx$ \textit{within a single
     `network'}: it is enough to add the output of an instantiation of
     \eqref{eq:mog-conditional-denoising-unified-operator} with input $(\vx_t,
