@@ -2684,7 +2684,7 @@ experimental results and analysis to verify the proposed solution, as
 well as discussion for further improvements.
 
 % Introduce basic 3D representations and common used 3D dataset.
-\subsection{3D Shape Representations and Datasets}
+\subsection{3D Shape Representations, Datasets and Tokenization}
 
 \paragraph{3D Shape Representations}
 \label{sec:3D representation}
@@ -2807,6 +2807,80 @@ As for the image data, each mesh is rendered under four camera poses,
 augmenting and improving the rendering diversity via the
 depth-conditioned ControlNet~\cite{10377881}.
 
+\paragraph{3D Tokenization.}
+As discussed in above, 3D data
+manifests in various forms, including point clouds, voxels, polygon
+meshes, and implicit neural representations. Fundamentally, point
+clouds, voxels, and meshes serve as discrete approximations of
+continuous 3D manifolds. In computer graphics and engineering,
+polygon meshes are particularly ubiquitous because they explicitly
+preserve surface topology, offering an efficient balance between
+visual fidelity and geometric structure.
+
+However, directly applying modern deep learning
+architectures—specifically Transformers—to these raw representations
+presents significant challenges. Unlike 2D images, which possess a
+regular grid structure easily split into patches, 3D data is often
+sparse, unstructured, and irregular. To leverage the power of
+sequence modeling and self-attention mechanisms in 3D, we must bridge
+the gap between raw geometric data and the discrete, ordered
+sequences required by Transformers. This process is known as
+\textit{3D Tokenization}.
+
+\begin{itemize}
+\item \textbf{Point Tokenization.} Point clouds are typically
+    tokenized using grouping techniques such as Farthest Point
+    Sampling (FPS) followed by k-Nearest Neighbors (k-NN). Each
+    cluster of points is treated as a token, often processed by a
+    permutation-invariant networkwork (such as PointNet) to extract a
+    feature vector.
+    
+\item \textbf{Voxel Tokenization.} Similar to 2D image patches, voxel
+    grids can be partitioned into 3D sub-grids or ``cublets." While
+    straightforward, this method often suffers from the cubic
+    complexity of voxel resolution (the $O(N^3)$ memory bottleneck).
+
+
+\item \textbf{Mesh Tokenization.} Tokenizing meshes presents unique
+    challenges due to their irregular connectivity and graph-like
+    structure. Common approaches involve traversing the surface to
+    serialize faces or vertices into sequences, or decomposing the
+    mesh into discrete primitives. These methods are particularly
+    prevalent in autoregressive mesh generation, where the objective
+    is to generate not just the 3D geometry, but also a valid, clean topology.
+
+\end{itemize}
+
+While these explicit tokenization strategies effectively discretize 
+continuous manifolds, they operate directly in the high-dimensional 
+observation space, often resulting in excessively long sequence lengths 
+and computational redundancy. To address these scalability constraints 
+and achieve higher compression ratios, the field has gravitated towards 
+learning-based discrete representations. Instead of tokenizing raw 
+geometric primitives directly, these following methods first project the 3D data 
+into a compact, low-dimensional latent space where semantic information 
+is aggregated, effectively decoupling geometric reconstruction from structural modeling.
+
+\textbf{Latent Vector Quantization.} This approach learns a discrete 
+codebook via Vector Quantization (VQ). In this framework, a high-dimensional 
+input (e.g., a voxel grid $X$ or  implicit function field $F_\theta$) 
+is compressed by an encoder $E$ into 
+a latent feature space $Z$. This continuous latent representation is then 
+discretized using a learned codebook $\mathcal{C}=\{c_k\}_{k=1}^K$ by 
+finding the nearest neighbor for each latent vector $z_i$:
+\begin{equation}
+q(z_i) = \arg\min_{c_k \in \mathcal{C}} \| z_i - c_k \|_2^2
+\end{equation}
+
+\textbf{Learned Latent Set.} This approach encodes a 3D shape
+    into a set of continuous latent vectors. It utilizes a attention
+    mechanism to aggregate input geometry (such as point clouds) into
+    a fixed number of permutation-invariant latent slots. These
+    continuous vectors condition an Implicit Neural Representation
+    (INR) decoder, creating a compact, high-fidelity latent space
+    that is highly effective for training generative Latent Diffusion Models.
+
+
 % Introduce task and challenges
 \subsection{Task}
 Our goal here is to learn a conditional  3D shape generative model
@@ -2847,6 +2921,8 @@ clip=true,width=.99\linewidth]{\toplevelprefix/chapters/chapter8/figs/michelange
 \label{fig:michelangelo_network}
 \end{figure}
 
+
+
 % Introduce network and loss func
 \subsection{Architecture and Objective}
 
@@ -2884,20 +2960,46 @@ from the surface of 3D shapes, where $N$ represents the number of
 points, and $C$ denotes additional point features such as normal or
 color. Next, a linear layer is used to project the concatenation of
 the Fourier positional encoded point clouds $\vP$ to the 3D shape
-encoder input $\vX \in \R^{d \times N}$. Drawing inspiration from
-previous transformer-based architectures for point cloud
-understanding~\cite{pmlr-v139-jaegle21a}, the 3D shape encoder is
-built on a perceiver-based transformer. Specifically, a
-cross-attention layer is used to inject the 3D shape information from
-the input $\vX$ into a series of learnable query tokens $\vQ \in
-\R^{d \times (1+L_{\mathrm{s}})}$, where $1 + L_{\mathrm{s}}$ is the
-length of query tokens $\vQ$, consisting of one global head token
-$\vQ_g \in \R^{d}$ with high-level semantics and $L_{\mathrm{s}}$
-local tokens $\vQ_l \in \R^{d \times L_{\mathrm{s}}}$ containing
-low-level geometric structure information. Then, several
+encoder input $\vX \in \R^{d \times N}$. 
+
+To process this dense 3D data efficiently, the encoder adopts a 
+Perceiver-based  architecture~\cite{pmlr-v139-jaegle21a}. Unlike 
+standard Transformers that scale quadratically with input length, 
+the Perceiver employs a latent bottleneck mechanism to decouple 
+the processing complexity from the input size. Instead of tokenizing 
+the input points directly for self-attention, the model utilizes a fixed 
+set of small, learnable latent queries $\vQ \in \R^{d \times (1+L_{\mathrm{s}})}$, 
+where $1 + L_{\mathrm{s}}$ is the length of query tokens $\vQ$. Mechanistically, 
+a Cross-Attention layer projects the high-dimensional 
+input space into this compact latent space: the input point cloud serves 
+as the Keys and Values, while the learnable queries $\vQ$ act as the Queries 
+to extract relevant geometric features. This operation compresses 
+the variable-length input $N$ into a fixed-length latent sequence.
+
+In the context of Michelangelo, these queries are structured to capture 
+hierarchical semantics: they consist of one global head token
+$\vQ_g \in \R^{d}$ with high-level 
+semantics and $L_{\mathrm{s}}$ local tokens 
+$\vQ_l \in \R^{d \times L_{\mathrm{s}}}$ 
+containing low-level geometric structure information. Then, several
 self-attention blocks are used to iteratively improve the feature
 representation and obtain the final shape embeddings,
 $\vE_{\mathrm{s}} \in \R^{d \times (1+L_{\mathrm{s}})}$.
+
+% Drawing inspiration from
+% previous transformer-based architectures for point cloud
+% understanding~\cite{pmlr-v139-jaegle21a}, the 3D shape encoder is
+% built on a perceiver-based transformer. Specifically, a
+% cross-attention layer is used to inject the 3D shape information from
+% the input $\vX$ into a series of learnable query tokens $\vQ \in
+% \R^{d \times (1+L_{\mathrm{s}})}$, where $1 + L_{\mathrm{s}}$ is the
+% length of query tokens $\vQ$, consisting of one global head token
+% $\vQ_g \in \R^{d}$ with high-level semantics and $L_{\mathrm{s}}$
+% local tokens $\vQ_l \in \R^{d \times L_{\mathrm{s}}}$ containing
+% low-level geometric structure information. Then, several
+% self-attention blocks are used to iteratively improve the feature
+% representation and obtain the final shape embeddings,
+% $\vE_{\mathrm{s}} \in \R^{d \times (1+L_{\mathrm{s}})}$.
 \yima{Probably more detail or illustration for the above description
 about how to tokenize 3D shape data, say point clouds, through a
 perceiver. How is it trained, separately or jointly, with what
@@ -3520,54 +3622,7 @@ $\latent$ which can then be decoded into the final 3D object and camera pose.
 
 \subsection{3D Shape Representation and Tokenizations}
 % {\color{red} maybe we should move this to michealangelo}
-As discussed in Section~\ref{sec:3D representation}, 3D data
-manifests in various forms, including point clouds, voxels, polygon
-meshes, and implicit neural representations. Fundamentally, point
-clouds, voxels, and meshes serve as discrete approximations of
-continuous 3D manifolds. In computer graphics and engineering,
-polygon meshes are particularly ubiquitous because they explicitly
-preserve surface topology, offering an efficient balance between
-visual fidelity and geometric structure.
 
-However, directly applying modern deep learning
-architectures—specifically Transformers—to these raw representations
-presents significant challenges. Unlike 2D images, which possess a
-regular grid structure easily split into patches, 3D data is often
-sparse, unstructured, and irregular. To leverage the power of
-sequence modeling and self-attention mechanisms in 3D, we must bridge
-the gap between raw geometric data and the discrete, ordered
-sequences required by Transformers. This process is known as
-\textit{3D Tokenization}.
-
-\begin{itemize}
-\item \textbf{Voxel Tokenization:} Similar to 2D image patches, voxel
-    grids can be partitioned into 3D sub-grids or ``cublets." While
-    straightforward, this method often suffers from the cubic
-    complexity of voxel resolution (the $O(N^3)$ memory bottleneck).
-
-\item \textbf{Point Tokenization:} Point clouds are typically
-    tokenized using grouping techniques such as Farthest Point
-    Sampling (FPS) followed by k-Nearest Neighbors (k-NN). Each
-    cluster of points is treated as a token, often processed by a
-    permutation-invariant networkwork (such as PointNet) to extract a
-    feature vector.
-
-\item \textbf{Mesh Tokenization:} Tokenizing meshes presents unique
-    challenges due to their irregular connectivity and graph-like
-    structure. Common approaches involve traversing the surface to
-    serialize faces or vertices into sequences, or decomposing the
-    mesh into discrete primitives. These methods are particularly
-    prevalent in autoregressive mesh generation, where the objective
-    is to generate not just the 3D geometry, but also a valid, clean topology.
-
-\item \textbf{Learned Latent Set:} This approach encodes a 3D shape
-    into a set of continuous latent vectors. It utilizes a attention
-    mechanism to aggregate input geometry (such as point clouds) into
-    a fixed number of permutation-invariant latent slots. These
-    continuous vectors condition an Implicit Neural Representation
-    (INR) decoder, creating a compact, high-fidelity latent space
-    that is highly effective for training generative Latent Diffusion Models.
-\end{itemize}
 
 A central challenge in 3D shape generation is finding a tokenization
 that is both compact and expressive, capable of high-fidelity
@@ -3684,56 +3739,42 @@ geometry and appearance for the final 3D object.}
 \label{fig:cupid_architecture}
 \end{figure*}
 
-\paragraph{Stage 1: Occupancy and Pose Generation.}
 
-The first stage, driven by a flow model we denote $\sflow$, takes the
-input image $\image$ and generates two low-resolution grids:
-\begin{itemize}
-\item An \textbf{occupancy cube} $\mathbf{G}_o \in \{0,1\}^{r \times
-    r \times r \times 1}$, which indicates the set of active voxels
-    that constitute the coarse shape of the object.
-\item A \textbf{UV cube} $\mathbf{G}_{uv} \in [0,1]^{r \times r
-    \times r \times 2}$, which stores the normalized pixel
-    coordinates $(u,v)$ for each voxel, effectively encoding the camera pose.
-\end{itemize}
-From these two cubes, we extract the set of active voxels and their
-corresponding pixel coordinates $\{(\point_i,
-\pixcoord_i)\}_{i=1}^{\numpts}$ and solve for the camera pose
-$\mathbf{P}^{*}$ using \Cref{eq:pnp_solve}.
+
+\subsection{Cascaded Flow Modeling}
+\label{sec:flow_model}
+
+We employ a two-stage cascaded flow model to jointly sample a 3D object and its corresponding camera pose, denoted as $\latent = \{ (\point_i, \feat_i), (\point_i,\pixcoord_i) \}_{i=1}^{\numpts}$.
+
+In the first stage, the occupancy and pose generation model ($\sflow$) produces two key outputs: (i) an occupancy cube identifying active voxels, and (ii) a UV cube encoding the object-centric camera pose (see \ref{sec:representation}). In the second stage, conditioned on these predictions, the pose-aligned geometry and appearance model ($\lflow$) synthesizes DINO features $\feat_i$ for each active voxel to yield the final representation $\latent$.
+
+\paragraph{Occupancy and Pose Generation.}
+Given a conditioning image \(\image\), this stage generates an occupancy cube and a UV cube, both at resolution $r$. The occupancy cube, \(\mathbf{G}_o \in \{0,1\}^{r \times r \times r \times 1}\), contains binary values distinguishing active from inactive voxels. The UV cube, \(\mathbf{G}_{uv} \in [0,1]^{r \times r \times r \times 2}\), stores normalized pixel coordinates $(u,v)$ for every voxel; notably, voxels sharing identical pixel coordinates lie along the same camera ray.\footnote{We do not explicitly model occlusion, as recent studies suggest transformers effectively model light transport implicitly~\citep{jin2024lvsm, zeng2025renderformer}.}
+
+To improve computational efficiency, we train a 3D VAE to compress the UV cube into a low-resolution feature grid \(\mathbf{S}_{uv} \in \mathbb{R}^{s\times s\times s \times C}\), achieving near-lossless pose recovery (mean RRE/RTE $< 0.5^\circ$). To fine-tune TRELLIS, we concatenate the original feature grid \(\mathbf{S}_o\) with \(\mathbf{S}_{uv}\) and introduce linear projection layers at both the input and output of the flow network $\sflow$. Once the occupancy and UV cubes are generated, we extract the set $\{ (\point_i, \pixcoord_i(\pose)) \}_{i=1}^{\numpts}$ by collecting active voxels and solving for the camera pose via Equation~\ref{eq:pnp}.
 
 \yima{How these voxel-type 3D data are tokenized. Discuss
 relationship or difference from the Perceiver for tokenizing point
 clouds in the Michelangelo project. Also, describe basic deep
 architectures used for the two flow-matching based generative models learned. }
 
-\paragraph{Stage 2: Pose-Aligned Geometry and Appearance Generation.}
 
-The second stage, driven by a flow model $\lflow$, generates the
-detailed geometry and appearance features
-$\{\feat_i\}_{i=1}^{\numpts}$ for the active voxels identified in
-Stage 1. A critical aspect of this stage is \textbf{pose-aligned
-conditioning}, which injects pixel-local information from the input
-image to ensure the final reconstruction is faithful to the observation.
+\paragraph{Pose-Aligned Geometry and Appearance Generation.}
+In the second stage, we generate detailed 3D latent features $\{ \feat_i \}_{i=1}^{\numpts}$ exclusively at active voxel locations. Experiments indicate that the standard $\lflow$ model from TRELLIS, which relies on globally attended image information, is prone to color drift and the loss of fine-grained details. We mitigate this by utilizing the camera pose derived in the first stage to inject locally attended pixel information into each voxel.
 
-Using the camera pose $\mathbf{P}^{*}$ recovered from the first
-stage, we project each active voxel center $\point_i$ back onto the
-input image plane to find its corresponding pixel coordinate
-$\pixcoord_i$. We then sample features from the input image at this
-location. Specifically, we extract two types of features:
-\begin{enumerate}
-\item \textbf{High-level semantic features} $\feat_i^\dino =
-    \interp(\pixcoord_i, \dino(\image))$, sampled from a pre-trained
-    DINOv2 feature map.
-\item \textbf{Low-level visual features} $\feat_i^\low$, sampled from
-    the output of a lightweight convolutional head, which capture
-    fine details like color and texture that may be lost in the DINOv2 features.
-\end{enumerate}
-These pixel-aligned features, $\feat_i^\high$ and $\feat_i^\low$, are
-then concatenated with the current noisy voxel feature $\feat_i^{t}$
-at timestep $t$ and fused into the flow transformer via a linear
-layer. This mechanism ensures that the generative process is strongly
-guided by the visual evidence in the input image, preventing the
-color drift and shape inconsistencies common in pure 3D generative models.
+Specifically, we compute the features for the $i$-th voxel using the estimated pose as follows:
+\begin{equation}
+\begin{aligned}
+\feat^\dino_{i} &= \interp(\pixcoord_i, \dino(\image)) \in \mathbb{R}^{1024}, \\
+\{\feat^{\high}_{i}\}_{i=1}^{\numpts} &= \slatenc\big(\{\point_i, \feat^\dino_i\}_{i=1}^{\numpts}\big), \quad \feat^{\high}_{i} \in \mathbb{R}^{8},
+\end{aligned}
+\label{eq:latent}
+\end{equation}
+where $\pixcoord_i$ represents the projection of the $i$-th 3D voxel center onto the image plane, $\interp$ denotes bilinear interpolation, and $\slatenc$ is the 3D VAE encoder. Although DINO captures high-level semantics, it often lacks the low-level cues necessary for precise reconstruction. To compensate, we extract complementary low-level features $\feat^{\low}$ from $\image$ using a lightweight convolutional head, sampling them at $\pixcoord_i$ via $\interp$. Finally, at each time step $t$, we fuse the noisy voxel feature $\feat_i^{t}$ with the pixel-aligned features via a linear layer before inputting them into the flow transformer:
+\begin{equation}
+l_t = \mathrm{Linear}\big([\feat_i^{t}\,\oplus\, \feat^{\high}_{i} \,\oplus\, \feat^{\low}_{i}]\big).
+\end{equation}
+This pose-aligned fusion strategy significantly enhances both 3D geometric accuracy and appearance fidelity relative to the input image.
 
 \begin{remark}[Decoupled Generative Processes]
 Notice that the above two-stage framework decouples the distribution
@@ -3744,86 +3785,48 @@ representations are much better structured and enable much more
 precise and flexible spatial reasoning and generation.
 \end{remark}
 
-\subsection{Evaluation}
-\label{sub:cupid_evaluation}
-
-To comprehensively assess the performance, we evaluate three distinct aspects:
-\begin{enumerate}
-\item \textbf{Monocular Geometry Accuracy:} Measures alignment of the
-    visible portion with ground-truth. Metrics: Chamfer Distance
-    (CD), F-score, Mask IoU.
-\item \textbf{Input View Consistency:} Re-render the generated object
-    from the predicted pose and compare to the input. Metrics: PSNR,
-    SSIM, LPIPS.
-\item \textbf{Full 3D Evaluation:} Quality of the complete 3D object
-    (including occluded parts), evaluated qualitatively and with CLIP
-    similarity on novel views.
-\end{enumerate}
-Evaluations are conducted on Toys4K (synthetic) and Google Scanned
-Objects (GSO, real-world).
-
 \subsection{Experiments}
-\label{sub:3d_reconstruction_experiments}
+\label{sec:experiments}
 
-We compare CUPID against leading methods in three families: (1)
-point-map regression (VGGT, MoGe), (2) view-centric reconstruction
-(LRM, LaRa), (3) 3D generation with post-hoc alignment (OnePoseGen).
+To validate the architecture, we evaluated the system across three critical dimensions: monocular geometry prediction, input-view consistency, and full single-image-to-3D reconstruction. The benchmarking process focused on learning-based systems, excluding per-scene optimization methods to ensure a fair comparison of inference capabilities. We ablate pose-conditioning.
 
-% \paragraph{Experiment Results.}
-% \Cref{tab:cupid_geometry} shows that \Cupid\ achieves
-% state-of-the-art monocular geometry accuracy, outperforming
-% view-centric methods by a large margin (e.g., ~50\% lower CD on
-% GSO) while remaining competitive with partial-geometry methods —
-% validating highly accurate pose estimation.
+\paragraph{Evaluation}
+\label{sec:Evaluation}
 
-% \Cref{tab:cupid_appearance} and \Cref{fig:cupid_view_consistency}
-% demonstrate superior input-view fidelity (PSNR/SSIM/LPIPS) thanks
-% to pose-aligned conditioning.
+\paragraph{The Comparative Landscape.}
+We benchmarked against three distinct paradigms currently dominating the field:
+\begin{enumerate}[label=(\roman*)]
+    \item \textit{Point-map Regression}, such as VGGT~\citep{wang2025vggt} and MoGe~\citep{wang2025moge}, which simultaneously predict per-pixel 3D points and camera poses but often lack robust priors for occluded geometry;
+    \item \textit{View-centric Reconstruction}, including LRM~\citep{hong2023lrm} and LaRa~\citep{LaRa}, which generate 3D models directly in view space to bypass test-time pose estimation; and
+    \item \textit{Decoupled Generation}, exemplified by OnePoseGen~\citep{geng2025one}, which separates canonical 3D generation from pose estimation, relying on post-hoc alignment.
+\end{enumerate}
 
-% \begin{table}[h]
-% \centering
-% \caption{\small\textbf{Monocular geometry accuracy on GSO and
-% Toys4K.} \Cupid\ outperforms or matches all baselines, especially
-% full-3D methods.}
-% \label{tab:cupid_geometry}
-% \vspace{2mm}
-% \includegraphics[width=\textwidth]{tables/table_mono_geo.png}
-% \end{table}
+\input{chapters/chapter8/figs/cupid/tables/table_mono_geo}
+\input{chapters/chapter8/figs/cupid/tables/table_nvs}
+\input{chapters/chapter8/figs/cupid/tables/table_mono_render}
 
-% \begin{table}[h]
-% \centering
-% \caption{\small\textbf{Input view consistency on GSO and Toys4K.}
-% \Cupid\ significantly outperforms all baselines in re-rendering fidelity.}
-% \label{tab:cupid_appearance}
-% \vspace{2mm}
-% \includegraphics[width=\textwidth]{tables/table_mono_render.png}
-% \end{table}
+\paragraph{Geometric Accuracy and Pipeline Simplification.}
+In monocular geometry tasks, the proposed model demonstrated a clear superiority over view-centric approaches (Table~\ref{tab:geometry}). On the GSO dataset~\citep{downs2022google}, it reduced the average Chamfer Distance (CD) by 50\% relative to LRM~\citep{hong2023lrm}. This improvement is attributed to the model's dual capability: it accurately models object intrinsics via generative priors while simultaneously predicting precise extrinsic camera parameters.
 
-% \begin{figure}[h]
-% \centering
-% \caption{\small\textbf{Qualitative comparison of input view
-% consistency.} From left to right: input, LaRa, LRM, OnePoseGen,
-% \Cupid\ (ours). Our method preserves both geometry and texture faithfully.}
-% \label{fig:cupid_view_consistency}
-% \vspace{2mm}
-% \includegraphics[width=\textwidth]{tables/result_grid.png}
-% \end{figure}
+Crucially, the model achieved geometric accuracy competitive with specialized point-map regressors like MoGe. This finding has significant implications for pipeline design: it suggests that complex, multi-stage workflows—which traditionally use partial geometry estimation as a prerequisite step~\citep{yao2025castcomponentaligned3dscene}—can be streamlined. Our approach achieves comparable accuracy in a single step, rendering those intermediate representations unnecessary.
 
-% \paragraph{Ablation Study.}
+\paragraph{Visual Fidelity and Consistency.}
+We evaluated input-view consistency to measure how well the 3D reconstruction realigns with the source image (Table~\ref{tab:appearance}). The results highlighted specific weaknesses in the baselines: LaRa's texture quality degraded due to inconsistent novel-view generation, while OnePoseGen suffered from severe texture misalignment and color shifting during registration.
 
-% \Cref{tab:cupid_abl_appearance} confirms that injecting both DINOv2
-% and low-level pixel-aligned features (full PAC) yields the best
-% appearance fidelity, even when using stochastically predicted poses
-% from Stage 1.
+By contrast, our method maintained high pose accuracy without sacrificing texture details (Figure~\ref{fig:view_consistency}). It successfully reconstructed high-fidelity objects from both synthetic datasets (Toys4K) and challenging ``in-the-wild'' images (Figure~\ref{fig:teaser}), consistently outperforming baselines in semantic alignment metrics such as CLIP similarity~\citep{radford2021learning} (Table~\ref{tab:clip}).
 
-% \begin{table}[h]
-% \centering
-% \caption{\small\textbf{Ablation study on pose-aligned conditioning
-% (PAC).} Full model (e) achieves highest fidelity.}
-% \label{tab:cupid_abl_appearance}
-% \vspace{2mm}
-% \includegraphics[width=\textwidth]{tables/table_abl_color.png}
-% \end{table}
+% \input{chapters/chapter8/figs/cupid/tables/result_mv_grid}
+
+\paragraph{Ablation Studies}
+\label{sec:ablation}
+
+\input{chapters/chapter8/figs/cupid/tables/table_abl_color}
+% \input{chapters/chapter8/figs/cupid/tables/abl_color}
+
+Ablation studies on the second-stage refinement confirmed the critical role of Pose-Aligned Conditioning (PAC). We tested variants ranging from standard latent baselines to those incorporating DINOv2 feature volumes.
+
+As shown in Table~\ref{tab:abl_appearance}, the most effective configuration proved to be a hybrid approach: concatenating DINOv2 features with low-level visual cues extracted via convolutional layers. This combination yielded the highest visual quality, effectively bridging semantic understanding with pixel-level detail (Figure~\ref{fig:abl_appearance}). Furthermore, this conditioning mechanism demonstrated remarkable robustness, maintaining high performance even when the input geometry contained stochastic perturbations from the first generation stage.
+
 
 \begin{figure*}[t]
 \centering
@@ -3834,34 +3837,49 @@ point-map regression (VGGT, MoGe), (2) view-centric reconstruction
 \label{fig:cupid_scene_reconstruction}
 \end{figure*}
 
-\subsection{Application: Compositional Scene
-Reconstruction}\label{sub:cupid_application}
-% refine figure
-A significant advantage of explicitly modeling object-centric pose is
-the natural extension to compositional scene reconstruction. As
-illustrated in \Cref{fig:cupid_scene_reconstruction}, the
-\textbf{Cupid} framework can be applied to reconstruct complex scenes
-with multiple objects. The process involves:
-\begin{enumerate}
-\item \textbf{Object Segmentation:} A foundation model (e.g., SAM) is
-    used to segment individual objects in the input scene.
-\item \textbf{Per-Object Reconstruction:} \textbf{Cupid} is applied
-    independently to each masked object to generate a complete 3D
-    model and its corresponding 3D-to-2D correspondences. The model
-    is fine-tuned with random masking to be robust to occlusions.
-\item \textbf{Scene Composition:} A global depth prior (e.g., from
-    MoGe) provides a shared 3D reference frame. For each object, we
-    solve for a similarity transformation that aligns its visible 3D
-    points with the corresponding points in the global depth map.
-\end{enumerate}
-Applying these transformations places each independently
-reconstructed object into a shared camera frame, resulting in a
-cohesive, component-aligned 3D scene. This demonstrates how a
-principled approach to single-object reconstruction can serve as a
-powerful building block for more complex 3D understanding tasks.
 
-\subsection{Application: Multi-view Consistent
-Reconstruction}\label{sub:cupid_application_mv}
+\paragraph{Application: Compositional Scene Reconstruction.}
+\label{sub:cupid_application}
+To extend Cupid to scene-level reconstruction, we leverage foundation models to decompose the scene into $K$ objects with masks $\{ \mathbf{M}^{(k)} \}_{k=1}^K$ and estimate a global metric pointmap $\mathcal{P}$~\citep{wang2025moge}.
+
+In the first stage, we reconstruct each object independently to recover its canonical geometry, adapting the generator to handle mutual occlusions via random-mask fine-tuning~\citep{wu2025amodal3r}. For the $k$-th object, this yields a set of canonical 3D points $\mathbf{x}_i^{(k)}$ corresponding to pixels $\mathbf{u}_i \in \mathbf{M}^{(k)}$. To resolve the scale ambiguity inherent in independent generation, we formulate the alignment as a correspondence problem between the generated canonical space and the estimated camera space:
+\begin{equation}
+    \mathbf{p}_i = \mathcal{P}(\mathbf{u}_i), \quad \forall \mathbf{u}_i \in \mathbf{M}^{(k)},
+\end{equation}
+where $\mathbf{p}_i$ represents the target metric coordinates in the camera frame derived from the depth foundation model.
+
+In the second stage, we compute a per-object similarity transformation $\mathcal{T}_{k} = \{s_{k}, \mathbf{R}_{k}, \mathbf{t}_{k}\}$ to place all components into a unified coordinate system. We solve for these parameters using the Umeyama method~\citep{umeyama2002least} by minimizing the alignment error over the visible pixels of each object:
+\begin{equation}
+    \mathcal{T}_{k}^* = \argmin_{s_k, \mathbf{R}_k, \mathbf{t}_k} \sum_{i} \left\| \mathbf{p}_i - \left(s_k \mathbf{R}_k \mathbf{x}_i^{(k)} + \mathbf{t}_k\right) \right\|^2.
+\end{equation}
+Applying these optimal transformations results in a metric-consistent scene composition where all generated components are correctly positioned and scaled relative to one another.
+
+\paragraph{Application: Multi-view Consistent Reconstruction.}
+\label{sub:cupid_application_mv}
+To implement the multi-view capability described in Section~\ref{sec:flow_model}, we generalize the sampling process to accommodate $K$ input views $\{ \image^{(k)} \}_{k=1}^K$. 
+
+In the first stage, we aim to recover a single canonical geometry while simultaneously estimating $K$ distinct camera poses. We initialize a shared geometry latent $\mathbf{S}_{o}$ and $K$ independent pose latents $\{ \mathbf{S}_{uv}^{(k)} \}_{k=1}^K$. At each denoising step $t$, we predict the flow fields for both geometry and pose in parallel for each view. Let the output of the flow network for the $k$-th view be denoted as a concatenated vector of geometry and pose updates:
+\begin{equation}
+    [d_{o, t}^{(k)}, d_{uv, t}^{(k)}] = \sflow(\text{concat}(\mathbf{S}_{o}^t, \mathbf{S}_{uv}^{(k), t}), t, \image^{(k)}).
+\end{equation}
+To ensure geometric consistency across all observations, we aggregate the geometry updates while maintaining view-specific pose trajectories. The update rule at step $t$ becomes:
+\begin{equation}
+\begin{aligned}
+    \mathbf{S}_{o}^{t-1} &\leftarrow \text{Step}\left(\mathbf{S}_{o}^{t}, \frac{1}{K} \sum_{k=1}^K d_{o, t}^{(k)}\right), \\
+    \mathbf{S}_{uv}^{(k), t-1} &\leftarrow \text{Step}\left(\mathbf{S}_{uv}^{(k), t}, d_{uv, t}^{(k)}\right),
+\end{aligned}
+\end{equation}
+where $\text{Step}(\cdot)$ denotes the update rule of the flow sampler.
+
+In the second stage, with the geometry fixed, we apply a Multi-Diffusion strategy to the appearance latent $\mathbf{F}_{o}$. We maintain a single shared latent and update it using the averaged flow predictions from all $K$ views, conditioned on the poses estimated in the first stage:
+\begin{equation}
+    d_{\text{feat}, t}^{(k)} = \lflow(\mathbf{F}_{o}^t, \object, \pose^{k}, t, \image^{(k)}),
+\end{equation}
+\begin{equation}
+    \mathbf{F}_{o}^{t-1} \leftarrow \text{Step}\left(\mathbf{F}_{o}^{t}, \frac{1}{K} \sum_{k=1}^K d_{\text{feat}, t}^{(k)}\right).
+\end{equation}
+This averaging operation ensures that the generated 3D representation satisfies the visual constraints imposed by all input views simultaneously, yielding the SfM-like consistency shown in Figure~\ref{fig:mv_images}.
+
 
 \yima{Bingbing, try to work with Zibo and make sure notation,
 terminology, experiments etc are consistent with or complementary to
