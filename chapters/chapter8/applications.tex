@@ -2587,49 +2587,46 @@ we rely on statistical metrics to evaluate performance:
     indicates the image faithfully depicts the text description.
 \end{itemize}
 
-\paragraph{Advanced Architectures (SDXL and Flux).}
-To address limitations in resolution and prompt adherence, advanced
-architectures have evolved beyond the basic LDM. SDXL
-\cite{podell2023sdxl} introduces a dual-encoder strategy (combining
-CLIP and OpenCLIP) and Micro-Conditioning (embedding crop
-coordinates) to master high-resolution composition. Meanwhile, Flux
-\cite{blackforest2024flux} replaces the U-Net with a Multimodal
-Diffusion Transformer (MMDiT), processing text and visual tokens in a
-unified stream. By adopting the Flow Matching objective to straighten
-the generation trajectory and utilizing the T5-XXL encoder—which is
-significantly better at understanding sentence structure than
-CLIP—Flux achieves state-of-the-art performance in following complex,
-dense instructions.
+\paragraph{Advanced Text Conditioned Architectures (SDXL and Flux).}
+To address limitations in resolution and prompt adherence, advanced architectures have evolved beyond the basic LDM. SDXL \cite{podell2023sdxl} introduces a dual-encoder strategy to capture richer textual nuances, computing embeddings from both CLIP ViT-L and OpenCLIP ViT-bigG and concatenating them along the channel axis. Regarding data handling, SDXL employs Aspect Ratio Bucketing, grouping training images of similar aspect ratios into batches to prevent the model from learning to crop subjects arbitrarily. Furthermore, it implements Micro-Conditioning, where image resolution and crop coordinates are embedded and added to the time-step input, allowing the model to distinguish between centered and cropped subjects. 
 
-\subsection{Conditioning Mechanisms and Architectures}
-\label{subsec:cond_arch}
-
-To effectively inject the conditioning signal $c$ into the generative
-process, we require architectural mechanisms that can modulate the
-intermediate representations of the denoiser network. The choice of
-mechanism depends largely on the modality of $c$—whether it is
-semantic (text), structural (spatial layouts), or instance-specific
-(personalization)—and the desired fidelity.
-
-\paragraph{Semantic Conditioning via Cross-Attention.}
-For abstract semantic signals such as text prompts, we utilize a
-domain-specific encoder $\tau_\theta$ (e.g., CLIP or T5) to map the
-input $c$ into a sequence of embeddings. Following the Latent
-Diffusion Model (LDM) framework \cite{rombach2022high}, these
-embeddings are injected into the denoiser via a cross-attention
-mechanism. Formally, the training objective is modified to learn the
-conditional distribution by minimizing the reweighted variational lower bound:
+Meanwhile, Flux \cite{flux2024} represents a paradigm shift from the U-Net architecture to a Multimodal Diffusion Transformer (MMDiT). It processes text and visual tokens in a unified stream using Joint Attention blocks, enabled by modern transformer components like Rotary Positional Embeddings (RoPE) and RMSNorm for stability. Mathematically, Flux replaces standard diffusion with Rectified Flow Matching, simplifying the training target to predicting a straight-line velocity field $v_\theta$ between noise and data:
 \begin{equation}
-\mathcal{L}_{\text{LDM}} = \mathbb{E}_{\mathcal{E}(x), c, \epsilon
-\sim \mathcal{N}(0,1), t} \left[ \left\| \epsilon -
-\epsilon_\theta(z_t, t, \tau_\theta(c)) \right\|^2 \right],
-\label{eq:ldm_loss}
+    \mathcal{L}_{\text{RFM}} = \mathbb{E}_{t, x_1, x_0} \left[ \| v_\theta(x_t, t, c) - (x_1 - x_0) \|^2 \right],
 \end{equation}
-where $z_t$ is the noisy latent representation at time $t$. Within
-the backbone, the spatial image features $z$ act as queries $Q$,
-while the condition $\tau_\theta(c)$ provides keys $K$ and values
-$V$, allowing the model to synthesize content semantically aligned
-with the prompt.
+where the model $v_\theta$ predicts the velocity required to transport the noise distribution $x_0$ directly to the data distribution $x_1$ along a straight-line trajectory. This linearity significantly improves sampling efficiency and prompt adherence compared to the curved stochastic paths of traditional diffusion models.
+
+\subsection{Advanced Conditioning Mechanisms}
+\label{subsec:advanced_conditioning}
+
+While text-based conditioning effectively controls high-level semantics, it lacks the precision required for fine-grained spatial constraints or specific identity preservation. To address these limitations, we introduce advanced mechanisms that extend the standard pipeline to handle structural inputs and subject-specific customization.
+
+
+\paragraph{Structural and Spatial Control.}
+Text prompts are often geometrically ambiguous; describing a specific pose or layout in words is inefficient. To enable precise control, we require an architecture capable of injecting spatial signals $c_s$ (e.g., Canny edges, depth maps, or skeletons) without disrupting the pretrained semantic knowledge. ControlNet~\citep{zhang2023adding} solves this via a "locked-copy" strategy designed to prevent catastrophic forgetting while enabling end-to-end learning on small datasets.
+
+\textbf{Architecture and Connectivity.}
+ControlNet operates by cloning the parameters of a pretrained diffusion model. Specifically, it creates a trainable copy of the 12 encoder blocks and 1 middle block of the Stable Diffusion U-Net, while keeping the original parameters $\Theta$ completely locked. To match the dimension of the latent space ($64 \times 64$), the spatial condition $c_s$ (e.g., a $512 \times 512$ edge map) is first processed by a lightweight encoder $\mathcal{E}(\cdot)$ consisting of four convolution layers with $4 \times 4$ kernels and $2 \times 2$ strides, gradually increasing channels from 16 to 128.
+
+The critical innovation allowing these two streams to merge is the Zero Convolution—a $1 \times 1$ convolutional layer initialized with both weights $W$ and bias $B$ set strictly to zero. Formally, let $\mathcal{F}(\cdot; \Theta)$ be a pretrained block and $\mathcal{F}(\cdot; \Theta_c)$ be its trainable copy. The output $y_c$ is injected back into the main network's skip connections via:
+\begin{equation}
+    y_c = \mathcal{F}(\x; \Theta) + \mathcal{Z}\left( \mathcal{F}(\x + \mathcal{Z}(c_s; \theta_{z1}); \Theta_c); \theta_{z2} \right).
+    \label{eq:controlnet}
+\end{equation}
+Because the Zero Convolution $\mathcal{Z}$ is initialized to zero, the term $\mathcal{Z}(\cdot) = 0$ at the first training step. Consequently, the gradient for the weight $W$ becomes:
+\begin{equation}
+    \frac{\partial \mathcal{Z}(I; \{W, B\})}{\partial W_{i,j}} = I_{p,i} \neq 0,
+\end{equation}
+where $I$ is the input feature map. This proves that while the output is zero (preserving the original model's behavior perfectly at initialization), the gradient is non-zero, allowing learning to commence immediately.
+
+\textbf{Training Dynamics and Experiments.}
+ControlNet is trained to minimize the standard diffusion objective, but with the additional spatial condition $c_f$ (feature map of $c_s$) injected into the noise predictor. The specific learning objective is:
+\begin{equation}
+    \mathcal{L} = \mathbb{E}_{\z_0, t, \vc_t, c_f, \epsilon \sim \mathcal{N}(0,1)} \left[ \| \epsilon - \epsilon_\theta(\z_t, t, \vc_t, c_f) \|^2 \right],
+\end{equation}
+where $\vc_t$ represents the text prompt conditioning.
+A unique training phenomenon observed is "sudden convergence." During the initial thousands of steps, the model generates images consistent with the text but ignoring the spatial condition. Suddenly, the model learns to interpret the condition, and the error drops sharply. To force the model to rely on these structural signals rather than just the text (which might contradict the edge map), a crucial training strategy involves CFG-Dropout: randomly replacing 50\% of the text prompts $\vc_t$ with empty strings during training. This compels the encoder to extract semantic meaning directly from the spatial condition $c_f$. Empirically, ControlNet is highly efficient; it requires only $\sim 23\%$ more GPU memory and $\sim 34\%$ more time per iteration compared to standard fine-tuning, yet it can learn robust control from datasets as small as 1,000 samples without overfitting.
+
 
 \paragraph{Structural and Image-Driven Control.}
 While cross-attention excels at semantics, it often fails to capture
