@@ -1747,6 +1747,7 @@ posterior sampling).
 \end{table}
 
 \section{Conditional Inference with Paired Data and Measurements}
+\label{sec:paired-data}
 In many practical applications, we do not know either the
 distribution of the data $\x$ of interest or the explicit
 relationship between the data and certain observed attributes $\y$ of
@@ -2806,8 +2807,10 @@ issues to sort out:
         \Cref{ch:lossy-compression,ch:consistent-representations}, together with
         different denoising backbones in various combinations. The key questions
         here are of \textit{expressivity}, getting the best conditional
-        denoising performance, and \textit{efficiency}, getting the best
-        performance per unit of training data.
+        denoising performance; \textit{efficiency}, getting the best
+        performance per unit of training data; and \textit{stability},
+        guaranteeing that the training process converges quickly without
+        collapse.
 \end{enumerate}
 
 We will cover these three issues in detail below, providing guidance on how to
@@ -2831,40 +2834,179 @@ explore the design space and, where possible, generally-useful prescriptions.
     to explainable conditional sampling operators for the data, which
 could justify or improve the cross attention operator? }
 
-The space of possible designs for a denoiser for $(\vx_t, \vy)$ is vast, and
-almost certainly it has not been exhaustively explored by prior research. Hence
-it is invaluable to begin from first principles and build our design outwards.
-In motivating our development, we will make crucial use of two thought
-experiments. The first is based on the intuitions we have developed in our study
-of consistent representation learning in
-\Cref{ch:lossy-compression,ch:consistent-representations}, and it will lead us
-to a general information-theoretic criterion for learning useful representations
-of paired data with distinct (but not independent) modalities.
-The second is based on the simple mixture-of-Gaussians model in
-\Cref{example:denoising-gaussian-mixture-cfg-parameterization}, and it will lead
-us to a natural simplification of the vast space of possible per-modality
-embedding designs, and in turn a simple practical criterion for learning the
-embeddings.
+Although we do not know the precise relationship between $\vx$ and $\vy$ in the
+general paired data setting, in all practical settings of interest, they have
+significant correlations. For example, when the conditioning signal $\vy$ is
+a ``caption'' describing the image $\vx$ in natural language, it is easy to
+imagine a human artist being able to produce an accurate sketch of $\vx$ based
+solely on a high-quality caption.
+In our probabilistic setting, one natural way to quantify these
+``correlations'' is in terms of the mutual information, which we saw previously
+in \Cref{ch:lossy-compression} (\Cref{eq:information-entropy}):
+\begin{equation}\label{eq:mutual-info-ch7}
+    I(\vx; \vy) = h(\vx) - h(\vx \mid \vy).
+\end{equation}
+The mutual information \eqref{eq:mutual-info-ch7} is a purely
+information-theoretic quantity that does not depend on modality-specific aspects
+of $\vx$ and $\vy$.
+Hence it offers a natural criterion for learning a useful representation of
+either input $\vx$, $\vy$: one simply seeks to learn, say for $\vx$,
+a representation $\vz = f(\vx)$ that preserves the mutual information, so that
+$I(\vz; \vy) \approx I(\vx; \vy)$.
+That is:
+\begin{equation}\label{eq:infomax-x-abstract}
+    \text{Learn} \enspace \vz = f(\vx) \enspace \text{such that} \enspace I(\vz;
+    \vy) \approx I(\vx; \vy).
+\end{equation}
+Actually, we can be even more prescriptive here. For an encoder $f$ which is
+deterministic (matching all the cases we have studied throughout
+\Cref{ch:lossy-compression,ch:consistent-representations}), a fundamental result
+in information theory known as the \textit{data processing inequality} tells us
+that processing $\vx$ with $f$ to produce $\vz = f(\vx)$ changes the mutual
+information in a predictable way: \textit{it can only reduce it}.
+\begin{theorem}\label{thm:dpi}
+    Consider random variables $\vy, \vx, \vz$ defined such that $\vz$ is
+    independent of $\vy$, conditioned on $\vx$.\footnote{In other words, the
+    random variables form a Markov chain $\vy \to \vx \to \vz$.} Then the
+    \textit{data processing inequality} holds:
+    \begin{equation}\label{eq:dpi-ch7}
+        I(\vx; \vy) \geq I(\vz; \vy).
+    \end{equation}
+    \begin{proof}
+        Consider the mutual information $I(\vy; \vx, \vz)$ between $\vy$ and
+        $(\vx, \vz)$. Because $\vz$ is independent of $\vy$ conditioned on
+        $\vx$, we have
+        \begin{equation*}
+            h(\vy \mid \vx, \vz) = h(\vy \mid \vx),
+        \end{equation*}
+        so $I(\vy; \vx, \vz) = I(\vy; \vx)$. Meanwhile, we have by Bayes' rule
+        that
+        \begin{equation*}
+            p_{\vy \mid \vx, \vz} = p_{\vy \mid \vz}
+            % \frac{p_{\vx \mid \vy, \vz}}{p_{\vx \mid \vz}},
+            \frac{p_{\vy, \vx, \vz}}{p_{\vy, \vz} p_{\vx \mid \vz}},
+        \end{equation*}
+        which implies by the definition of conditional differential entropy that
+        \begin{equation*}
+            I(\vy; \vx, \vz) = 
+            I(\vy; \vz)
+            - \bE_{\vx, \vy, \vz}\left[ \log \left( 
+                % \frac{p_{\vx \mid \vz}}{p_{\vx \mid \vy, \vz}} 
+                \frac{p_{\vx \mid \vz} p_{\vy, \vz}}{p_{\vy, \vx, \vz}} 
+            \right)\right].
+        \end{equation*}
+        Applying Jensen's inequality to the expectation in the previous line
+        then implies the claim, because $\log$ is a concave function (and the
+        mutual information is symmetric, i.e.\ $I(\vx; \vy) = I(\vy; \vx)$).
+    \end{proof}
+\end{theorem}
 
-\paragraph{Learning representations for paired data.}
+For a deterministic encoder $f$, $\vz = f(\vx)$ is always independent of $\vy$
+when conditioned on $\vx$.
+The data processing inequality therefore suggests the following computational
+procedure to find the encoder $f$: \textit{seek to maximize the mutual
+information between the representation and the conditioning signal}.
+\Cref{eq:infomax-x-abstract} then leads to the objective
+\begin{equation}\label{eq:infomax-x}
+    \max_{f}\, I(f(\vx); \vy).
+\end{equation}
+This is known as the \textit{Infomax principle} \cite{infomax}, and it dates to the
+earliest years of representation learning.
 
-\paragraph{Joint embedding models: motivation and consequences.}
+\paragraph{Computational considerations in applying the Infomax principle.}
+
+There are two key conceptual issues to keep in mind when thinking about how to
+apply the (abstract) Infomax principle \eqref{eq:infomax-x} for learning
+a representation. The first is that in general it is computationally hard to
+estimate the mutual information, which constitutes the objective in
+\eqref{eq:infomax-x}.
+As we discussed in the context of rate distortion and lossy coding when we introduced
+the mutual information in \Cref{ch:lossy-compression}, the mutual information
+can be relaxed to remain well-defined even when $\vx$ and $\vy$ are
+low-dimensional and have differential entropy approaching $-\infty$ (e.g., by
+connection to the Gaussian rate reduction function that we have studied in
+\Cref{ch:lossy-compression,ch:deep-networks,ch:consistent-representations}).
+Moreover, empirically such relaxations have non-worst-case statistical
+properties in practice, as we saw in the experiments of
+\Cref{ch:lossy-compression}; and the accuracy of these approximations can be
+improved by incremental processing, as we saw in \Cref{ch:deep-networks}.
+This makes a criterion like \Cref{eq:infomax-x} an excellent foundation for
+learning representations of paired data $(\vx, \vy)$.
+
+The second issue to keep in mind is that for the objective \eqref{eq:infomax-x}
+to represent a sensible criterion for learning $f$, it is necessary that $f$
+itself is parameterized in a specific way, and/or that some additional
+structural enforcement is done on the representations $f(\vx)$. Indeed, if $f$
+is completely unconstrained, there are simple trivial solutions to
+\eqref{eq:infomax-x} that do not correspond to useful representations: for
+example, just take $f(\vx) = \vx$ to be the identity!
+We discussed principled techniques for structuring the representation space in
+\Cref{ch:consistent-representations} when we discussed autoencoding and closed
+loop transcription; many of these techniques can be brought to bear in our
+present joint embedding setting, and we will detail this further later in the
+section, when we move to practical implementation.
+
+\paragraph{Joint embedding with the Infomax principle.}
+
+Now, the question of \textit{joint} representation of $(\vx, \vy)$ remains.
+Applying the data processing inequality once more, we obtain for another encoder
+$g$ that produces a representation of $\vy$ that
+\begin{equation*}
+    I(\vx; \vy) \geq I(f(\vx); \vy) \geq I(f(\vx); g(\vy)).
+\end{equation*}
+The joint objective
+\begin{equation}\label{eq:infomax-x-y}
+    \max_{f, g}\, I(f(\vx); g(\vy))
+\end{equation}
+is then a well-founded consequence of the Infomax principle.
+
+To design the encoders $f$ and $g$, recall the intuition that we obtained
+through our work in
+\Cref{example:denoising-gaussian-mixture-cfg-parameterization}. There, we saw
+that in the case of a mixture-of-Gaussians model for $\vx$, with the
+conditioning signal $y$ identifying which specific mixture component generates
+the observation, a flexible denoiser architecture could be constructed via
+a suitable embedding of the class label $y$ into the \textit{same space} as the
+data $\vx$.
+More precisely, such an embedding $\vu_y \in \R^D$ allows, when correlated
+with the embeddings $\vU_{\vx}$ of $\vx \in \R^{D}$ (generally a matrix) via $\vu_y^\top
+\vU_{\vx}$, to `pick out' only the embeddings relevant to the correct mixture
+component of the distribution.
+How exactly to design these layers for use in neural networks being trained on
+more
+complex nonlinear high-dimensional data is a challenging question that we will dig into in
+more detail below. But a necessary condition is clear: the embeddings
+$f$ and $g$ should map their inputs to a \textit{common embedding space}, say
+$\R^d$, to facilitate downstream comparison when performing conditional
+sampling.
+This leads to the objective
+\begin{equation}\label{eq:infomax-joint}
+    \max_{f : \R^{D_{\vx}} \to \R^{d}, g: \R^{D_{\vy}} \to \R^d}\, 
+    I(f(\vx); g(\vy)).
+\end{equation}
+
+The next step is to instantiate a suitable computationally-convenient relaxation
+of the mutual information in \eqref{eq:infomax-joint} for use with large-scale
+datasets.
+
+
 
 \subsubsection{Practical Prescription for Learning Joint Embeddings: CLIP}
 
 A concrete and highly influential realization of learning joint embeddings for paired data is the method of Contrastive Language-Image Pre-training (CLIP) \cite{radford2021learning}. 
 Take the simple case of image-text pairs $[(\x_i, \y_i)]_{i=1}^N$ sampled from a dataset $\mathcal{D}$, where $\x_i$ is an image and $\y_i$ is a text caption.
-CLIP trains two encoders—an image encoder $f_{\theta}(\x)$ and a text encoder $g_{\phi}(\y)$—to map paired samples into a shared $d$-dimensional unit sphere.  
-To achieve this, we can adopt a simple symmetric cross-entropy loss that pushes the cosine similarity of matched pairs $(f_{\theta}(\x_i),g_{\phi}(\y_i))$ closer together while repelling unmatched pairs:
+CLIP trains two encoders—an image encoder $f_{\theta}(\x)$ and a text encoder $g_{\plainphi}(\y)$—to map paired samples into a shared $d$-dimensional unit sphere.  
+To achieve this, we can adopt a simple symmetric cross-entropy loss that pushes the cosine similarity of matched pairs $(f_{\theta}(\x_i),g_{\plainphi}(\y_i))$ closer together while repelling unmatched pairs:
 \begin{equation}
-    \mathcal{L}_{\mathrm{CLIP}} = \mathbb{E}_{[(\x_i, \y_i)]_{i=1}^N \sim \mathcal{D}} \left[ - \log \frac{\exp\left( \frac{f_{\theta}(\x_i)^\top g_{\phi}(\y_i)}{\|f_{\theta}(\x_i)\|_2 \|g_{\phi}(\y_i)\|_2} \right)}{\sum_{j=1}^N \exp\left( \frac{f_{\theta}(\x_i)^\top g_{\phi}(\y_j)}{\|f_{\theta}(\x_i)\|_2 \|g_{\phi}(\y_j)\|_2} \right)} \right], \label{eq:clip-loss}
+    \mathcal{L}_{\mathrm{CLIP}} = \mathbb{E}_{[(\x_i, \y_i)]_{i=1}^N \sim \mathcal{D}} \left[ - \log \frac{\exp\left( \frac{f_{\theta}(\x_i)^\top g_{\plainphi}(\y_i)}{\|f_{\theta}(\x_i)\|_2 \|g_{\plainphi}(\y_i)\|_2} \right)}{\sum_{j=1}^N \exp\left( \frac{f_{\theta}(\x_i)^\top g_{\plainphi}(\y_j)}{\|f_{\theta}(\x_i)\|_2 \|g_{\plainphi}(\y_j)\|_2} \right)} \right], \label{eq:clip-loss}
 \end{equation}
 From the perspective of mutual information maximization, CLIP is a tractable surrogate for the lower bound on the mutual information between the image and text representations:
 \begin{equation}
-    I\!\big(f_{\theta}(\x),g_{\phi}(\y)\big) \geq - \mathcal{L}_{\mathrm{CLIP}}.
+    I\!\big(f_{\theta}(\x),g_{\plainphi}(\y)\big) \geq - \mathcal{L}_{\mathrm{CLIP}}.
 \end{equation}
 
-Thus, CLIP provides a practical recipe for learning joint embeddings for paired data that increases the mutual information between the paired sample. Empricially, CLIP has been shown to be effective at learning joint embeddings for image-text pairs, and has been used in a variety of applications, including image captioning, image-text retrieval, image generation and beyond. We will see more specific examples in \Cref{ch:applications}.
+Thus, CLIP provides a practical recipe for learning joint embeddings for paired
+data that increases the mutual information between the paired sample. Empirically, CLIP has been shown to be effective at learning joint embeddings for image-text pairs, and has been used in a variety of applications, including image captioning, image-text retrieval, image generation and beyond. We will see more specific examples in \Cref{ch:applications}.
 
 
 \subsubsection{Application to Caption-Conditioned Image Generation}
@@ -2888,7 +3030,8 @@ formed the basis for the original open-source Stable Diffusion implementation
 \cite{rombach2022high}.
 In this setting, the embedding and subsequent conditioning is performed not on
 a class label, but a text prompt, which describes the desired image content
-(\Cref{fig:text-to-image}). We denote the raw tokenized text prompt as $\vY \in
+(\Cref{fig:text-to-image}). 
+We denote the raw tokenized text prompt as $\vY \in
 \bR^{D_{\mathrm{text}} \times N}$ in this context, since it
 corresponds to a sequence of
 vectors---in \Cref{sec:clm_text}, we describe the process of encoding a text
@@ -3456,6 +3599,16 @@ approximations as in DPS, such as TDS \cite{wu2023practical}.
 For more on this area, we recommend \cite{zheng2025inversebench}, which
 functions simultaneously as a survey and a benchmark of several popular methods
 on specific scientific inverse problem datasets.
+
+
+\paragraph{History of the Infomax principle.}
+The Infomax principle \cite{infomax} that we introduced in our discussion of
+joint embedding learning and CLIP in \Cref{sub:text-cond} is a well-known and
+important foundation for much of modern research into unsupervised
+representation learning. For further reading, we refer to 
+\cite{Van_den_Oord2018-qf}, which our conceptual discussion in \Cref{sub:text-cond} expands upon, 
+and \cite{Oko2025-wk}, which details further important theoretical issues associated with
+optimizing Infomax-type objectives from finite samples.
 
 \section{Exercises and Extensions}
 
