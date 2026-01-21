@@ -1477,12 +1477,182 @@ contained in the parameter set \(\theta\). The vocabulary \(\cV\) and tokenizer 
 \paragraph{Task-specific head.} The text transformer adopts a linear head similar to the one in \cref{sub:clip_vision_tower}.
 
 \subsection{Optimization Strategy}
+We train CLIP using a standard end-to-end stochastic optimization
+procedure. In particular, CLIP can be optimized with essentially
+any mainstream SGD-based optimizer (e.g., SGD with momentum, AdamW). Below we present a generic process.
 
-\subsection{Evaluation Methodology}
+At each timestep \(k\), we:
+\begin{itemize}
+    \item \textbf{Subsample paired data.} Sample a minibatch of \(n\)
+    paired examples
+    \[
+        \{(\vX_i^{(k)}, \vT_i^{(k)})\}_{i=1}^{n} \subseteq \cX \times \cT,
+    \]
+    where \(\vX_i^{(k)}\) is an image and \(\vT_i^{(k)}\) is its
+    associated text.
+
+    \item \textbf{Compute latent representations.} For each pair
+    \((\vX_i^{(k)}, \vT_i^{(k)})\), compute an image embedding via the
+    vision encoder \(f_\theta^{I}\) and a text embedding via the text
+    encoder \(f_\phi^{T}\):
+    \begin{equation}
+        \vz_{i}^{I,(k)} \doteq z_{\theta}^{I}(\vX_i^{(k)}) \doteq \frac{f_{\theta}^{I}(\vX_i^{(k)})}{\|f_{\theta}^{I}(\vX_i^{(k)})\|_2},
+        \qquad
+        \vz_{i}^{T,(k)} \doteq z_{\phi}^{T}(\vT_i^{(k)}) \doteq \frac{f_{\phi}^{T}(\vT_i^{(k)})}{\|f_{\phi}^{T}(\vT_i^{(k)})\|_2}.
+    \end{equation}
+
+    \item \textbf{Form the stochastic CLIP loss.} Using the two sets
+    of normalized latent features \(\{\vz_{i}^{I,(k)}\}_{i=1}^{n}\) and
+    \(\{\vz_{i}^{T,(k)}\}_{i=1}^{n}\), construct the minibatch
+    contrastive objective (symmetric text\(\to\)image and
+    image\(\to\)text directions):
+    \begin{equation}
+        \min_{\theta, \phi}
+        \hat{\cL}_{\text{CLIP}}^{(k)}
+        \doteq
+        -\frac{1}{2n}\left(
+        \sum_{i=1}^{n} p_{\theta,\phi}^{T\to I}(i \mid i)
+        \;+\;
+        \sum_{i=1}^{n} p_{\theta,\phi}^{I\to T}(i \mid i)
+        \right).
+    \end{equation}
+
+    \item \textbf{Compute gradients.} Compute the gradients of the
+    stochastic loss with respect to both parameter sets:
+    \begin{equation}
+        \nabla_{\theta}\hat{\cL}_{\text{CLIP}}^{(k)}(\theta,\phi),
+        \qquad
+        \nabla_{\phi}\hat{\cL}_{\text{CLIP}}^{(k)}(\theta,\phi).
+    \end{equation}
+
+    \item \textbf{Update parameters.} Apply one step of an
+    optimization algorithm to \((\theta,\phi)\), yielding the
+    iteration
+    \begin{equation}
+        (\theta^{(k+1)}, \phi^{(k+1)})
+        \doteq
+        \textsc{OptUpdate}^{(k)}\!\left(
+        (\theta^{(k)}, \phi^{(k)});
+        \nabla_{\theta}\hat{\cL}_{\text{CLIP}}^{(k)},
+        \nabla_{\phi}\hat{\cL}_{\text{CLIP}}^{(k)}
+        \right).
+    \end{equation}
+\end{itemize}
+
+
+\subsection{Evaluation Methodology}\label{sub:clip_eval}
+Because CLIP does not introduce a novel architecture for either the vision encoder or the text encoder—both follow standard, widely used model formats—it can be evaluated using most generic evaluation methodologies for vision and language encoders. For example, as mentioned earlier, one can perform linear probing by training a lightweight classification head and use classification accuracy to assess the quality of the learned representations.
+
+However, such approaches typically require fine-tuning on an additional labeled dataset. In contrast, CLIP’s particular design enables a classification method that requires no fine-tuning on any extra dataset (i.e., zero-shot classification). We now focus on explaining this zero-shot evaluation protocol.
+
+Recall that in a standard \(n\)-way image classification setup, we are given a dataset of images
+\(\{\vX_i\}_{i=1}^{N}\subseteq\cI\), each annotated with one of \(n\) class labels from the set
+\(\cL \doteq \{\ell_1,\ldots,\ell_n\}\) (e.g., \(\ell_j \in \{\text{cat},\text{dog},\ldots\}\)).
+Our goal is to build a prediction pipeline \(P\), leveraging a pre-trained model, such that
+\(P:\cI\to\{1,\ldots,n\}\) maps each image \(\vX_i\) to a predicted class index
+\(\hat{y}_i \doteq P(\vX_i)\). Writing the ground-truth class label as its index \(y_i \in \{1,\ldots,n\}\),
+the (top-1) classification accuracy of \(P\) on this dataset is then computed as
+\[
+\frac{1}{N}\sum_{i=1}^{N}\mathbf{1}\{\hat{y}_i = y_i\}.
+\]
+
+So the question is naturally how CLIP builds such a pipeline \(P\) without any additional fine-tuning. 
+At a high level, CLIP first uses its text encoder \(f_{\phi}^{T}\) to construct a \emph{text dictionary}
+\(\vD\in\R^{n\times d}\), whose \(j\)-th row stores the normalized latent representation of the \(j\)-th class label.
+Concretely, for each class \(\ell_j \in \cL\), we form a textual description (prompt) \(\vT_j\) (e.g.,
+``a photo of a \(\ell_j\)''), and compute its normalized embedding
+\(\vz_j \doteq \frac{f_{\phi}^{T}(\vT_j)}{\|f_{\phi}^{T}(\vT_j)\|_2} \in \R^{d}\). Stacking these row-wise yields
+\[
+\vD \doteq 
+\mat{(\vz_1)^{\top}\\ \vdots \\ (\vz_n)^{\top}}
+\in \R^{n\times d},
+\]
+
+Given an image \(\vX_i \in \cI\), we compute its image representation via the vision encoder and normalize it as
+\[
+\vz_i \doteq \frac{f_{\theta}^{I}(\vX_i)}{\|f_{\theta}^{I}(\vX_i)\|_2} \in \R^{d}.
+\]
+We then form a similarity vector
+\[
+\vd_i \doteq \vD\,\vz_i \in \R^{n},
+\]
+whose \(j\)-th entry \(\vd_i[j]\) is the cosine similarity between the \(i\)-th image and the \(j\)-th class label
+in the shared latent space. By the CLIP training objective, images are encouraged to be more similar to their
+matching texts than to mismatched texts; hence a larger cosine similarity indicates higher compatibility between
+\(\vX_i\) and class \(\ell_j\). Therefore, we predict the class index by
+\[
+\hat{y}_i \doteq \arg\max_{j \in \{1,\ldots,n\}} \vd_i[j].
+\]
+Finally, we can calculate the classification accuracy as mentioned above. 
+
+This zero-shot decision protocol is not limited to classification, but also applies naturally to \emph{retrieval} tasks,
+where the goal is to return the most relevant items from a large database given a query (e.g., retrieve the most
+relevant images for a text query, or the most relevant texts for an image query). For instance, in text-to-image
+retrieval, instead of building a dictionary from class-name prompts, we build an \emph{image dictionary} by encoding
+and normalizing all database images \(\{\vX_m\}_{m=1}^{M}\), stacking their embeddings into
+\(\vD\in\R^{M\times d}\). Given a query text \(\vT\), we compute its normalized embedding
+\(\vz \doteq f_{\phi}^{T}(\vT)/\|f_{\phi}^{T}(\vT)\|_2\), form similarity scores
+\(\vd \doteq \vD\vz\in\R^{M}\), and then rank images by these scores (equivalently, return the top-\(K\)
+indices). More broadly, this simple embedding-and-dot-product pipeline is arguably the most distinctive and
+practically important feature of CLIP.
+
+
 
 \subsection{Experimental Setup and Results}
 
-\subsection{Follow-up Works}\label{sub:follow-up}
+Next, we present results from the original CLIP paper comparing CLIP to a supervised ResNet baseline on several classic classification benchmarks. Across all benchmarks, CLIP is evaluated using the zero-shot classification protocol described in \Cref{sub:clip_eval}. Full details of the ResNet experimental setup are provided in the referenced source; here, we briefly introduce the evaluation datasets and summarize CLIP’s training and evaluation settings relevant to these comparisons.
+
+\paragraph{Evaluation Data}
+\begin{itemize}
+    \item \textbf{CIFAR-10.}
+    CIFAR-10 is a widely used small-scale image classification benchmark consisting of 60{,}000 RGB images of size \(32\times 32\) across 10 classes (6{,}000 images per class).
+    It is typically split into 50{,}000 training images and 10{,}000 test images.
+
+    \item \textbf{CIFAR-100.}
+    CIFAR-100 has the same overall size and image resolution as CIFAR-10 (60{,}000 RGB \(32\times 32\) images with a 50{,}000/10{,}000 train/test split), but it is more challenging because it contains 100 fine-grained classes (600 images per class).
+    The 100 classes are additionally grouped into 20 superclasses.
+
+    \item \textbf{PASCAL VOC 2007 (VOC2007).}
+    PASCAL VOC 2007 is a classic computer vision benchmark for object recognition, supporting tasks such as image classification, object detection, and segmentation.
+    It focuses on 20 object categories (e.g., person, car, dog).
+
+    \item \textbf{ImageNet-1K.}
+    ImageNet-1K is a subset of ILSVRC 2012 containing 1{,}000 object classes.
+    This subset includes 1{,}281{,}167 training images, 50{,}000 validation images, and 100{,}000 test images, and has played a central role in large-scale visual recognition and pretraining.
+\end{itemize}
+
+\paragraph{Model setup.}
+In the CLIP models demonstrated here, Vision Transformer is adopted as  the vision encoder \(f_{\theta}^{I}\) and is instantiated as one of three ViT variants: ViT-B/32, ViT-B/16, or ViT-L/14. Here, \(\text{B}\) (``Base'') and \(\text{L}\) (``Large'') specify the transformer width/depth (e.g., ViT-B typically uses 12 transformer blocks with embedding dimension \(d=768\) and 12 attention heads, whereas ViT-L uses 24 blocks with \(d=1024\) and 16 heads), while the suffix \(/32\), \(/16\), and \(/14\) denotes the \emph{patch size} in pixels used to patchify the input image . Smaller patch sizes (e.g., 16 or 14) yield more tokens per image at a fixed resolution, increasing compute but often improving accuracy due to finer spatial granularity.
+
+\paragraph{Optimization setup.}
+All ViT-based CLIP models are trained for 32 epochs using the Adam optimizer with decoupled weight decay (i.e., AdamW-style regularization), where weight decay is applied to all parameters except gains and biases. The learning rate is decayed using a cosine schedule. The learnable temperature parameter \(\tau\) (used to scale the contrastive logits) is initialized to the equivalent of \(0.07\), and is clipped to prevent scaling the logits by more than 100, which is found necessary for training stability. Finally, training uses a very large mini-batch size of \(32{,}768\).
+
+\paragraph{Results}\Cref{tab:clip_vs_resnet} reports zero-shot top-1 accuracy of three CLIP ViT variants (B/32, B/16, L/14) and compares them to supervised ResNet-50 and ResNet-101 baselines. 
+Across all four datasets, CLIP consistently outperforms the supervised ResNets: for example, CLIP ViT-B/16 improves over ResNet-50 from \(91.8\to 96.2\) on CIFAR-10, \(74.5\to 83.1\) on CIFAR-100, \(83.8\to 89.2\) on VOC2007, and \(74.3\to 80.2\) on ImageNet. 
+Scaling the CLIP backbone further yields additional gains, with ViT-L/14 reaching \(98.0\) on CIFAR-10, \(87.5\) on CIFAR-100, \(89.6\) on VOC2007, and \(83.9\) on ImageNet. 
+Nevertheless, this table should be interpreted as a comparison between two \emph{systems} rather than a controlled backbone ablation: CLIP benefits from large-scale image--text pretraining and is evaluated via zero-shot prompting, whereas the ResNet baselines rely on supervised pretraining and require labeled data to fit a probe on each benchmark. 
+Thus, the consistent margins primarily demonstrate the strength of CLIP's transferable representations under the zero-shot protocol, rather than establishing a purely architecture- or data-matched superiority of ViT over ResNet.
+
+\begin{table}[t]
+\centering
+\begin{tabular}{llcccc}
+\hline
+Backbone & Variant & CIFAR-10 & CIFAR-100 & VOC2007 & ImageNet \\
+\hline
+CLIP-ViT & B/32 & 95.1 & 80.5 & 87.7 & 76.1 \\
+CLIP-ViT & B/16 & 96.2 & 83.1 & 89.2 & 80.2 \\
+CLIP-ViT & L/14 & 98.0 & 87.5 & 89.6 & 83.9 \\
+\hline
+ResNet & 50  & 91.8 & 74.5 & 83.8 & 74.3 \\
+ResNet & 101 & 93.0 & 77.2 & 84.4 & 75.8 \\
+\hline
+\end{tabular}
+\caption{Performance on downstream datasets for various CLIP backbones and ResNet baselines.}
+\label{tab:clip_vs_resnet}
+\end{table}
+
+% \subsection{Follow-up Works}\label{sub:follow-up}
+
 
 \section{Supervised Image Classification}\label{sec:image_classification}
 
