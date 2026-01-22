@@ -2827,81 +2827,68 @@ these approaches, enabling a single model to handle diverse
 conditions—from sparse points to dense depth maps—within a shared
 parameter-efficient subspace.
 
+
 \paragraph{Subject-Driven Personalization.}
-A distinct challenge in conditional generation is
-"personalization"—adapting the model to synthesize specific subjects
-(e.g., a specific person or product) across varied contexts while
-preserving their key identity features. Early approaches like
-DreamBooth \cite{ruiz2023dreambooth} address this by fine-tuning the
-model weights to bind a unique identifier token (e.g., "[V]") to the
-subject. To prevent "catastrophic forgetting," where the model loses
-its ability to generate generic instances of the class (e.g.,
-forgetting what a normal dog looks like), the objective function
-includes a class-specific prior preservation loss:
+While foundational models possess a vast semantic prior, they lack the ability to synthesize specific subject instances (e.g., a user's specific cat) consistently across different contexts. To address this, DreamBooth \citep{ruiz2023dreambooth} introduces a "personalization" fine-tuning protocol. The core challenge is implanting a new subject into the model's output domain without "catastrophic forgetting"—where the model loses its understanding of the general class (e.g., forgetting what a generic cat looks like) or suffers from "language drift" (overwriting the word "cat" with the specific cat's features).
+
+\textbf{Identifier and Data Strategy.}
+Unlike standard training which requires millions of pairs, DreamBooth operates on a "few-shot" dataset provided by the user, typically containing just 3--5 images of the subject. To bind this subject to the model's text space, a unique identifier $[V]$ is required. The authors propose a rare-token selection strategy: rather than using random characters (which might be tokenized into common letters with strong priors), the method searches the tokenizer's vocabulary for rare token sequences (e.g., in the T5-XXL tokenizer range $\{5000, \dots, 10000\}$) that have weak semantic associations. This identifier is always paired with a coarse Class Noun (e.g., "a $[V]$ cat") in the prompt. This "tethering" is crucial: it leverages the model's strong prior for the class (knowing how to render a "cat" in various poses) while binding the specific identity features to the identifier $[V]$.
+
+\textbf{Prior Preservation Training.}
+To prevent the model from overfitting to the few-shot images and losing diversity, DreamBooth employs an autogenous class-specific prior preservation loss. As illustrated in Figure \ref{fig:dreambooth_pipeline}, the training process minimizes a combined objective:
 \begin{equation}
-\mathcal{L}_{\text{DB}} = \mathbb{E}_{z_t, c, \epsilon, t} \left[ \|
-    \epsilon - \epsilon_\theta(z_t, t, c) \|^2 + \lambda \| \epsilon -
-\epsilon_\theta(z'_t, t, c_{pr}) \|^2 \right].
-\label{eq:dreambooth}
+    \mathcal{L}_{\text{DB}} = \mathbb{E}_{\z_t, \vc, \epsilon, t} \left[ \underbrace{\| \epsilon - \epsilon_\theta(\z_t, t, \vc_{\text{subj}}) \|^2}_{\text{Reconstruction Loss}} + \lambda \underbrace{\| \epsilon - \epsilon_\theta(\z'_t, t, \vc_{\text{prior}}) \|^2}_{\text{Prior Preservation Loss}} \right].
+    \label{eq:dreambooth}
 \end{equation}
-Here, the first term minimizes the reconstruction error for the
-specific subject images conditioned on the identifier $c$, while the
-second term serves as a regularizer. It enforces that the model
-maintains low error on generic class images generated with a prior
-prompt $c_{pr}$ (e.g., "a dog"), thereby anchoring the model in its
-original semantic space.
+The first term fine-tunes the model weights (typically the entire U-Net and text encoder) to reconstruct the subject images conditioned on the unique prompt $\vc_{\text{subj}}$ (e.g., "a $[V]$ cat"). The second term acts as a regularizer: it supervises the model with its own generated samples of the generic class $\vc_{\text{prior}}$ (e.g., "a cat"). This forces the model to retain its original understanding of the class distribution, ensuring that the identifier $[V]$ learns the specific subject nuances while the class noun "cat" remains generic.
 
-While effective, DreamBooth requires computationally expensive
-full-model fine-tuning. To improve efficiency, Custom Diffusion
-\cite{kumari2023multi} demonstrated that updating only the key and
-value projection matrices in the cross-attention layers is sufficient
-to encode new concepts, significantly reducing the parameter
-overhead. More recently, the field has shifted toward "tuning-free"
-architectures such as InstantID \cite{wang2024instantid} and
-PhotoMaker \cite{li2024photomaker}. Instead of iterative
-optimization, these methods utilize an external ID-Encoder (typically
-based on face recognition backbones) to extract a high-fidelity
-identity embedding. This embedding is then injected via decoupled
-cross-attention or stacked into the prompt feature space, enabling
-zero-shot personalization of arbitrary subjects without the need for
-test-time gradient updates.
 
-\subsection{Classifier-Free Guidance (CFG)}
-\label{subsec:cfg}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/db_pipeline.pdf}
+    \caption{\textbf{The training and inference pipeline of DreamBooth.} During \textit{subject-driven finetuning}, the text-to-image model is updated using a combined loss: a reconstruction loss to learn the specific subject (e.g., "[V] cat") and a prior preservation loss to maintain generic class knowledge (e.g., "a cat"). At \textit{inference}, the personalized model can generate the specific subject in novel contexts (e.g., "laying on a wooden table") using the unique identifier.}
+    \label{fig:dreambooth_pipeline}
+\end{figure}
 
-While the architectural mechanisms described above enable conditional
-training, the resulting samples often suffer from weak alignment with
-the prompt due to the dominance of unconditional modes in the data
-distribution. To strictly enforce alignment, the standard approach is
-to employ Classifier-Free Guidance (CFG) \cite{ho2022classifier}
-during the sampling phase.
+While DreamBooth is effective, fine-tuning the entire model is computationally expensive and storage-heavy. Custom Diffusion \citep{kumari2023multi} improves efficiency by updating only the key ($W_K$) and value ($W_V$) projection matrices in the cross-attention layers, demonstrating that these specific weights are sufficient to encode new concepts. More recently, the field has shifted toward Tuning-Free architectures like PhotoMaker \citep{li2024photomaker} and InstantID \citep{wang2024instantid}. Instead of iterative optimization, these methods employ a "stacking" strategy: an external ID-Encoder (often based on face recognition backbones) extracts a high-fidelity identity embedding from the reference image, which is then injected directly into the diffusion process via decoupled cross-attention or prompt stacking. This enables zero-shot personalization of arbitrary subjects in a single forward pass without any gradient updates.
 
-Rather than training a separate explicit classifier, CFG enables the
-generative model to approximate its own guidance signal. This is
-achieved by learning both conditional and unconditional vector fields
-within a single network; during training, the condition $c$ is
-randomly dropped (replaced with a null token $\emptyset$) with a
-fixed probability. During inference, the guided vector field
-$\hat{v}(z_t, c)$ is computed by extrapolating away from the
-unconditional estimate:
-\begin{equation}
-\hat{v}(z_t, c) = v_\theta(z_t, \emptyset) + w \cdot \left(
-v_\theta(z_t, c) - v_\theta(z_t, \emptyset) \right),
-\label{eq:cfg}
-\end{equation}
-where $w \geq 1$ is the guidance scale. This operation effectively
-shifts the sampling trajectory toward regions where the implicit
-likelihood ratio is high. However, a major limitation of
-Eq.~\ref{eq:cfg} is that large values of $w$ significantly inflate
-the magnitude of the vector field, leading to over-saturated or
-"burned" artifacts. To mitigate this, state-of-the-art models (e.g.,
-SDXL) often integrate a \textit{Guidance Rescale} strategy
-\cite{lin2024common}, which normalizes the guided update to match the
-statistical magnitude of the original conditional estimate:
-$\hat{v}_{\text{rescale}} = \phi \cdot \hat{v} \cdot
-\frac{\sigma(v_\theta(z_t, c))}{\sigma(\hat{v})} + (1-\phi) \cdot
-\hat{v}$. This simple correction allows for higher guidance
-scales—and thus better prompt adherence—without sacrificing image fidelity.
+
+% \subsection{Classifier-Free Guidance (CFG)}
+% \label{subsec:cfg}
+
+% While the architectural mechanisms described above enable conditional
+% training, the resulting samples often suffer from weak alignment with
+% the prompt due to the dominance of unconditional modes in the data
+% distribution. To strictly enforce alignment, the standard approach is
+% to employ Classifier-Free Guidance (CFG) \cite{ho2022classifier}
+% during the sampling phase.
+
+% Rather than training a separate explicit classifier, CFG enables the
+% generative model to approximate its own guidance signal. This is
+% achieved by learning both conditional and unconditional vector fields
+% within a single network; during training, the condition $c$ is
+% randomly dropped (replaced with a null token $\emptyset$) with a
+% fixed probability. During inference, the guided vector field
+% $\hat{v}(z_t, c)$ is computed by extrapolating away from the
+% unconditional estimate:
+% \begin{equation}
+% \hat{v}(z_t, c) = v_\theta(z_t, \emptyset) + w \cdot \left(
+% v_\theta(z_t, c) - v_\theta(z_t, \emptyset) \right),
+% \label{eq:cfg}
+% \end{equation}
+% where $w \geq 1$ is the guidance scale. This operation effectively
+% shifts the sampling trajectory toward regions where the implicit
+% likelihood ratio is high. However, a major limitation of
+% Eq.~\ref{eq:cfg} is that large values of $w$ significantly inflate
+% the magnitude of the vector field, leading to over-saturated or
+% "burned" artifacts. To mitigate this, state-of-the-art models (e.g.,
+% SDXL) often integrate a \textit{Guidance Rescale} strategy
+% \cite{lin2024common}, which normalizes the guided update to match the
+% statistical magnitude of the original conditional estimate:
+% $\hat{v}_{\text{rescale}} = \phi \cdot \hat{v} \cdot
+% \frac{\sigma(v_\theta(z_t, c))}{\sigma(\hat{v})} + (1-\phi) \cdot
+% \hat{v}$. This simple correction allows for higher guidance
+% scales—and thus better prompt adherence—without sacrificing image fidelity.
 
 \subsection{Extension to Video Generation}
 \label{subsec:video_gen}
