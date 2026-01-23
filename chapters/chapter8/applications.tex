@@ -2850,45 +2850,26 @@ The first term fine-tunes the model weights (typically the entire U-Net and text
     \label{fig:dreambooth_pipeline}
 \end{figure}
 
-While DreamBooth is effective, fine-tuning the entire model is computationally expensive and storage-heavy. Custom Diffusion \citep{kumari2023multi} improves efficiency by updating only the key ($W_K$) and value ($W_V$) projection matrices in the cross-attention layers, demonstrating that these specific weights are sufficient to encode new concepts. More recently, the field has shifted toward Tuning-Free architectures like PhotoMaker \citep{li2024photomaker} and InstantID \citep{wang2024instantid}. Instead of iterative optimization, these methods employ a "stacking" strategy: an external ID-Encoder (often based on face recognition backbones) extracts a high-fidelity identity embedding from the reference image, which is then injected directly into the diffusion process via decoupled cross-attention or prompt stacking. This enables zero-shot personalization of arbitrary subjects in a single forward pass without any gradient updates.
 
 
-% \subsection{Classifier-Free Guidance (CFG)}
-% \label{subsec:cfg}
 
-% While the architectural mechanisms described above enable conditional
-% training, the resulting samples often suffer from weak alignment with
-% the prompt due to the dominance of unconditional modes in the data
-% distribution. To strictly enforce alignment, the standard approach is
-% to employ Classifier-Free Guidance (CFG) \cite{ho2022classifier}
-% during the sampling phase.
+\textbf{Multi-Concept Personalization.}
+While DreamBooth is effective, fine-tuning the entire model is computationally expensive and storage-heavy. Custom Diffusion \cite{kumari2023multi} improves efficiency by updating only the key ($W_K$) and value ($W_V$) projection matrices in the cross-attention layers to demonstrate that these specific weights are sufficient to encode new concepts.
 
-% Rather than training a separate explicit classifier, CFG enables the
-% generative model to approximate its own guidance signal. This is
-% achieved by learning both conditional and unconditional vector fields
-% within a single network; during training, the condition $c$ is
-% randomly dropped (replaced with a null token $\emptyset$) with a
-% fixed probability. During inference, the guided vector field
-% $\hat{v}(z_t, c)$ is computed by extrapolating away from the
-% unconditional estimate:
-% \begin{equation}
-% \hat{v}(z_t, c) = v_\theta(z_t, \emptyset) + w \cdot \left(
-% v_\theta(z_t, c) - v_\theta(z_t, \emptyset) \right),
-% \label{eq:cfg}
-% \end{equation}
-% where $w \geq 1$ is the guidance scale. This operation effectively
-% shifts the sampling trajectory toward regions where the implicit
-% likelihood ratio is high. However, a major limitation of
-% Eq.~\ref{eq:cfg} is that large values of $w$ significantly inflate
-% the magnitude of the vector field, leading to over-saturated or
-% "burned" artifacts. To mitigate this, state-of-the-art models (e.g.,
-% SDXL) often integrate a \textit{Guidance Rescale} strategy
-% \cite{lin2024common}, which normalizes the guided update to match the
-% statistical magnitude of the original conditional estimate:
-% $\hat{v}_{\text{rescale}} = \phi \cdot \hat{v} \cdot
-% \frac{\sigma(v_\theta(z_t, c))}{\sigma(\hat{v})} + (1-\phi) \cdot
-% \hat{v}$. This simple correction allows for higher guidance
-% scales—and thus better prompt adherence—without sacrificing image fidelity.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/gen4gen_teaser.pdf}
+    \caption{\textbf{The Gen4Gen pipeline for multi-concept personalization.} To overcome the limitations of existing datasets in multi-subject scenarios, Gen4Gen \cite{yeh2024gen4gen} automates the creation of a high-quality benchmark (MyCanvas). Training on this data significantly boosts the model's ability to generate complex scenes with multiple specific subjects (e.g., "a $[V1]$ cat and a $[V2]$ dog").}
+    \label{fig:gen4gen_pipeline}
+\end{figure}
+
+However, accurately synthesizing "multiple" personalized concepts (e.g., "a $[V1]$ cat and a $[V2]$ dog") within a single image remains difficult due to the scarcity of high-quality, text and image aligned training data for complex compositions during the pretraining stage of Stable Diffusion . To addressing this, Gen4Gen \cite{yeh2024gen4gen} proposes a data-centric solution shown in Figure \ref{fig:gen4gen_pipeline}. Instead of modifying the model architecture, it introduces a generative data pipeline that leverages foundation models to construct "MyCanvas"—a benchmark dataset featuring complex multi-object scenes paired with detailed, dense captions. By fine-tuning on this synthesized data, where object identities and spatial relationships are explicitly curated, models can significantly improve their ability to disentangle and preserve multiple personalized subjects simultaneously (e.g., a specific cat and dog interacting in a complex scene) without suffering from identity blending or omission.
+
+
+More recently, the field has shifted toward Tuning-Free architectures like PhotoMaker \cite{li2024photomaker} and InstantID \cite{wang2024instantid}. Instead of iterative optimization, these methods employ a "stacking" strategy: an external ID-Encoder (often based on face recognition backbones) extracts a high-fidelity identity embedding from the reference image, which is then injected directly into the diffusion process via decoupled cross-attention or prompt stacking. This enables zero-shot personalization of arbitrary subjects in a single forward pass without any gradient updates.
+
+
 
 \subsection{Extension to Video Generation}
 \label{subsec:video_gen}
@@ -2903,8 +2884,8 @@ spatiotemporal data.
 
 \paragraph{Spatiotemporal Inflation.}
 To leverage the robust visual priors established by 2D image
-generators, architectures such as VideoLDM \cite{blattmann2023align}
-and AnimateDiff \cite{guo2023animatediff} introduce the concept of
+generators, architectures such as VideoLDM \citep{blattmann2023align}
+and AnimateDiff \citep{guo2023animatediff} introduce the concept of
 inflating 2D layers into pseudo-3D layers. This is commonly achieved
 by inserting temporal layers into the frozen 2D backbone.
 Specifically, given a latent feature map $z$ of shape $(B, C, T, H,
@@ -2932,7 +2913,7 @@ the goal is to model the transition probability:
 p(x_{t+1} | x_{1:t}, a_t),
 \end{equation}
 where $a_t$ represents the action taken at time $t$. In frameworks
-like Genie \cite{bruce2024genie}, the action $a_t$ is discretized
+like Genie \citep{bruce2024genie}, the action $a_t$ is discretized
 into a latent token and injected into the network using the same
 conditioning mechanisms used for text or classes. For instance, $a_t$
 can be added to the time-step embedding or utilized as a key/value
@@ -2941,9 +2922,18 @@ function as a data-driven physics engine, predicting the visual
 consequences of actions (e.g., a character jumping) by minimizing the
 same reconstruction or flow matching objectives used in static image
 generation. Large-scale implementations like Sora
-\cite{brooks2024video} further suggest that scaling this
+\citep{openai2024sora} further suggest that scaling this
 autoregressive or diffusion-based prediction leads to emergent 3D
 consistency and object permanence.
+
+
+
+
+
+
+
+
+
 
 \section{Image and Text Conditioned 3D Object Generation}
 \label{sec:Michelangelo}\label{sec:object-generation}
