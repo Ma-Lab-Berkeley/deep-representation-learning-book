@@ -3132,7 +3132,18 @@ sequences required by Transformers. This process is known as
 \item \textbf{Voxel Tokenization.} Similar to 2D image patches, voxel
     grids can be partitioned into 3D sub-grids or ``cublets." While
     straightforward, this method often suffers from the cubic
-    complexity of voxel resolution (the $O(N^3)$ memory bottleneck). \yima{Not clear at all, what are the output tokens? how are they generated in what format? If this process is similar to tokenizing 2D image, please refer to an earlier section that describes tokenizing 2D image, if that is what you mean here.}
+    complexity of voxel resolution (the $O(N^3)$ memory bottleneck). 
+    
+    Extending the 2D patch embedding strategy to 3D, 
+we partition the input voxel grid $V \in \mathbb{R}^{D \times H \times W \times C}$ into 
+non-overlapping 3D patches or ``cubelets'' of size $p \times p \times p$. 
+These cubelets are flattened into 1D vectors and mapped via a learnable linear projection 
+to the token dimension $d_{model}$. 
+The resulting output is a sequence of tokens with length $L = \frac{DHW}{p^3}$. 
+However, this approach suffers from the cubic complexity of voxel resolution, 
+as the sequence length $L$ scales with $O(N^3)$, causing significant memory bottlenecks.
+    
+    \yima{Not clear at all, what are the output tokens? how are they generated in what format? If this process is similar to tokenizing 2D image, please refer to an earlier section that describes tokenizing 2D image, if that is what you mean here.}
 
 
 \item \textbf{Mesh Tokenization.} Tokenizing meshes presents unique
@@ -3254,33 +3265,61 @@ representations to characterize each 3D shape effectively. To achieve
 this, point clouds $\vP \in \R^{(3 + C) \times N}$ are first sampled
 from the surface of 3D shapes, where $N$ represents the number of
 points, and $C$ denotes additional point features such as normal or
-color. Next, a linear layer is used to project the concatenation of
-the Fourier positional encoded point clouds $\vP$ to the 3D shape
-encoder input $\vX \in \R^{d \times N}$. \yima{What does ``Fourier positional encoded'' mean? How is $\X$ related to $\vP$, exactly?}
+color. 
 
-To process this dense 3D data \yima{Which data, $\vP$ or $\X$?} efficiently, the encoder adopts a 
+To better capture high-frequency geometric details, 
+we utilize Fourier positional encoding to map the 
+low-dimensional spatial coordinates 
+$\boldsymbol{v} \in \mathbb{R}^3$ 
+of each point into a higher-dimensional frequency space. 
+This encoding $\gamma(\boldsymbol{v})$ is defined as a
+sequence of sinusoidal functions with exponentially 
+increasing frequencies:$$\gamma(\boldsymbol{v}) = [\sin(2^0\pi \boldsymbol{v}), \cos(2^0\pi \boldsymbol{v}), \dots, \sin(2^{L-1}\pi \boldsymbol{v}), \cos(2^{L-1}\pi \boldsymbol{v})]$$
+where $L$ is the number of frequency bands.
+To construct the final input representation, we explicitly
+decompose the input point cloud $\vP \in \mathbb{R}^{(3+C) 
+\times N}$ into spatial coordinates $\boldsymbol{v}$ and 
+auxiliary features $\boldsymbol{f} \in \mathbb{R}^{C \times 
+N}$. The high-dimensional positional embeddings 
+$\gamma(\boldsymbol{v})$ are then concatenated with the 
+preserved features $\boldsymbol{f}$ and projected via a 
+learnable linear layer. Formally, the 3D shape encoder input 
+$\boldsymbol{X} \in \mathbb{R}^{d \times N}$ is obtained 
+as:$$\boldsymbol{X} = \text{Linear}([\gamma(\boldsymbol{v}); \boldsymbol{f}])$$where $[\cdot ; \cdot]$ denotes the 
+concatenation operation along the feature dimension.
+
+
+% Next, a linear layer is used to project the concatenation of
+% the Fourier positional encoded point clouds $\vP$ to the 3D shape
+% encoder input $\vX \in \R^{d \times N}$. 
+\yima{What does ``Fourier positional encoded'' mean? How is $\X$ related to $\vP$, exactly?} {\color{blue} Update: We have added the formula for Fourier positional encoding and provided a mathematical expression describing the process of transforming from $\vP$ to $\X$.}
+
+To process this dense feature sequence $\vX$ efficiently, \yima{Which data, $\vP$ or $\X$?} {\color{blue} Update: We have changed the expression to avoid the ambiguity.} the encoder adopts a 
 Perceiver-based architecture~\cite{pmlr-v139-jaegle21a}. Unlike 
 standard Transformers that scale quadratically with input length, 
 the Perceiver employs a latent bottleneck mechanism to decouple 
-the processing complexity from the input size. Instead of tokenizing 
-the input points directly for self-attention, the model utilizes a fixed 
-set of small, learnable latent queries $\vQ \in \R^{d \times (1+L_{\mathrm{s}})}$, 
-where $1 + L_{\mathrm{s}}$ is the length of query tokens $\vQ$. Mechanistically, 
-a Cross-Attention layer projects the high-dimensional 
-input space into this compact latent space: the input point cloud serves 
-as the Keys and Values, while the learnable queries $\vQ$ act as the Queries 
-to extract relevant geometric features. This operation compresses 
-the variable-length input $N$ into a fixed-length latent sequence.
+the processing complexity from the input size. Instead of tokenizing the
+input points directly for self-attention, the model utilizes a fixed set 
+of small, learnable latent queries $\vQ \in \R^{(1+L_{\mathrm{s}}) \times 
+d}$, where $1 + L_{\mathrm{s}}$ is the number of query tokens. 
+Mechanistically, a Cross-Attention layer projects the high-dimensional 
+input space into this compact latent space.Formally, let $\vW_q, \vW_k, 
+\vW_v$ be the learnable projection matrices. The initial latent 
+representation $\vZ_0$ is computed as:$$\vZ_0 = \text{Cross-Attention}
+(\vQ, \vX) = \text{softmax}\left(\frac{(\vQ\vW_q)(\vX\vW_k)^\top}
+{\sqrt{d_k}}\right) (\vX\vW_v)$$Here, the input point cloud $\vX$ serves 
+as the Keys and Values, while the learnable queries $\vQ$ act as the 
+Queries. This operation compresses the variable-length input $N$ into a 
+fixed-length latent sequence $\vZ_0 \in \R^{(1+L_{\mathrm{s}}) \times 
+d}$.
 
-In the context of Michelangelo, these queries are structured to capture 
-hierarchical semantics: they consist of one global head token
-$\vQ_g \in \R^{d}$ with high-level 
-semantics and $L_{\mathrm{s}}$ local tokens 
-$\vQ_l \in \R^{d \times L_{\mathrm{s}}}$ 
-containing low-level geometric structure information. Then, several
-self-attention blocks are used to iteratively improve the feature
-representation and obtain the final shape embeddings,
-$\vE_{\mathrm{s}} \in \R^{d \times (1+L_{\mathrm{s}})}$.
+In the context of Michelangelo, these queries are structured to 
+capture hierarchical semantics: they consist of one global head token $\vQ_g \in \R^{1 \times d}$ with high-level semantics and 
+$L_{\mathrm{s}}$ local tokens $\vQ_l \in \R^{L_{\mathrm{s}} \times d}$ 
+containing low-level geometric structure information. Then, several self-
+attention blocks are used to iteratively improve the feature 
+representation and obtain the final shape embeddings, $\vE_{\mathrm{s}} 
+\in \R^{(1+L_{\mathrm{s}}) \times d}$.
 
 % Drawing inspiration from
 % previous transformer-based architectures for point cloud
@@ -3297,7 +3336,7 @@ $\vE_{\mathrm{s}} \in \R^{d \times (1+L_{\mathrm{s}})}$.
 % representation and obtain the final shape embeddings,
 % $\vE_{\mathrm{s}} \in \R^{d \times (1+L_{\mathrm{s}})}$.
 
-\yima{Probably more detail or illustration for the above description about how to tokenize 3D shape data, say point clouds, through a perceiver. How is it trained, separately or jointly, with what architecture and data etc.? How is it related to the ``3D tokenization'' methods introduced earlier?}
+\yima{Probably more detail or illustration for the above description about how to tokenize 3D shape data, say point clouds, through a perceiver. How is it trained, separately or jointly, with what architecture and data etc.? How is it related to the ``3D tokenization'' methods introduced earlier?} {\color{blue} Update: We have supplemented the description of how the input is tokenized through the perceiver-based architecture, and the entire process is trained jointly. }
 
 % Learn aligned latent
 \textbf{Alignment among 3D shapes, images, and texts} plays a crucial
