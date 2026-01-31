@@ -3152,13 +3152,13 @@ Point clouds are typically
     feature vector.
     
 \item \textbf{Voxel Tokenization.} 
-Analogous to the patch embedding strategy in Vision Transformers (ViT) for 2D images (see Section \ref{sec:2d_tokenization}), voxel grids can be partitioned into non-overlapping 3D sub-grids or ``cubelets.'' Given a voxel grid $V \in \mathbb{R}^{D \times H \times W \times C}$, we extract patches of size $P \times P \times P$. Each patch is flattened into a vector $v_p \in \mathbb{R}^{P^3 \cdot C}$ and mapped via a learnable linear projection $E$ to the token dimension $d_{model}$. The result is a sequence of tokens $Z \in \mathbb{R}^{L \times d_{model}}$ where $L = \frac{DHW}{P^3}$. While straightforward, this method inherits the cubic complexity of voxel resolution ($O(N^3)$), often creating memory bottlenecks for high-resolution shapes.
+Analogous to the patch embedding strategy in Vision Transformers (ViT) for 2D images, voxel grids can be partitioned into non-overlapping 3D sub-grids. Given a voxel grid $V \in \mathbb{R}^{D \times H \times W \times C}$, we extract patches of size $P \times P \times P$. Each patch is flattened into a vector $v_p \in \mathbb{R}^{P^3 \cdot C}$ and mapped via a learnable linear projection to the token dimension $d_{model}$. The result is a sequence of tokens $Z \in \mathbb{R}^{L \times d_{model}}$ where $L = \frac{DHW}{P^3}$. While straightforward, this method inherits the cubic complexity of voxel resolution ($O(N^3)$), often creating memory bottlenecks for high-resolution shapes.
 
 
-Similar to 2D image patches, voxel
-    grids can be partitioned into 3D sub-grids or ``cublets." While
-    straightforward, this method often suffers from the cubic
-    complexity of voxel resolution (the $O(N^3)$ memory bottleneck). 
+% Similar to 2D image patches, voxel
+%     grids can be partitioned into 3D sub-grids or ``cublets." While
+%     straightforward, this method often suffers from the cubic
+%     complexity of voxel resolution (the $O(N^3)$ memory bottleneck). 
     
 %     Extending the 2D patch embedding strategy to 3D, 
 % we partition the input voxel grid $V \in \mathbb{R}^{D \times H \times W \times C}$ into 
@@ -3172,7 +3172,19 @@ Similar to 2D image patches, voxel
     \yima{Not clear at all, what are the output tokens? how are they generated in what format? If this process is similar to tokenizing 2D image, please refer to an earlier section that describes tokenizing 2D image, if that is what you mean here.}
 
 
-\item \textbf{Mesh Tokenization.} Tokenizing meshes presents unique
+\item \textbf{Mesh Tokenization.} 
+% Tokenizing meshes is challenging due to their graph-like structure involving both vertices and faces. Current methods typically serialize the mesh elements into a sequence of discrete tokens to enable autoregressive modeling (where the model predicts the next vertex/face token based on previous ones to generate valid topology).
+
+% Prominent approaches like MeshGPT~\cite{siddiqui2024meshgpt} serialize the mesh into two interleaved sequences: (1) a **Vertex Sequence**, where vertex coordinates are quantized and ordered (often via z-order curve sorting), and (2) a **Face Sequence**, where faces are represented as indices pointing to the vertex list. Alternatively, graph-based methods may treat local mesh patches (geodesic neighborhoods) as tokens, encoding them via Graph Convolutional Networks (GCNs) into feature vectors.
+
+In PolyGen~\cite{nash2020polygen}, the mesh is represented as a set of vertices $V = \{v_1, \dots, v_n\}$ (where each $v_i \in \mathbb{R}^3$) and faces $F = \{f_1, \dots, f_m\}$ (where each $f_j$ is a tuple of vertex indices). The model learns the joint distribution $P(V, F)$ by factoring it into two sequential stages—first generating vertices, then faces conditioned on those vertices:
+\begin{equation}
+    P(V, F) = P(V) \cdot P(F \mid V) = \prod_{i=1}^{n} P(v_i \mid v_{<i}) \cdot \prod_{j=1}^{m} P(f_j \mid f_{<j}, V)
+\end{equation}
+
+
+
+Tokenizing meshes presents unique
     challenges due to their irregular connectivity and graph-like
     structure. Common approaches involve traversing the surface to
     serialize faces or vertices into sequences, or decomposing the
@@ -3193,15 +3205,19 @@ into a compact, low-dimensional latent space where semantic information
 is aggregated, effectively decoupling geometric reconstruction from structural modeling.
 
 \textbf{Latent Vector Quantization.} This approach learns a discrete 
-codebook via Vector Quantization (VQ). In this framework, a high-dimensional 
+codebook to represent the shape via Vector Quantization (VQ). In this framework, a high-dimensional 
 input (e.g., a voxel grid $X$ or  implicit function field $F_\theta$) 
 is compressed by an encoder $E$ into 
-a latent feature space $Z$. This continuous latent representation is then 
-discretized using a learned codebook $\mathcal{C}=\{c_k\}_{k=1}^K$ by 
-finding the nearest neighbor for each latent vector $z_i$:
+lower-dimensional spatial grid of latent vectors $Z \in \mathbb{R}^{h \times w \times d \times c}$. 
+Each vector $z_i \in Z$ is then replaced by its nearest neighbor from a learnable codebook $\mathcal{C}=\{c_k\}_{k=1}^K$:
 \begin{equation}
-q(z_i) = \arg\min_{c_k \in \mathcal{C}} \| z_i - c_k \|_2^2
+q(z_i) = \arg\min_{c_k \in \mathcal{C}} | z_i - c_k |_2^2
 \end{equation}
+This reduces the shape to a sequence of discrete codebook indices that preserve 
+spatial structure while drastically reducing dimensionality. These discrete indices 
+serve as the tokens for subsequent Transformer processing.
+
+
 \yima{Then each 3D shape is converted to a single vector, instead of a sequence of tokens?}
 
 \textbf{Learned Latent Set.} This approach encodes a 3D shape
