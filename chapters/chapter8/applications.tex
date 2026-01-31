@@ -3122,14 +3122,40 @@ sequences required by Transformers. This process is known as
 \textit{3D Tokenization}.
 
 \begin{itemize}
-\item \textbf{Point Cloud Tokenization.} Point clouds are typically
+\item \textbf{Point Cloud Tokenization.} 
+Raw point clouds are typically tokenized into local groups to capture 
+geometric context. This process usually begins with Farthest Point Sampling (FPS)~\cite{eldar1997farthest}, 
+an iterative algorithm that selects a subset of points $\{x_1, \dots, x_m\}$ 
+from the original set $\mathcal{P}$, such that each selected point maximizes 
+the distance to the set of previously selected points: 
+$x_{i} = \arg\max_{x \in \mathcal{P}} \min_{j=1}^{i-1} \|x - x_j\|$.
+Following FPS, points are grouped via k-Nearest Neighbors (k-NN) to form local clusters.
+Each cluster serves as a token to handle the permutation invariance of points 
+within a cluster, a lightweight network such as PointNet~\cite{qi2017pointnet} is applied. 
+Mathematically, for a cluster of points $\{p_1, \dots, p_k\}$, 
+PointNet approximates a symmetric function $f$ by applying a shared 
+Multi-Layer Perceptron (MLP) $h$ followed by a symmetric aggregation operator (typically max-pooling):
+\begin{equation}
+    \mathbf{t} = \gamma \left( \max_{i=1}^k \{ h(p_i) \} \right)
+\end{equation}
+where $\mathbf{t}$ is the resulting feature token and $\gamma$ is a post-processing MLP. 
+This converts an unstructured cloud into a sequence of feature vectors.
+
+
+
+
+Point clouds are typically
     tokenized using grouping techniques such as Farthest Point
     Sampling (FPS) \yima{what is this?} followed by k-Nearest Neighbors (k-NN). Each
     cluster of points is treated as a token, often processed by a
     permutation-invariant networkwork (such as PointNet \yima{reference? what does it do exactly, in mathematical terms?} ) to extract a
     feature vector.
     
-\item \textbf{Voxel Tokenization.} Similar to 2D image patches, voxel
+\item \textbf{Voxel Tokenization.} 
+Analogous to the patch embedding strategy in Vision Transformers (ViT) for 2D images (see Section \ref{sec:2d_tokenization}), voxel grids can be partitioned into non-overlapping 3D sub-grids or ``cubelets.'' Given a voxel grid $V \in \mathbb{R}^{D \times H \times W \times C}$, we extract patches of size $P \times P \times P$. Each patch is flattened into a vector $v_p \in \mathbb{R}^{P^3 \cdot C}$ and mapped via a learnable linear projection $E$ to the token dimension $d_{model}$. The result is a sequence of tokens $Z \in \mathbb{R}^{L \times d_{model}}$ where $L = \frac{DHW}{P^3}$. While straightforward, this method inherits the cubic complexity of voxel resolution ($O(N^3)$), often creating memory bottlenecks for high-resolution shapes.
+
+
+Similar to 2D image patches, voxel
     grids can be partitioned into 3D sub-grids or ``cublets." While
     straightforward, this method often suffers from the cubic
     complexity of voxel resolution (the $O(N^3)$ memory bottleneck). 
