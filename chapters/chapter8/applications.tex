@@ -2245,7 +2245,22 @@ models, the saliency maps correspond to the objects in the input image.}
 \label{fig:crate_mae_semantic_heads}
 \end{figure}
 
-\section{Representation Auto-Encoding of Imagery Data}
+\section{Image Generation via Auto-Encoding and Sampling}
+In the previous section, we have introduced masked autoencoding (MAE) as one approach to learn an autoencoding of natural images $\x \sim p(\x)$:
+\begin{equation}
+\x\xrightarrow{\hspace{1mm} \mathcal{E} = f \hspace{1mm}} \z
+\xrightarrow{\hspace{1mm} \mathcal{D} = g \hspace{1mm}} \hat{\x}.
+\end{equation}
+where $\z = f(\x)$ is certain feature space. Such an autoencoding is designed to learn correlation, or co-occurrence, among  patches of a natural image. 
+
+However, MAE does not  enforce the (distribution of) learned features to have any explicit structures or properties, which can be very important if we want to use the so-learned features for certain subsequent tasks such as recognition or controlled generation. In addition, the simple MMSE loss used for image completion does not necessarily respect the possible nonlinear structures in the image manifold and typically generate an expected value, hence usually blurred version, for the missing image patches, as we have shown in Figure \ref{fig:mae_autoencoding-small} in the previous Chapter \ref{ch:conditional-inference}.
+
+Hence, in this section, we will introduce some other methods to learn representations for (the distribution of) natural images via auto-encoding that aim, to large extent, to remedy the above two issues. More precisely, we want to the distribution of the encoded features to have certain desired structures and images decoded from such features are much more faithful to the distribution of natural images -- that is, of much better visual quality. 
+
+
+\subsection{Variational Auto-Encoding of Imagery Data}
+
+\subsection{Representation Auto-Encoding of Imagery Data}
 \label{sec:RAE-implement}
 % \yima{Conceptual connections and necessity... Practical
 % implementations details... (Robin and Peter)}
@@ -2256,16 +2271,7 @@ models, the saliency maps correspond to the objects in the input image.}
 \newcommand{\tablestyle}[2]{\setlength{\tabcolsep}{#1}\renewcommand{\arraystretch}{#2}\centering\scriptsize}
 % \newcommand{\round}[1]{\num[round-mode=places, round-precision=2]{#1}}
 
-Once we have learned a good representation of the data, it is often
-desirable to be able to generate new samples from the learned
-representation distribution. In this section, we discuss how to
-achieve this by connecting the learning and sampling processes of the
-representation distribution, two aspects covered extensively in
-earlier chapters. By fitting them into the same framework, we show
-how to generate high-quality samples from the learned representation
-distribution effectively and efficiently.
 
-\subsection{The RAE Task}
 
 As discussed in \Cref{ch:lossy-compression}, learning structured
 representations of the data is crucial for many downstream tasks. In
@@ -2301,7 +2307,7 @@ trainable ViT-based decoder $g \colon \cZ \to \cX$ that maps the
 learned representation $\z$ back to the original data space,
 producing the reconstructed data $\x' = g(\z)$.
 
-\subsection{Data}
+\subsubsection{Data}
 We assume access to a dataset $\cD = \{\x_i\}_{i=1}^N$ of samples
 from the original data distribution $\cX$. Each sample is an image of
 the form $\x \in \R^{3 \times H \times W}$, where $H$ and $W$ are the
@@ -2314,7 +2320,7 @@ tokens back to reconstruct $\x' \in \R^{3 \times H\frac{p_d}{p_e}
 set $p_d = p_e$ to ensure that the reconstructed image has the same
 resolution as the original image.
 
-\subsection{Objective and Evaluation Metrics} To train RAE, our goal
+\subsubsection{Objective and Evaluation Metrics} To train RAE, our goal
 is to train a decoder $g$ such that the reconstructed data $\x' =
 g(f(\x))$ is as close as possible to the original data $\x$. This can
 be achieved by minimizing a sample-wise consistency loss over the
@@ -2340,7 +2346,7 @@ the FID score \cite{heusel2017gans} on the reconstructed images from
 the ImageNet-1k validation set, denoted as rFID. A lower rFID
 indicates better reconstruction quality.
 
-\subsection{Experimental Results}
+\subsubsection{Experimental Results}
 We can compare RAEs trained on different pretrained encoders,
 including DINOv2, MAE, and SigLIP2. As a baseline, we also consider a
 vanilla variational autoencoder (VAE) trained directly on the image
@@ -2484,24 +2490,13 @@ illustrations to show qualitative improvements... }
 
 \subsection{Sampling from Learned Representations via Denoising}
 
-Having learned a consistent and structured representation space via
-RAEs, we now turn to the task of generating \textit{new samples} from
-the learned representation distribution. This involves sampling from
-the latent space $\cZ$ of the RAE and decoding these samples back to
-the data space $\cX$ using the trained decoder $g$. To achieve this,
-we can leverage denoising and diffusion techniques, as introduced in
-earlier chapters. Concretely, suppose we have a probabilistic model
-$p(\z)$ that captures the distribution of the learned representations
-$\cZ$ and an initial standard Gaussian distribution $\cN(0, I)$. Our
-goal is to learn a denoiser $\bar{\z}$ such that it iteratively
-denoises a sample from the initial distribution to the target
-distribution of the learned representations. This denoiser can be
-trained using objectives introduced in
-\Cref{ch:conditional-inference}. \yima{Chapter 7 or Chapter 3?
-Chapter 7 is about conditional sampling... But below seems unconditioned...}
+Once we have learned a consistent and structured representation of the distribution of natural images, say via VAE or 
+RAE, we typically like to efficiently generate\textit{ samples} $\z \in \cZ$ from the learned representation distribution so that we can regenerate the natural images associated with these samples via the learned decoder $\hat{\x} = g(\z) \in \cX$. This auto-encoding process is illustrated by the top half of Figure \ref{fig:mental-picture} in Chapter \ref{ch:intro}.
 
-Let's take the simple case of flow matching. We can define the
-denoiser as a time-dependent vector field $\bar{\z}_{\theta}(t,
+To learn hence sample the distribution of the features $\z$ in the latent space $\cZ$, we can leverage the denoising and diffusion method introduced in Chapter \ref{ch:denoising}. Concretely, suppose $p(\z)$ is the distribution of the learned features $\z$. We may learn a denosing process that, starting from an initial standard Gaussian distribution $\vg \sim \cN(0, \vI)$, converges to this distribution $p(\z)$. Following the method introduced in Chapter \ref{ch:denoising}, we want to learn a denoiser $\bar{\z}$ such that it iteratively
+denoises a sample from the initial distribution $\cN(0, I)$ to the target distribution of the learned representations $p(\z)$. This process is illustrated by the bottom half of Figure \ref{fig:mental-picture} in Chapter \ref{ch:intro}.
+
+Here to learn the denoising,  let us take the simple case of flow matching. We can define the denoiser as a time-dependent vector field $\bar{\z}_{\theta}(t,
 \z_t)$ parameterized by $\theta$ that transforms a sample from the
 initial distribution to the target distribution over time $t \in [0,
 1]$. Here, $\z_t$ is an interpolation between $\z_0$ and $\z_1$ at time $t$:
@@ -2509,33 +2504,35 @@ initial distribution to the target distribution over time $t \in [0,
 \z_t = (1 - t)\z_0 + t\z_1,
 \end{equation}
 where $\z_0 \sim p(\z)$ is a sample from the learned representation
-distribution and $\z_1 \sim \cN(0, I)$.
+distribution and $\z_1 \sim \cN(0, \vI)$.
 The training objective for the denoiser can then be expressed as:
 \begin{equation}
 \min_{\theta} \cL_{\mathrm{FM}}(\theta) = \Ex_{\z_0 \sim p(\z), \z_1
 \sim \cN(0, I), t \sim \mathrm{Unif}(0, 1)} \left[
 \norm{\bar{\z}_{\theta}(t,\z_t) - (\z_1 - \z_0)}_2^2 \right].
 \end{equation}
-\yima{Here we should discuss the difficulty in learning a diffusion
-model in a high-dimensional latent space and how and why this matter
-can be alleviated in the case of DINO features or RAE... mainly
-because of better structures of the feature distribution and certain
-implementation details ... }
+
+Typically, the denoising vector field $\bar{\z}_{\theta}(t,
+\z_t)$ are modeled by a deep network. Popular choices of the deep network can be either a U-Net or a diffusion image transformer (DiT). Below we provide more details about how they can be implemented in practice.
+
+\subsubsection{Realizing Denoiser with a U-Net.}
+
+\subsubsection{Realizing Denoising with a DiT.}
 
 Once we have trained the denoiser, we can use it to generate new
-samples from the learned representation distribution via a diffusion
-process. The generated representations can then be decoded back to
-the data space using the RAE decoder $g$.
+samples from the learned representation distribution via the denoising
+process. The generated feature samples can then be decoded back to
+the image space with the corresponding decoder $g$.
 
-\section{Conditioned 2D Image or Video Generation}
+\section{Controlled Generation of 2D Images}
 \label{sec:image-generation}
 \label{sec:video-generation}
 %\yima{From the above latent diffusion model for images, it is natural to transition to conditioned image generation. Text condition via CLIP or SimCLIP... and DPS implementation, classifier-free, or cross-attention etc. (Robin, Jingfeng, Daniel, and Peter, decide what to feature...)}
 
 % --- draft by Daniel Yeh ---
-In the previous sections, we established the fundamental machinery
+In the previous section, we established the fundamental machinery
 for generative modeling: a Representation Engine (RE), usually an
-autoencoder, to encode the data $\x$ into a (usually compressed and
+autoencoder, to encode the data $\x$ into a (usually 
 more structured) latent $\z$:
 \begin{equation}
 \x\xrightarrow{\hspace{1mm} \mathcal{E} = f \hspace{1mm}} \z
@@ -2543,15 +2540,15 @@ more structured) latent $\z$:
 \end{equation}
 
 Then one learns a diffusion/denoising process to model and access the
-distribution of $\z$: $p(\z)$. In this section, we shift our focus
-from \textit{generation} to \textit{control}. We assume a good 
-representation of the distribution of the data is already learned; our
+distribution of $\z$: $p(\z)$. However, the sampling process is essentially random and lack of control. In this section, we study how to introduce mechanisms to influence or control the sampling process so that we can produce images with desired content or properties. 
+
+Hence, we assume a good 
+(auto-encoding) representation of the distribution of the imagery data is already learned; our
 specific task here is to study how to steer the sampling process using a
 user-provided ``control'' signal $\vc$. That is, we want to sample
-from the conditional distribution $p(\z\mid \vc)$. In practice, $\vc$
-could represent partial attributes of the image that one wants to
-complete or a caption that describes the desired content of the image
-to be generated.
+from the conditional distribution $p(\z\mid \vc)$. In the context of image generation, $\vc$
+could represent partial attributes of the image that one wants to complete or a caption that describes the desired content of the image
+to be generated. Chapter \ref{ch:conditional-inference} has described  general methods for controlling the sampling or generation process to produce samples from the conditional distribution. In this section, we provide implementation details for controlled image generation.
 
 \subsection{Task Formulation}
 \label{subsec:cond_problem}
@@ -2664,44 +2661,106 @@ model's knowledge is limited to its training data, a powerful
 pre-trained encoder is crucial for generalizing to novel concepts or
 rare words. In practice, Stable Diffusion typically utilizes a frozen
 CLIP text encoder~\citep{radford2021learning}, producing a sequence
-of semantically rich embeddings $\tau_\theta(\vc) \in \mathbb{R}^{M
-\times d_\tau}$ (where $d_\tau$ is typically 768 or 1024). \yima{Please refer to Section \ref{sec:CLIP}, and make sure notation and dimension match!} Recent
+of semantically rich embeddings $\tau_\theta(\vc) \in \mathbb{R}^{d_\tau \times M}$ (where $d_\tau$ is typically 768 or 1024). \yima{Please refer to Section \ref{sec:CLIP}, and make sure notation and dimension match!} Recent
 works like Imagen have demonstrated that scaling up this encoder
 (e.g., using T5-XXL \yima{citation?}) yields significantly larger improvements in
 image fidelity than scaling the generative backbone itself.
+
+
+
+
+
+
+
+% \paragraph{The Generation Model (Latent Representation).}
+% The core generative process does not produce the final image
+% directly. Instead, to avoid the prohibitive computational cost of
+% modeling high-resolution pixels (e.g., $1024 \times 1024$), it
+% generates a compressed ``intermediate product''—a latent representation $\z$.
+% \begin{itemize}
+% \item \textbf{Data Format:} The input image $\x \in \mathbb{R}^{H
+%     \times W \times 3}$ is compressed by a factor of $f=8$ into a
+%     latent tensor $\z_0 \in \mathbb{R}^{h \times w \times 4}$.\yima{How is it ``compressed''? Via a VAE? Do you follow some work here? citation?} For a
+%     standard $512^2$ image, this results in a manageable $64 \times
+%     64 \times 4$ latent space.
+% \item \textbf{Conditioning Mechanism:} The generation model is
+%     implemented as a Time-Conditional U-Net. It predicts the noise
+%     $\epsilon$ added to the latent $\z_t$, conditioned on the text
+%     embeddings via {\em Cross-Attention}. To enable this interaction,
+%     the spatial latent features $\phi_i(\z_t)$ \yima{what ``spatial'' mean here? it was not introduced. what is $\phi_i(\cdot)$? how it is specified?} are flattened into a
+%     sequence $\mathbb{R}^{N \times d}$ to act as the Query ($Q$),
+%     while the text embeddings serve as Key ($K$) and Value ($V$):
+%     \begin{equation}
+%         Q = W_Q^{(i)} \cdot \phi_i(\z_t), \quad K = W_K^{(i)} \cdot
+%         \tau_\theta(\vc), \quad V = W_V^{(i)} \cdot \tau_\theta(\vc).
+%     \end{equation}
+%     \yima{is $i$ here the index for layer?}
+%     This mechanism allows the model to spatially align specific
+%     visual regions (e.g., ``cat's eye'') with specific text tokens.
+% \end{itemize}
+
+% Training involves a noise prediction task. We sample a random
+% timestep $t$, add Gaussian noise $\epsilon$ to the clean latent
+% $\z_0$ to create a noisy latent $\z_t$, and train the U-Net backbone
+% $\epsilon_\theta$ to predict the added noise. The model minimizes the
+% standard reweighted diffusion objective:
+% \begin{equation}
+% \mathcal{L}_{\text{LDM}} = \mathbb{E}_{\z_0, \vc, \epsilon \sim
+% \mathcal{N}(0,1), t} \left[ \| \epsilon - \epsilon_\theta(\z_t, t,
+% \tau_\theta(\vc)) \|^2 \right].
+% \end{equation}
+% During inference (sampling), we start with pure Gaussian noise $\z_T
+% \sim \mathcal{N}(\bm{0}, \I)$. In each step, the U-Net predicts the
+% noise component, which is then subtracted from the current state to
+% gradually refine the latent representation $\z_t \to \z_{t-1}$ until
+% a clean latent $\hat{\z}_0$ is formed.
+
+
 
 \paragraph{The Generation Model (Latent Representation).}
 The core generative process does not produce the final image
 directly. Instead, to avoid the prohibitive computational cost of
 modeling high-resolution pixels (e.g., $1024 \times 1024$), it
-generates a compressed ``intermediate product''—a latent representation $\z$.
+generates a compressed "intermediate product"—a latent representation $\z$.
 \begin{itemize}
 \item \textbf{Data Format:} The input image $\x \in \mathbb{R}^{H
     \times W \times 3}$ is compressed by a factor of $f=8$ into a
-    latent tensor $\z_0 \in \mathbb{R}^{h \times w \times 4}$.\yima{How is it ``compressed''? Via a VAE? Do you follow some work here? citation?} For a
-    standard $512^2$ image, this results in a manageable $64 \times
+    latent tensor $\z_0 \in \mathbb{R}^{h \times w \times 4}$.
+    This compression is performed by a pre-trained Variational Autoencoder (VAE)~\citep{rombach2022high} that learns a perceptually equivalent but computationally efficient lower-dimensional space.
+    For a standard RGB input image of size $512 \times 512 \times 3$ (i.e., $H=W=512$), this results in a manageable $64 \times
     64 \times 4$ latent space.
+
 \item \textbf{Conditioning Mechanism:} The generation model is
     implemented as a Time-Conditional U-Net. It predicts the noise
     $\epsilon$ added to the latent $\z_t$, conditioned on the text
-    embeddings via {\em Cross-Attention}. To enable this interaction,
-    the spatial latent features $\phi_i(\z_t)$ \yima{what ``spatial'' mean here? it was not introduced. what is $\phi_i(\cdot)$? how it is specified?} are flattened into a
-    sequence $\mathbb{R}^{N \times d}$ to act as the Query ($Q$),
-    while the text embeddings serve as Key ($K$) and Value ($V$):
+    embeddings via \textbf{Cross-Attention}.
+    To enable this interaction, we treat the intermediate visual features from the U-Net layer $i$ as the Query source, and the text embeddings as the Key/Value source.
+    Let $\phi_i(\z_t) \in \mathbb{R}^{d_\epsilon^{(i)} \times N}$ denote the flattened spatial features at layer $i$ (where $d_\epsilon^{(i)}$ varies by layer, e.g., 320, 640, or 1280 channels), and let $\tau_\theta(\vc) \in \mathbb{R}^{d_\tau \times M}$ denote the sequence of $M$ text embeddings (typically $d_\tau=768$).
+    Since these dimensions differ, we project both into a common subspace of dimension $d$ (head dimension) using learnable weights.
+
+    We first define the Query ($\mathbf{Q}$), Key ($\mathbf{K}$), and Value ($\mathbf{V}$) matrices using projection weights $\mathbf{U}^{(i)}_{Q} \in \mathbb{R}^{d \times d_\epsilon^{(i)}}$ and $\mathbf{U}^{(i)}_{K}, \mathbf{U}^{(i)}_{V} \in \mathbb{R}^{d \times d_\tau}$:
     \begin{equation}
-        Q = W_Q^{(i)} \cdot \phi_i(\z_t), \quad K = W_K^{(i)} \cdot
-        \tau_\theta(\vc), \quad V = W_V^{(i)} \cdot \tau_\theta(\vc).
+        \mathbf{Q} = \mathbf{U}^{(i)}_{Q} \phi_i(\z_t), \quad
+        \mathbf{K} = \mathbf{U}^{(i)}_{K} \tau_\theta(\vc), \quad
+        \mathbf{V} = \mathbf{U}^{(i)}_{V} \tau_\theta(\vc).
     \end{equation}
-    \yima{is $i$ here the index for layer?}
-    This mechanism allows the model to spatially align specific
-    visual regions (e.g., ``cat's eye'') with specific text tokens.
+    Adapting the column-wise formulation from [placeholder], the cross-attention operation is then computed as:
+    \begin{equation}
+        \text{CrossAttn}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) \doteq \mathbf{V} \cdot \operatorname{softmax}\left( \frac{\mathbf{K}^\top \mathbf{Q}}{\sqrt{d}} \right),
+    \end{equation}
+    where the $\operatorname{softmax}$ is defined column-wise as
+    \begin{align}
+        \operatorname{softmax}(\mathbf{A})
+        &\doteq \begin{bmatrix} \operatorname{softmax}(\mathbf{a}_{1}) & \cdots & \operatorname{softmax}(\mathbf{a}_{N}) \end{bmatrix}, \\
+        \forall \mathbf{A}
+        &= \begin{bmatrix} \mathbf{a}_{1}, \dots, \mathbf{a}_{N} \end{bmatrix} \in \mathbb{R}^{M \times N}.
+    \end{align}
+    In this context, the matrix $\mathbf{A} = \frac{\mathbf{K}^\top \mathbf{Q}}{\sqrt{d}}$ represents the alignment scores, and the column-wise softmax normalizes the attention weights over the $M$ text tokens for each of the $N$ visual regions. This mechanism allows the model to spatially align specific visual regions (e.g., ``cat's eye'') with specific text tokens.
 \end{itemize}
 
-Training involves a noise prediction task. We sample a random
-timestep $t$, add Gaussian noise $\epsilon$ to the clean latent
-$\z_0$ to create a noisy latent $\z_t$, and train the U-Net backbone
-$\epsilon_\theta$ to predict the added noise. The model minimizes the
-standard reweighted diffusion objective:
+Training involves a noise prediction task. We uniformly sample a random
+timestep $t \in \{1, \dots, T\}$, add Gaussian noise $\epsilon$ to the clean latent
+$\z_0$ to create a noisy latent $\z_t$. To inform the model of the noise level, the scalar timestep $t$ is first mapped to a sinusoidal embedding (encoding low and high frequency components), followed by a Multi-Layer Perceptron (MLP) composed of `Linear` $\to$ `SiLU` $\to$ `Linear` layers. This produces a rich time embedding vector (e.g., 1280-dim) which is added to the feature maps in each ResNet block of the U-Net backbone $\epsilon_\theta$. The model then minimizes the standard reweighted diffusion objective:
 \begin{equation}
 \mathcal{L}_{\text{LDM}} = \mathbb{E}_{\z_0, \vc, \epsilon \sim
 \mathcal{N}(0,1), t} \left[ \| \epsilon - \epsilon_\theta(\z_t, t,
@@ -2712,6 +2771,11 @@ During inference (sampling), we start with pure Gaussian noise $\z_T
 noise component, which is then subtracted from the current state to
 gradually refine the latent representation $\z_t \to \z_{t-1}$ until
 a clean latent $\hat{\z}_0$ is formed.
+
+
+
+
+
 
 \paragraph{The Decoder (Image Reconstruction).}
 The final component is a neural network trained to translate the sample latent vector $\hat{\z}$ back into a natural image
@@ -3173,15 +3237,28 @@ Analogous to the patch embedding strategy in Vision Transformers (ViT) for 2D im
 
 
 \item \textbf{Mesh Tokenization.} 
-% Tokenizing meshes is challenging due to their graph-like structure involving both vertices and faces. Current methods typically serialize the mesh elements into a sequence of discrete tokens to enable autoregressive modeling (where the model predicts the next vertex/face token based on previous ones to generate valid topology).
+Tokenizing meshes is challenging due to their graph-like structure involving both vertices and faces. 
+Unlike images, meshes lack a canonical order. To enable sequence modeling, common approaches involve
+explicit serialization, where raw geometric and topological elements are directly quantized and ordered into sequences.
+
+% Current methods typically serialize the mesh elements into a sequence of discrete tokens to enable autoregressive modeling (where the model predicts the next vertex/face token based on previous ones to generate valid topology).
 
 % Prominent approaches like MeshGPT~\cite{siddiqui2024meshgpt} serialize the mesh into two interleaved sequences: (1) a **Vertex Sequence**, where vertex coordinates are quantized and ordered (often via z-order curve sorting), and (2) a **Face Sequence**, where faces are represented as indices pointing to the vertex list. Alternatively, graph-based methods may treat local mesh patches (geodesic neighborhoods) as tokens, encoding them via Graph Convolutional Networks (GCNs) into feature vectors.
 
-In PolyGen~\cite{nash2020polygen}, the mesh is represented as a set of vertices $V = \{v_1, \dots, v_n\}$ (where each $v_i \in \mathbb{R}^3$) and faces $F = \{f_1, \dots, f_m\}$ (where each $f_j$ is a tuple of vertex indices). The model learns the joint distribution $P(V, F)$ by factoring it into two sequential stages—first generating vertices, then faces conditioned on those vertices:
+Taking PolyGen~\cite{nash2020polygen} as an example, the mesh is represented as a set of 
+vertices $V = \{v_1, \dots, v_n\}$ (where each $v_i \in \mathbb{R}^3$) and faces 
+$F = \{f_1, \dots, f_m\}$ (where each $f_j$ is a tuple of vertex indices). 
+The model learns the joint distribution $P(V, F)$ by factoring it into two sequential stages: 
+a Vertex Model that predicts quantized coordinates, and a Face Model that predicts vertex indices
 \begin{equation}
     P(V, F) = P(V) \cdot P(F \mid V) = \prod_{i=1}^{n} P(v_i \mid v_{<i}) \cdot \prod_{j=1}^{m} P(f_j \mid f_{<j}, V)
 \end{equation}
-
+Crucially, this factorization dictates two distinct token formats corresponding to each stage. 
+For the Vertex Model ($P(V)$), the tokens are quantized coordinate values, 
+continuous coordinates are discretized (e.g., into 8-bit integers), 
+creating a sequence of tokens from a fixed vocabulary of size 256. 
+Conversely, for the Face Model ($P(F \mid V)$), the tokens are vertex indices (pointers).
+While effective, operating on these raw primitives often results in extremely long sequence lengths, limiting scalability.
 
 
 Tokenizing meshes presents unique
