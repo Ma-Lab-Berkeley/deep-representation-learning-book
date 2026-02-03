@@ -2246,6 +2246,9 @@ models, the saliency maps correspond to the objects in the input image.}
 \end{figure}
 
 \section{Image Generation via Auto-Encoding and Sampling}
+\label{sec:auto-encode-img-gen}
+
+
 In the previous section, we have introduced masked autoencoding (MAE) as one approach to learn an autoencoding of natural images $\x \sim p(\x)$:
 \begin{equation}
 \x\xrightarrow{\hspace{1mm} \mathcal{E} = f \hspace{1mm}} \z
@@ -2524,147 +2527,99 @@ samples from the learned representation distribution via the denoising
 process. The generated feature samples can then be decoded back to
 the image space with the corresponding decoder $g$.
 
-\section{Controlled Generation of 2D Images}
-\label{sec:image-generation}
-\label{sec:video-generation}
+\section{Conditioned 2D Image/Video Generation}
+\label{sec:cond_gen}
 %\yima{From the above latent diffusion model for images, it is natural to transition to conditioned image generation. Text condition via CLIP or SimCLIP... and DPS implementation, classifier-free, or cross-attention etc. (Robin, Jingfeng, Daniel, and Peter, decide what to feature...)}
 
 % --- draft by Daniel Yeh ---
-In the previous section, we established the fundamental machinery
-for generative modeling: a Representation Engine (RE), usually an
-autoencoder, to encode the data $\x$ into a (usually 
-more structured) latent $\z$:
+In the previous sections, we established the fundamental machinery
+for generative modeling: an autoencoder architecture to encode the data $\x$ into a (compressed and more structured) latent $\z$:
 \begin{equation}
-\x\xrightarrow{\hspace{1mm} \mathcal{E} = f \hspace{1mm}} \z
-\xrightarrow{\hspace{1mm} \mathcal{D} = g \hspace{1mm}} \hat{\x}.
+\x\xrightarrow{\hspace{1mm} \mathcal{E} \hspace{1mm}} \z
+\xrightarrow{\hspace{1mm} \mathcal{D} \hspace{1mm}} \hat{\x}.
 \end{equation}
 
-Then one learns a diffusion/denoising process to model and access the
-distribution of $\z$: $p(\z)$. However, the sampling process is essentially random and lack of control. In this section, we study how to introduce mechanisms to influence or control the sampling process so that we can produce images with desired content or properties. 
-
-Hence, we assume a good 
-(auto-encoding) representation of the distribution of the imagery data is already learned; our
-specific task here is to study how to steer the sampling process using a
-user-provided ``control'' signal $\vc$. That is, we want to sample
-from the conditional distribution $p(\z\mid \vc)$. In the context of image generation, $\vc$
-could represent partial attributes of the image that one wants to complete or a caption that describes the desired content of the image
-to be generated. Chapter \ref{ch:conditional-inference} has described  general methods for controlling the sampling or generation process to produce samples from the conditional distribution. In this section, we provide implementation details for controlled image generation.
+Then, a generative process is learned to model the distribution of these latents $p(\z)$. In this section, we shift our focus from \textit{unconditional generation} to \textit{control}. We assume the representation $\z$ is already learned (via methods detailed in Chapter \ref{ch:conditional-inference}); our specific task here is to steer the sampling process using a user-provided ``control'' signal $\vc$. That is, we aim to sample from the conditional distribution $p(\z\mid \vc)$. In practice, $\vc$ could represent partial attributes of the image (inpainting), a semantic mask, or a text caption describing the desired content.
 
 \subsection{Task Formulation}
 \label{subsec:cond_problem}
 
-%\paragraph{Task Definition.}
-Formally, the goal of conditioned generation is to learn a mapping
-that transforms a source distribution (typically Gaussian noise) into
-a target conditional distribution $p(\z|\vc)$. The so generated
-feature $\z$ is subsequently decoded to a corresponding image $\x$.
-As illustrated in Figure \ref{fig:task_formulation},\yima{??} the system is
-defined by its inputs and outputs:
+Formally, the goal of conditioned generation is to learn a mapping that transforms a simple source distribution (typically Gaussian noise) into a target conditional distribution. The generated feature $\hat{\z}$ is subsequently decoded to a corresponding image $\hat{\x}$. As illustrated as follows, the system is defined by its inputs and outputs:
 \begin{enumerate}
-\item \textbf{Stochastic Input ($\z$):} A latent variable sampled
-    from a standard normal prior $\z \sim \mathcal{N}(\bm{0}, \I)$.
-    This provides the ``seed'' for diversity, ensuring that we can
-    generate multiple variations of the same concept.
-\item \textbf{Control Signal ($
-    \vc$):} A structured input defining the desired semantic or
-    spatial content. This can be a text caption (e.g., ``a red car''),
-    a semantic mask (segmentation), or a low-resolution image (for
-    super-resolution tasks).
-\item \textbf{Output ($\hat{\x}$):} A high-fidelity data sample
-    $\hat{\x} = F_\theta(\z, \vc)$ that aligns with the user's intent
-    $\vc$ while remaining on the natural image manifold learned from
-    the training data.
+    \item \textbf{Stochastic Input ($\epsilon$):} A noise variable sampled from a standard normal prior $\epsilon \sim \mathcal{N}(\bm{0}, \I)$. This provides the "seed" for diversity, ensuring that we can generate multiple variations of the same concept.
+    \item \textbf{Control Signal ($\vc$):} A structured input defining the desired semantic or spatial content. This can be a text caption (e.g., "a red car"), a semantic segmentation mask, or a layout.
+    \item \textbf{Output ($\hat{\x}$):} A high-fidelity data sample $\hat{\x} = \mathcal{D}(\hat{\z})$ that aligns with the user's intent $\vc$ while remaining on the natural image manifold.
 \end{enumerate}
-Hence the overall controlled generation process can be described as:
+We employ a domain-specific \textbf{Condition Encoder}, denoted as $\tau_\phi$, to project the control signal $\vc$ into a useful embedding space. Hence, the overall controlled generation process can be formally described as a composition of a generator $G_\theta$ and the decoder $\mathcal{D}$:
 \begin{equation}
-F_{(\theta)}: \z \sim \mathcal{N}(\bm{0}, \I), \vc \longrightarrow
-\hat{\z} \sim p(\z\mid \vc) \longrightarrow \hat{\x} \sim p(\x \mid \vc).
+    \underbrace{\epsilon \sim \mathcal{N}(\bm{0}, \I)}_{\text{Source}}, \vc 
+    \xrightarrow{\quad G_\theta(\epsilon, \tau_\phi(\vc)) \quad} 
+    \hat{\z} \sim p(\z\mid \vc) 
+    \xrightarrow{\quad \mathcal{D}(\hat{\z}) \quad} 
+    \hat{\x} \approx \x.
 \end{equation}
 
 \paragraph{The Modality Gap.}
-While the task is conceptually straightforward—mapping $(\z, \vc) \to
-\x$—which requires bridging disjoint topological spaces in the
-text-to-image generation case: the visual data $\x$ lies in a
-continuous, high-dimensional pixel space $\mathbb{R}^{H \times W
-\times 3}$, whereas the condition $\vc$ typically resides in a
-discrete symbolic space (language). There is no natural Euclidean
-metric to measure the distance $\| \x - \vc \|$ directly.
-Therefore, a critical component of any conditional system is a
-\textbf{Condition Encoder} $\tau_\phi(\vc)$ that tends to align an
-image $\x$ with its caption $\vc$, usually through a joint embedding
-of $\x$ and $\vc$ into a common feature space in which the mutual
-information, or its surrogate, is easier to compute and maximize:
-\begin{equation}
-\max I(f_1(\x), f_2(\vc)).
-\end{equation}
-As discussed in Chapter \ref{ch:conditional-inference}, we rely on pretrained contrastive encoders
-(like CLIP introduced in Section \ref{sec:CLIP}) or large language models (like T5~\citep{raffel2020exploring}) to map discrete language tokens into a continuous semantic embedding space $\mathbb{R}^{d}$. The
-generative backbone must then learn to align the evolving latent features with these semantic embeddings via a specific fusion
-mechanism, such as a Cross-Attention.
+While the task is conceptually straightforward—mapping $(\epsilon, \vc) \to \x$—it requires bridging disjoint topological spaces, particularly in text-to-image generation. The visual data $\x$ lies in a continuous, high-dimensional pixel space $\mathbb{R}^{H \times W \times 3}$, whereas the condition $\vc$ typically resides in a discrete symbolic space (language). There is no natural Euclidean metric to measure the distance $\| \x - \vc \|$ directly.
+Therefore, the critical component $\tau_\phi(\vc)$ mentioned above must align the modalities. As discussed in Chapter \ref{ch:conditional-inference}, modern approaches rely on pre-trained contrastive encoders (like CLIP) or large language models (like T5~\citep{raffel2020exploring}) to map discrete language tokens into a continuous semantic embedding space. The generative backbone $G_\theta$ (i.e., Denoising U-Net) must then learn to map the noise distribution to the data distribution, guided by these semantic embeddings via a specific fusion mechanism, such as Cross-Attention.
 
 \paragraph{The One-to-Many Inverse Problem.}
-Conditioning is inherently ill-posed because the control signal is
-usually \textit{under-determined}. A text prompt $\vc=$ ``a dog''
-provides semantic category information but omits the dog's pose,
-lighting, background, and fur pattern. Consequently, the inverse
-mapping $\vc \to \x$ is not a single point, but potentially a complex
-multi-modal distribution. If we were to train a simple deterministic
-regression model minimizing $\| \x - F(\vc) \|^2$, the model would
-converge to the
-conditional mean—an average of all possible dogs—resulting in a
-blurry, unrealistic output. 
+Conditioning is inherently ill-posed because the control signal is usually \textit{under-determined}. A text prompt $\vc=$ ``a dog'' provides semantic category information but omits the dog's pose, lighting, background, and fur pattern. Consequently, the inverse mapping $\vc \to \x$ is not a single point, but a complex multi-modal distribution. If we were to train a simple deterministic regression model to minimize the Euclidean error $\|\x - G_\theta(\vc)\|^2$, the model would converge to the conditional mean $\mathbb{E}[\x|\vc]$—an average of all possible dogs—resulting in a blurry, unrealistic output. To generate high-fidelity results, we can utilize generative frameworks (such as U-Net or DiT mentioned in Section~\ref{sec:auto-encode-img-gen}) to model the full conditional distribution $p(\z|\vc)$, allowing us to sample diverse, sharp instances that satisfy the condition.
 
 % To generate high-fidelity results, we
 % must utilize the Flow Matching framework (Eq. 8.7 \yima{what is this?}) to model the full
 % conditional distribution $p(\z|\vc)$, allowing us to sample diverse,
 % sharp instances that satisfy the condition.
 
-\subsection{The Basic Realization: Text-to-Image Generation}
-\label{subsec:basic_realization}
 
-To realize the conditional framework defined in Section
-\ref{subsec:cond_problem}, we require a concrete architecture capable
-of bridging the modality gap between discrete text tokens and
-continuous pixel arrays. As illustrated in Figure
-\ref{fig:sd_pipeline}, modern state-of-the-art models (such as Stable
-Diffusion~\citep{rombach2022high}, DALL-E
-2~\citep{ramesh2022hierarchical}, and
-Imagen~\citep{saharia2022photorealistic}) universally follow a
-pipeline consisting of three decoupled components: (1) a Text Encoder
-to interpret the prompt, (2) a Generation Model to synthesize a
-compressed ``latent representation'' of the image, and (3) a Decoder to map
-this representation back to a high-fidelity image in the pixel domain. We detail the
-implementation of each component below, using the Latent Diffusion
-Model (LDM)~\citep{rombach2022high} as the primary case study.
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/sd_pipeline.pdf}
-\caption{\textbf{The three-stage inference pipeline of Stable Diffusion.}
-    (1) \textbf{Text Encoder} (e.g., CLIP) converts the input prompt
-    $\vc$ into semantic embeddings.
-    (2) \textbf{Generation Model} (a time-conditional U-Net)
-    iteratively denoises a random latent tensor $\z_T$ to produce a
-    clean intermediate representation $\hat{\z}$, conditioned on the
-    text embeddings via cross-attention.
-    (3) \textbf{Decoder} (from a VAE) maps the denoised latent
-    $\hat{\z}_0$ back to the pixel space to synthesize the final
-high-resolution image $\hat{\x}$.}
-\label{fig:sd_pipeline}
-\end{figure}
 
-\paragraph{The Text Encoder.}
-The first component converts the user's text prompt $\vc$ (e.g., ``A
-fluffy ginger cat on the couch'') into a machine-readable vector
-sequence. Its role is semantic understanding: because the generative
-model's knowledge is limited to its training data, a powerful
-pre-trained encoder is crucial for generalizing to novel concepts or
-rare words. In practice, Stable Diffusion typically utilizes a frozen
-CLIP text encoder~\citep{radford2021learning}, producing a sequence
-of semantically rich embeddings $\tau_\theta(\vc) \in \mathbb{R}^{d_\tau \times M}$ (where $d_\tau$ is typically 768 or 1024). \yima{Please refer to Section \ref{sec:CLIP}, and make sure notation and dimension match!} Recent
-works like Imagen have demonstrated that scaling up this encoder
-(e.g., using T5-XXL \yima{citation?}) yields significantly larger improvements in
-image fidelity than scaling the generative backbone itself.
+% \subsection{The Basic Realization: Text-to-Image Generation}
+% \label{subsec:basic_realization}
+
+% To realize the conditional framework defined in Section
+% \ref{subsec:cond_problem}, we require a concrete architecture capable
+% of bridging the modality gap between discrete text tokens and
+% continuous pixel arrays. As illustrated in Figure
+% \ref{fig:sd_pipeline}, modern state-of-the-art models (such as Stable
+% Diffusion~\citep{rombach2022high}, DALL-E
+% 2~\citep{ramesh2022hierarchical}, and
+% Imagen~\citep{saharia2022photorealistic}) universally follow a
+% pipeline consisting of three decoupled components: (1) a Text Encoder
+% to interpret the prompt, (2) a Generation Model to synthesize a
+% compressed ``latent representation'' of the image, and (3) a Decoder to map
+% this representation back to a high-fidelity image in the pixel domain. We detail the
+% implementation of each component below, using the Latent Diffusion
+% Model (LDM)~\citep{rombach2022high} as the primary case study.
+
+% \begin{figure}[h]
+% \centering
+% \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/sd_pipeline.pdf}
+% \caption{\textbf{The three-stage inference pipeline of Stable Diffusion.}
+%     (1) \textbf{Text Encoder} (e.g., CLIP) converts the input prompt
+%     $\vc$ into semantic embeddings.
+%     (2) \textbf{Generation Model} (a time-conditional U-Net)
+%     iteratively denoises a random latent tensor $\z_T$ to produce a
+%     clean intermediate representation $\hat{\z}$, conditioned on the
+%     text embeddings via cross-attention.
+%     (3) \textbf{Decoder} (from a VAE) maps the denoised latent
+%     $\hat{\z}_0$ back to the pixel space to synthesize the final
+% high-resolution image $\hat{\x}$.}
+% \label{fig:sd_pipeline}
+% \end{figure}
+
+% \paragraph{The Text Encoder.}
+% The first component converts the user's text prompt $\vc$ (e.g., ``A
+% fluffy ginger cat on the couch'') into a machine-readable vector
+% sequence. Its role is semantic understanding: because the generative
+% model's knowledge is limited to its training data, a powerful
+% pre-trained encoder is crucial for generalizing to novel concepts or
+% rare words. In practice, Stable Diffusion typically utilizes a frozen
+% CLIP text encoder~\citep{radford2021learning}, producing a sequence
+% of semantically rich embeddings $\tau_\theta(\vc) \in \mathbb{R}^{d_\tau \times M}$ (where $d_\tau$ is typically 768 or 1024). \yima{Please refer to Section \ref{sec:CLIP}, and make sure notation and dimension match!} Recent
+% works like Imagen have demonstrated that scaling up this encoder
+% (e.g., using T5-XXL \yima{citation?}) yields significantly larger improvements in
+% image fidelity than scaling the generative backbone itself.
 
 
 
@@ -2717,34 +2672,148 @@ image fidelity than scaling the generative backbone itself.
 
 
 
-\paragraph{The Generation Model (Latent Representation).}
-The core generative process does not produce the final image
-directly. Instead, to avoid the prohibitive computational cost of
-modeling high-resolution pixels (e.g., $1024 \times 1024$), it
-generates a compressed "intermediate product"—a latent representation $\z$.
+% \paragraph{The Generation Model (Latent Representation).}
+% The core generative process does not produce the final image
+% directly. Instead, to avoid the prohibitive computational cost of
+% modeling high-resolution pixels (e.g., $1024 \times 1024$), it
+% generates a compressed "intermediate product"—a latent representation $\z$.
+% \begin{itemize}
+% \item \textbf{Data Format:} The input image $\x \in \mathbb{R}^{H
+%     \times W \times 3}$ is compressed by a factor of $f=8$ into a
+%     latent tensor $\z_0 \in \mathbb{R}^{h \times w \times 4}$.
+%     This compression is performed by a pre-trained Variational Autoencoder (VAE)~\citep{rombach2022high} that learns a perceptually equivalent but computationally efficient lower-dimensional space.
+%     For a standard RGB input image of size $512 \times 512 \times 3$ (i.e., $H=W=512$), this results in a manageable $64 \times
+%     64 \times 4$ latent space.
+
+% \item \textbf{Conditioning Mechanism:} The generation model is
+%     implemented as a Time-Conditional U-Net. It predicts the noise
+%     $\epsilon$ added to the latent $\z_t$, conditioned on the text
+%     embeddings via \textbf{Cross-Attention}.
+%     To enable this interaction, we treat the intermediate visual features from the U-Net layer $i$ as the Query source, and the text embeddings as the Key/Value source.
+%     Let $\phi_i(\z_t) \in \mathbb{R}^{d_\epsilon^{(i)} \times N}$ denote the flattened spatial features at layer $i$ (where $d_\epsilon^{(i)}$ varies by layer, e.g., 320, 640, or 1280 channels), and let $\tau_\theta(\vc) \in \mathbb{R}^{d_\tau \times M}$ denote the sequence of $M$ text embeddings (typically $d_\tau=768$).
+%     Since these dimensions differ, we project both into a common subspace of dimension $d$ (head dimension) using learnable weights.
+
+%     We first define the Query ($\mathbf{Q}$), Key ($\mathbf{K}$), and Value ($\mathbf{V}$) matrices using projection weights $\mathbf{U}^{(i)}_{Q} \in \mathbb{R}^{d \times d_\epsilon^{(i)}}$ and $\mathbf{U}^{(i)}_{K}, \mathbf{U}^{(i)}_{V} \in \mathbb{R}^{d \times d_\tau}$:
+%     \begin{equation}
+%         \mathbf{Q} = \mathbf{U}^{(i)}_{Q} \phi_i(\z_t), \quad
+%         \mathbf{K} = \mathbf{U}^{(i)}_{K} \tau_\theta(\vc), \quad
+%         \mathbf{V} = \mathbf{U}^{(i)}_{V} \tau_\theta(\vc).
+%     \end{equation}
+%     Adapting the column-wise formulation from [placeholder], the cross-attention operation is then computed as:
+%     \begin{equation}
+%         \text{CrossAttn}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) \doteq \mathbf{V} \cdot \operatorname{softmax}\left( \frac{\mathbf{K}^\top \mathbf{Q}}{\sqrt{d}} \right),
+%     \end{equation}
+%     where the $\operatorname{softmax}$ is defined column-wise as
+%     \begin{align}
+%         \operatorname{softmax}(\mathbf{A})
+%         &\doteq \begin{bmatrix} \operatorname{softmax}(\mathbf{a}_{1}) & \cdots & \operatorname{softmax}(\mathbf{a}_{N}) \end{bmatrix}, \\
+%         \forall \mathbf{A}
+%         &= \begin{bmatrix} \mathbf{a}_{1}, \dots, \mathbf{a}_{N} \end{bmatrix} \in \mathbb{R}^{M \times N}.
+%     \end{align}
+%     In this context, the matrix $\mathbf{A} = \frac{\mathbf{K}^\top \mathbf{Q}}{\sqrt{d}}$ represents the alignment scores, and the column-wise softmax normalizes the attention weights over the $M$ text tokens for each of the $N$ visual regions. This mechanism allows the model to spatially align specific visual regions (e.g., ``cat's eye'') with specific text tokens.
+% \end{itemize}
+
+% Training involves a noise prediction task. We uniformly sample a random
+% timestep $t \in \{1, \dots, T\}$, add Gaussian noise $\epsilon$ to the clean latent
+% $\z_0$ to create a noisy latent $\z_t$. To inform the model of the noise level, the scalar timestep $t$ is first mapped to a sinusoidal embedding (encoding low and high frequency components), followed by a Multi-Layer Perceptron (MLP) composed of `Linear` $\to$ `SiLU` $\to$ `Linear` layers. This produces a rich time embedding vector (e.g., 1280-dim) which is added to the feature maps in each ResNet block of the U-Net backbone $\epsilon_\theta$. The model then minimizes the standard reweighted diffusion objective:
+% \begin{equation}
+% \mathcal{L}_{\text{LDM}} = \mathbb{E}_{\z_0, \vc, \epsilon \sim
+% \mathcal{N}(0,1), t} \left[ \| \epsilon - \epsilon_\theta(\z_t, t,
+% \tau_\theta(\vc)) \|^2 \right].
+% \end{equation}
+% During inference (sampling), we start with pure Gaussian noise $\z_T
+% \sim \mathcal{N}(\bm{0}, \I)$. In each step, the U-Net predicts the
+% noise component, which is then subtracted from the current state to
+% gradually refine the latent representation $\z_t \to \z_{t-1}$ until
+% a clean latent $\hat{\z}_0$ is formed.
+
+
+
+
+
+
+% \paragraph{The Decoder (Image Reconstruction).}
+% The final component is a neural network trained to translate the sample latent vector $\hat{\z}$ back into a natural image
+% $\hat{\x}$. Unlike the generation model which requires image-text
+% pairs, this Decoder is part of a VAE (Variational Autoencoder) that
+% can be trained separately on large-scale unlabeled image data.
+% During the training phase, the VAE minimizes a reconstruction error
+% (combining L1 loss and Perceptual Loss) to ensure the decoder
+% $\mathcal{D}$ can accurately map compressed latents back to pixels
+% ($\mathcal{D}(\mathcal{E}(\x)) \approx \x$). Once trained, the
+% Encoder is discarded from the inference pipeline, and the Decoder is
+% frozen. It simply takes the denoised latent $\hat{\z}_0$ produced by
+% the Generation Model and upsamples it to the final pixel result $\hat{\x}$.
+
+% \textit{Note on Visualization:} When visualizing the generation for every time-step using Stable Diffusion, users often observe the image evolving from a
+% "blurry blob" to a sharp result. This distinctive "blur-to-sharp"
+% transition occurs because, at every step of the sampling process, the
+% system passes the current noisy latent $\z_t$ through the Decoder to
+% visualize progress. Since the Decoder is trained on clean data, it
+% interprets the noise in the latent space as high-frequency texture
+% information, rendering the noisy latent as a blurry, low-detail image
+% rather than static noise.
+
+
+
+
+
+
+\subsection{The Basic Realization: Text-to-Image Generation}
+\label{subsec:basic_realization}
+
+To realize the conditional framework defined in \ref{subsec:cond_problem}, we require a concrete architecture capable of bridging the modality gap between discrete text tokens and continuous pixel arrays. As illustrated in Figure~\ref{fig:sd_pipeline}, modern state-of-the-art models (such as Stable Diffusion~\citep{rombach2022high}) decouple this complex task into three independent components: (1) a \textbf{Perceptual Compression} module (VAE) to translate between pixels and latents, (2) a \textbf{Semantic Conditioning} interface (CLIP Text Encoder) to interpret prompts, and (3) a \textbf{Latent Generation} backbone (U-Net) to synthesize content. We detail the implementation of each component below.
+
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/sd_pipeline.pdf}
+\caption{\textbf{The three-stage inference pipeline of Stable Diffusion.}
+    (1) \textbf{Text Encoder} (e.g., CLIP) converts the input prompt
+    $\vc$ into semantic embeddings.
+    (2) \textbf{Generation Model} (a time-conditional U-Net)
+    iteratively denoises a random latent tensor $\z_T$ to produce a
+    clean intermediate representation $\hat{\z}$, conditioned on the
+    text embeddings via cross-attention.
+    (3) \textbf{Decoder} (from a VAE) maps the denoised latent
+    $\hat{\z}_0$ back to the pixel space to synthesize the final
+high-resolution image $\hat{\x}$.}
+\label{fig:sd_pipeline}
+\end{figure}
+
+
+\paragraph{Component 1: Perceptual Compression (The VAE).}
+The first pillar of the architecture is a Variational Autoencoder (VAE) trained to abstract away high-frequency details that are perceptually insignificant but computationally expensive to model. This component defines the \textbf{Latent Space} in which the generation occurs.
 \begin{itemize}
-\item \textbf{Data Format:} The input image $\x \in \mathbb{R}^{H
-    \times W \times 3}$ is compressed by a factor of $f=8$ into a
-    latent tensor $\z_0 \in \mathbb{R}^{h \times w \times 4}$.
-    This compression is performed by a pre-trained Variational Autoencoder (VAE)~\citep{rombach2022high} that learns a perceptually equivalent but computationally efficient lower-dimensional space.
-    For a standard RGB input image of size $512 \times 512 \times 3$ (i.e., $H=W=512$), this results in a manageable $64 \times
-    64 \times 4$ latent space.
+    \item \textbf{The Encoder ($\mathcal{E}$):} The encoder maps an input RGB image $\mathbf{x} \in \mathbb{R}^{H \times W \times 3}$ into a low-dimensional latent representation $\mathbf{z} = \mathcal{E}(\mathbf{x}) \in \mathbb{R}^{h \times w \times c}$. Following \cite{rombach2022high}, it utilizes a KL-regularized encoder with a downsampling factor of $f=H/h=W/w=8$. For a standard input of $512 \times 512 \times 3$, this yields a compact latent tensor of dimensions $64 \times 64 \times 4$. In the context of the diffusion process (Component 3), this encoded representation serves as the "clean" ground-truth latent $\mathbf{z}_0$.
+    
+    \item \textbf{The Decoder ($\mathcal{D}$):} The decoder learns the reverse mapping to reconstruct the image from the latent space, denoted as $\tilde{\mathbf{x}} = \mathcal{D}(\mathbf{z}) = \mathcal{D}(\mathcal{E}(\mathbf{x}))$. It is trained to minimize the perceptual difference between $\mathbf{x}$ and $\tilde{\mathbf{x}}$. During the inference phase of the diffusion model, this decoder is frozen and used to map the generated (denoised) latent vectors back to the high-resolution pixel space.
+\end{itemize}
+Note that the VAE is pre-trained with a combination of perceptual loss and patch-based adversarial loss to ensure sharp reconstructions. Once trained, its weights are frozen, and it serves as a static interface for the diffusion model.
 
-\item \textbf{Conditioning Mechanism:} The generation model is
-    implemented as a Time-Conditional U-Net. It predicts the noise
-    $\epsilon$ added to the latent $\z_t$, conditioned on the text
-    embeddings via \textbf{Cross-Attention}.
-    To enable this interaction, we treat the intermediate visual features from the U-Net layer $i$ as the Query source, and the text embeddings as the Key/Value source.
-    Let $\phi_i(\z_t) \in \mathbb{R}^{d_\epsilon^{(i)} \times N}$ denote the flattened spatial features at layer $i$ (where $d_\epsilon^{(i)}$ varies by layer, e.g., 320, 640, or 1280 channels), and let $\tau_\theta(\vc) \in \mathbb{R}^{d_\tau \times M}$ denote the sequence of $M$ text embeddings (typically $d_\tau=768$).
-    Since these dimensions differ, we project both into a common subspace of dimension $d$ (head dimension) using learnable weights.
+\paragraph{Component 2: Semantic Conditioning (The Text Encoder).}
+To guide the generation process, we require a robust semantic representation of the user's prompt $\vc$ (e.g., "A fluffy ginger cat"). Instead of training a text encoder from scratch, Latent Diffusion Models typically leverage the frozen text encoder from CLIP~\citep{radford2021learning}. This pre-trained transformer maps the input text tokens to a sequence of semantic embeddings $\tau_\theta(\vc) \in \mathbb{R}^{d_\tau \times M}$, where $M$ is the sequence length (e.g., 77 tokens) and $d_\tau$ is the embedding dimension (typically 768 or 1024). These embeddings serve as the semantic "Key" and "Value" sources for the generation backbone.
 
-    We first define the Query ($\mathbf{Q}$), Key ($\mathbf{K}$), and Value ($\mathbf{V}$) matrices using projection weights $\mathbf{U}^{(i)}_{Q} \in \mathbb{R}^{d \times d_\epsilon^{(i)}}$ and $\mathbf{U}^{(i)}_{K}, \mathbf{U}^{(i)}_{V} \in \mathbb{R}^{d \times d_\tau}$:
+\paragraph{Component 3: Latent Generation (The Time-Conditional U-Net).}
+The core generation engine is implemented as a Time-Conditional U-Net $\epsilon_\theta$. Unlike pixel-space models, this network operates entirely within the compressed latent space. Its architecture is composed of a series of ResNet blocks for feature extraction and Cross-Attention layers for conditioning.
+\begin{itemize}
+    \item \textbf{Input Streams:} The model processes three distinct signals:
+    \begin{enumerate}
+        \item \textbf{Visual Stream:} The noisy latent $\z_t \in \mathbb{R}^{h \times w \times 4}$, which represents the image at the current diffusion step.
+        \item \textbf{Timestep ($t$):} To inform the model of the current noise level, the scalar timestep $t \in \{1, \dots, T\}$ is mapped to a sinusoidal embedding (encoding low and high frequency components), followed by a Multi-Layer Perceptron (MLP) composed of `Linear` $\to$ `SiLU` $\to$ `Linear` layers. This produces a global time embedding vector (e.g., 1280-dim) which is injected into every ResNet block in the U-Net.
+        \item \textbf{Context Stream:} The text embeddings $\tau_\theta(\vc)$ from Component 2.
+    \end{enumerate}
+
+    \item \textbf{Conditioning Mechanism (Cross-Attention):} The interaction between the visual content and the text prompt is handled via Cross-Attention layers interleaved throughout the U-Net. Let $\phi_i(\z_t) \in \mathbb{R}^{d_\epsilon^{(i)} \times N}$ denote the flattened spatial features at U-Net layer $i$ (where $N = h_i \times w_i$ is the number of visual tokens and $d_\epsilon^{(i)}$ is the channel depth, e.g., 320, 640, or 1280), and let $\tau_\theta(\vc) \in \mathbb{R}^{d_\tau \times M}$ denote the text embeddings.
+    
+    Since the visual dimension $d_\epsilon^{(i)}$ and text dimension $d_\tau$ differ, we project both into a common subspace of dimension $d$ (the attention head dimension) using learnable weights. We first define the Query ($\mathbf{Q}$), Key ($\mathbf{K}$), and Value ($\mathbf{V}$) matrices:
     \begin{equation}
         \mathbf{Q} = \mathbf{U}^{(i)}_{Q} \phi_i(\z_t), \quad
         \mathbf{K} = \mathbf{U}^{(i)}_{K} \tau_\theta(\vc), \quad
-        \mathbf{V} = \mathbf{U}^{(i)}_{V} \tau_\theta(\vc).
+        \mathbf{V} = \mathbf{U}^{(i)}_{V} \tau_\theta(\vc),
     \end{equation}
-    Adapting the column-wise formulation from [placeholder], the cross-attention operation is then computed as:
+    
+    where $\mathbf{U}^{(i)}_{Q} \in \mathbb{R}^{d \times d_\epsilon^{(i)}}$ and $\mathbf{U}^{(i)}_{K}, \mathbf{U}^{(i)}_{V} \in \mathbb{R}^{d \times d_\tau}$. Adapting the column-wise formulation from \ref{sub:image_classification_architecture}, the cross-attention operation is computed as:
     \begin{equation}
         \text{CrossAttn}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) \doteq \mathbf{V} \cdot \operatorname{softmax}\left( \frac{\mathbf{K}^\top \mathbf{Q}}{\sqrt{d}} \right),
     \end{equation}
@@ -2758,69 +2827,45 @@ generates a compressed "intermediate product"—a latent representation $\z$.
     In this context, the matrix $\mathbf{A} = \frac{\mathbf{K}^\top \mathbf{Q}}{\sqrt{d}}$ represents the alignment scores, and the column-wise softmax normalizes the attention weights over the $M$ text tokens for each of the $N$ visual regions. This mechanism allows the model to spatially align specific visual regions (e.g., ``cat's eye'') with specific text tokens.
 \end{itemize}
 
-Training involves a noise prediction task. We uniformly sample a random
-timestep $t \in \{1, \dots, T\}$, add Gaussian noise $\epsilon$ to the clean latent
-$\z_0$ to create a noisy latent $\z_t$. To inform the model of the noise level, the scalar timestep $t$ is first mapped to a sinusoidal embedding (encoding low and high frequency components), followed by a Multi-Layer Perceptron (MLP) composed of `Linear` $\to$ `SiLU` $\to$ `Linear` layers. This produces a rich time embedding vector (e.g., 1280-dim) which is added to the feature maps in each ResNet block of the U-Net backbone $\epsilon_\theta$. The model then minimizes the standard reweighted diffusion objective:
+\paragraph{Training Objective.}
+The training process unifies these components. We sample a random image $\x$, compress it using the frozen Encoder $\z_0 = \mathcal{E}(\x)$, and add Gaussian noise $\epsilon$ to produce $\z_t$. The U-Net $\epsilon_\theta$ is then trained to predict this noise, conditioned on the text $\vc$ and timestep $t$:
 \begin{equation}
-\mathcal{L}_{\text{LDM}} = \mathbb{E}_{\z_0, \vc, \epsilon \sim
-\mathcal{N}(0,1), t} \left[ \| \epsilon - \epsilon_\theta(\z_t, t,
-\tau_\theta(\vc)) \|^2 \right].
+\mathcal{L}_{\text{LDM}} = \mathbb{E}_{\mathcal{E}(\x), \vc, \epsilon \sim \mathcal{N}(0,1), t} \left[ \| \epsilon - \epsilon_\theta(\z_t, t, \tau_\theta(\vc)) \|^2 \right].
 \end{equation}
-During inference (sampling), we start with pure Gaussian noise $\z_T
-\sim \mathcal{N}(\bm{0}, \I)$. In each step, the U-Net predicts the
-noise component, which is then subtracted from the current state to
-gradually refine the latent representation $\z_t \to \z_{t-1}$ until
-a clean latent $\hat{\z}_0$ is formed.
+During inference, the Encoder is discarded. The process starts from pure noise $\z_T \sim \mathcal{N}(\bm{0}, \I)$, iteratively denoises it using the U-Net, and finally passes the resulting $\hat{\z}_0$ through the Decoder $\mathcal{D}$ to synthesize the image.
 
 
 
-
-
-
-\paragraph{The Decoder (Image Reconstruction).}
-The final component is a neural network trained to translate the sample latent vector $\hat{\z}$ back into a natural image
-$\hat{\x}$. Unlike the generation model which requires image-text
-pairs, this Decoder is part of a VAE (Variational Autoencoder) that
-can be trained separately on large-scale unlabeled image data.
-During the training phase, the VAE minimizes a reconstruction error
-(combining L1 loss and Perceptual Loss) to ensure the decoder
-$\mathcal{D}$ can accurately map compressed latents back to pixels
-($\mathcal{D}(\mathcal{E}(\x)) \approx \x$). Once trained, the
-Encoder is discarded from the inference pipeline, and the Decoder is
-frozen. It simply takes the denoised latent $\hat{\z}_0$ produced by
-the Generation Model and upsamples it to the final pixel result $\hat{\x}$.
-
-\textit{Note on Visualization:} When visualizing the generation for every time-step using Stable Diffusion, users often observe the image evolving from a
-"blurry blob" to a sharp result. This distinctive "blur-to-sharp"
-transition occurs because, at every step of the sampling process, the
-system passes the current noisy latent $\z_t$ through the Decoder to
-visualize progress. Since the Decoder is trained on clean data, it
-interprets the noise in the latent space as high-frequency texture
-information, rendering the noisy latent as a blurry, low-detail image
-rather than static noise.
 
 \paragraph{Evaluation Metrics.}
-Since conditional generation lacks a single "correct" ground truth,
-we rely on statistical metrics to evaluate performance:
+Since conditional generation lacks a single "correct" ground truth, we rely on statistical metrics to evaluate performance. We denote the distribution of real images as $p_r$ and the distribution of generated images as $p_g$.
+
 \begin{itemize}
-\item FID (Fréchet Inception Distance): Measures the distance between
-    the distribution of generated images and real images in the
-    feature space of a pre-trained Inception network. A lower FID
-    indicates the generated images are more realistic and diverse.
-\item CLIP Score: Measures the semantic alignment between the
-    generated image and the text prompt. By feeding both into a CLIP
-    model, we calculate their cosine similarity; a higher score
-    indicates the image faithfully depicts the text description.
+    \item \textbf{FID (Fréchet Inception Distance):} This metric quantifies the realism and diversity of generated samples by measuring the distance between $p_r$ and $p_g$ in the feature space of a pre-trained Inception-v3 network. We approximate these feature distributions as multidimensional Gaussians $\mathcal{N}(\bm{\mu}_r, \bm{\Sigma}_r)$ and $\mathcal{N}(\bm{\mu}_g, \bm{\Sigma}_g)$. The FID score is then defined as the Fréchet distance between them:
+    \begin{equation}
+        \text{FID}(p_r, p_g) = \| \bm{\mu}_r - \bm{\mu}_g \|^2 + \text{Tr}\left( \bm{\Sigma}_r + \bm{\Sigma}_g - 2(\bm{\Sigma}_r \bm{\Sigma}_g)^{1/2} \right).
+    \end{equation}
+    A lower FID indicates that the generated distribution is statistically closer to the real distribution, implying higher image quality and diversity.
+
+    \item \textbf{CLIP Score:} This metric measures the semantic alignment between a generated image $\hat{\x}$ and its conditioning prompt $\vc$. Let $E_{\text{img}}$ and $E_{\text{txt}}$ be the image and text encoders of a pre-trained CLIP model. The score is calculated as the cosine similarity between their embeddings:
+    \begin{equation}
+        \text{CLIP-Score}(\hat{\x}, \vc) = \max \left( 0, \frac{E_{\text{img}}(\hat{\x}) \cdot E_{\text{txt}}(\vc)}{\|E_{\text{img}}(\hat{\x})\| \|E_{\text{txt}}(\vc)\|} \right) \cdot w,
+    \end{equation}
+    where $w$ is a scaling factor (typically 2.5). A higher score indicates that the visual content faithfully reflects the textual description.
 \end{itemize}
 
 \paragraph{Advanced Text Conditioned Architectures (SDXL and Flux).}
-To address limitations in resolution and prompt adherence, advanced architectures have evolved beyond the basic LDM. SDXL \cite{podell2023sdxl} introduces a dual-encoder strategy to capture richer textual nuances, computing embeddings from both CLIP ViT-L and OpenCLIP ViT-bigG and concatenating them along the channel axis. Regarding data handling, SDXL employs Aspect Ratio Bucketing, grouping training images of similar aspect ratios into batches to prevent the model from learning to crop subjects arbitrarily. Furthermore, it implements Micro-Conditioning, where image resolution and crop coordinates are embedded and added to the time-step input, allowing the model to distinguish between centered and cropped subjects. 
+To address limitations in resolution and prompt adherence, advanced architectures have evolved beyond the basic LDM. SDXL~\citep{podell2023sdxl} introduces a dual-encoder strategy to capture richer textual nuances, computing embeddings from both CLIP ViT-L and OpenCLIP ViT-bigG and concatenating them along the channel axis. Regarding data handling, SDXL employs \textit{Aspect Ratio Bucketing}, grouping training images of similar aspect ratios into batches to prevent the model from learning to crop subjects arbitrarily. Furthermore, it implements \textit{Micro-Conditioning}, where metadata such as image resolution and crop coordinates are embedded and concatenated with the text condition $\vc$, allowing the model to explicitly distinguish between centered and cropped subjects.
 
-Meanwhile, Flux \cite{flux2024} represents a paradigm shift from the U-Net architecture to a Multimodal Diffusion Transformer (MMDiT). It processes text and visual tokens in a unified stream using Joint Attention blocks, enabled by modern transformer components like Rotary Positional Embeddings (RoPE) and RMSNorm for stability. Mathematically, Flux replaces standard diffusion with Rectified Flow Matching, simplifying the training target to predicting a straight-line velocity field $v_\theta$ between noise and data:
+Meanwhile, Flux~\citep{flux2024} represents a paradigm shift from the U-Net architecture to a Multimodal Diffusion Transformer (MMDiT). It processes text and visual tokens in a unified stream using Joint Attention blocks, enabled by modern transformer components like Rotary Positional Embeddings (RoPE) and RMSNorm. Mathematically, Flux replaces standard diffusion with \textbf{Rectified Flow Matching}. Unlike standard diffusion which predicts noise $\epsilon$, Flow Matching simplifies the training target to predicting a straight-line velocity field $v_\theta$ between noise and data. We define the process over a continuous time $t \in [0, 1]$, where $t=0$ represents the noise distribution ($\z_0$) and $t=1$ represents the data distribution ($\z_1$).\footnote{Note that this time convention ($0 \to \text{Noise}, 1 \to \text{Data}$) is the inverse of the standard diffusion notation used in previous sections.} The objective is to minimize:
 \begin{equation}
-    \mathcal{L}_{\text{RFM}} = \mathbb{E}_{t, x_1, x_0} \left[ \| v_\theta(x_t, t, c) - (x_1 - x_0) \|^2 \right],
+    \mathcal{L}_{\text{RFM}} = \mathbb{E}_{t, \z_1, \z_0} \left[ \| v_\theta(\z_t, t, \vc) - (\z_1 - \z_0) \|^2 \right],
 \end{equation}
-where the model $v_\theta$ predicts the velocity required to transport the noise distribution $x_0$ directly to the data distribution $x_1$ along a straight-line trajectory. This linearity significantly improves sampling efficiency and prompt adherence compared to the curved stochastic paths of traditional diffusion models.
+where $\z_t = t \z_1 + (1-t) \z_0$ is the interpolated latent state. The model $v_\theta$ learns to predict the constant velocity $(\z_1 - \z_0)$ required to transport the noise $\z_0$ directly to the data $\z_1$ along a straight trajectory. This linearity significantly improves sampling efficiency and prompt adherence compared to the curved stochastic paths of traditional diffusion models.
+
+
+
+
 
 \subsection{Advanced Conditioning Mechanisms}
 \label{subsec:advanced_conditioning}
