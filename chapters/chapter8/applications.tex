@@ -2487,9 +2487,21 @@ achieving much higher linear probing accuracy compared to VAEs.
 % \vspace{-4pt}
 \label{tab:rae_recon_results}
 \end{table*}
+To complement the quantitative metrics in \Cref{tab:rae_recon_results}, 
+\Cref{fig:rae_recon_qualitative} provides a visual comparison of 
+reconstructions. RAE reconstructions preserve fine-grained textures, 
+object boundaries, and semantic details as faithfully as the SD-VAE 
+baseline, consistent with its better rFID scores.
 
-\yima{Besides the quantitative results, please have some
-illustrations to show qualitative improvements... }
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{chapters/chapter8/figs/recon_grid.pdf}
+    \caption{\small\textbf{RAE Reconstruction examples.} From left to right: input image, RAE (DINOv2-B), RAE (Siglp-B), \RAE (MAE-B), SD-VAE. Zoom in for details.}
+    \label{fig:rae_recon_qualitative}
+\end{figure}
+
+% \yima{Besides the quantitative results, please have some
+% illustrations to show qualitative improvements... }
 
 \subsection{Sampling from Learned Representations via Denoising}
 
@@ -2519,8 +2531,52 @@ Typically, the denoising vector field $\bar{\z}_{\theta}(t,
 \z_t)$ are modeled by a deep network. Popular choices of the deep network can be either a U-Net or a diffusion image transformer (DiT). Below we provide more details about how they can be implemented in practice.
 
 \subsubsection{Realizing Denoising with a U-Net.}
+A common architecture for implementing the parametric denoiser
+$\bar{\z}_{\theta}(t, \z_t)$ is the \textit{U-Net}, an encoder-decoder 
+network with skip connections. The encoder progressively downsamples the 
+noisy input to extract multi-scale features, while the decoder upsamples 
+and refines predictions. Skip connections concatenate encoder features to 
+corresponding decoder layers, preserving spatial detail. To capture 
+long-range dependencies, self-attention layers are often inserted at 
+lower resolutions. The convolutional structure provides strong spatial 
+inductive biases, which can be beneficial when training data is limited.
+
+The timestep $t$ is typically embedded via 
+sinusoidal functions (analogous to positional encodings in transformers) 
+and injected through \textit{adaptive group normalization}: the scale and 
+shift parameters of normalization layers are regressed from the timestep 
+embedding. For class-conditional generation, a class embedding is simply 
+added to the timestep embedding before injection. For text conditioning, 
+a pretrained text encoder (e.g., CLIP) produces a sequence of token 
+embeddings, which are incorporated via \textit{cross-attention}: at 
+selected layers, the image features serve as queries while the text 
+embeddings serve as keys and values. This allows the network to attend to 
+relevant parts of the text prompt when denoising each spatial location.
+
 
 \subsubsection{Realizing Denoising with a DiT.}
+An alternative to the U-Net is the \textit{Diffusion Transformer (DiT)}, 
+which replaces convolutions entirely with transformer blocks. Following 
+the Vision Transformer, the input is divided into patches and linearly 
+embedded as token sequences. Unlike the U-Net, the DiT has no explicit 
+spatial inductive bias---all structure is learned from data. This 
+generality enables the same architecture to handle images, video, and 
+other modalities with minimal modification. Perhaps most importantly, DiT 
+follows favorable scaling laws: larger models and more compute yield 
+predictable improvements in sample quality.
+
+Timestep and class conditioning in DiT is 
+achieved through \textit{adaptive layer normalization} (adaLN-Zero): the 
+scale and shift parameters of each layer normalization are regressed from 
+the conditioning embedding (formed by summing timestep and class 
+embeddings), with these parameters initialized near zero for training 
+stability. For text conditioning, two approaches are common: (1) 
+cross-attention, as in the U-Net, where text token embeddings from a 
+frozen encoder are attended to by the image tokens; or (2) prepending the 
+text tokens directly to the image token sequence, allowing the 
+transformer's self-attention to jointly process both modalities.
+
+
 
 Once we have trained the denoiser, we can use it to generate new
 samples from the learned representation distribution via the denoising
