@@ -2824,16 +2824,7 @@ To realize the conditional framework defined in \ref{subsec:cond_problem}, we re
 \begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/sd_pipeline.pdf}
-\caption{\textbf{The three-stage inference pipeline of Stable Diffusion.}
-    (1) \textbf{Text Encoder} (e.g., CLIP) converts the input prompt
-    $\vc$ into semantic embeddings.
-    (2) \textbf{Generation Model} (a time-conditional U-Net)
-    iteratively denoises a random latent tensor $\z_T$ to produce a
-    clean intermediate representation $\hat{\z}$, conditioned on the
-    text embeddings via cross-attention.
-    (3) \textbf{Decoder} (from a VAE) maps the denoised latent
-    $\hat{\z}_0$ back to the pixel space to synthesize the final
-high-resolution image $\hat{\x}$.}
+\caption{\textbf{The three-stage inference pipeline of Stable Diffusion.} (1) \textbf{Text Encoder} (e.g., CLIP) converts the input prompt $\mathbf{c}$ into semantic embeddings. (2) \textbf{Generation Model} (a time-conditional U-Net $\epsilon_\theta$) iteratively denoises a random latent tensor $\mathbf{z}_T$ to produce a clean intermediate representation $\hat{\mathbf{z}}$, conditioned on the text embeddings via cross-attention. (3) \textbf{Decoder} (from a VAE) maps the denoised latent $\hat{\mathbf{z}}$ back to the pixel space to synthesize the final high-resolution image $\hat{\mathbf{x}}$. \textit{Note: The VAE Encoder is utilized only during training and is omitted from this inference pipeline.}}
 \label{fig:sd_pipeline}
 \end{figure}
 
@@ -2903,7 +2894,7 @@ Since conditional generation lacks a single "correct" ground truth, we rely on s
     \end{equation}
     A lower FID indicates that the generated distribution is statistically closer to the real distribution, implying higher image quality and diversity.
 
-    \item \textbf{CLIP Score:} This metric measures the semantic alignment between a generated image $\hat{\x}$ and its conditioning prompt $\vc$. Let $E_{\text{img}}$ and $E_{\text{txt}}$ be the image and text encoders of a pre-trained CLIP model. The score is calculated as the cosine similarity between their embeddings:
+    \item \textbf{CLIP Score:} This metric measures the semantic alignment between a generated image $\hat{\x}$ and its conditioning prompt $\vc$. Let $E_{\text{img}}$ and $E_{\text{txt}}$ be the image and text encoders of a pre-trained CLIP model as discussed in Chapter \ref{ch:conditional-inference}. The score is calculated as the cosine similarity between their embeddings:
     \begin{equation}
         \text{CLIP-Score}(\hat{\x}, \vc) = \max \left( 0, \frac{E_{\text{img}}(\hat{\x}) \cdot E_{\text{txt}}(\vc)}{\|E_{\text{img}}(\hat{\x})\| \|E_{\text{txt}}(\vc)\|} \right) \cdot w,
     \end{equation}
@@ -2921,72 +2912,76 @@ where $\z_t = t \z_1 + (1-t) \z_0$ is the interpolated latent state. The model $
 
 
 
-
-
 \subsection{Advanced Conditioning Mechanisms}
 \label{subsec:advanced_conditioning}
 
-While text-based conditioning effectively controls high-level semantics, it lacks the precision required for fine-grained spatial constraints or specific identity preservation. To address these limitations, we introduce advanced mechanisms that extend the standard pipeline to handle structural inputs and subject-specific customization.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/cnet_pipeline.pdf}
+    \caption{\textbf{ControlNet architecture pipeline.} A trainable copy of the Stable Diffusion (SD) U-Net encoder and middle blocks, conditioned on a hint image via the Hint Encoder $\mathcal{E}_{\text{hint}}$, injects feature maps into the frozen SD UNet decoder through zero convolutions to enable spatial control. (Image example from \url{https://github.com/huggingface/diffusers/blob/main/docs/source/en/using-diffusers/controlnet.md}).}
+    \label{fig:controlnet_pipeline}
+\end{figure}
 
 
-\paragraph{Structural and Spatial Control.}
-Text prompts are often geometrically ambiguous; describing a specific pose or layout in words is inefficient. To enable precise control, we require an architecture capable of injecting spatial signals $c_s$ (e.g., Canny edges, depth maps, or skeletons) without disrupting the pretrained semantic knowledge. ControlNet~\citep{zhang2023adding} solves this via a "locked-copy" strategy designed to prevent catastrophic forgetting while enabling end-to-end learning on small datasets.
+While text conditioning provides semantic control, it struggles with fine-grained spatial constraints (e.g., specific poses or edge maps). To address this, ControlNet~\citep{zhang2023adding} introduces a neural architecture that adds spatial control to large, pre-trained text-to-image diffusion models as shown in Figure~\ref{fig:controlnet_pipeline}.
 
 \textbf{Architecture and Connectivity.}
-ControlNet operates by cloning the parameters of a pretrained diffusion model. Specifically, it creates a trainable copy of the 12 encoder blocks and 1 middle block of the Stable Diffusion U-Net, while keeping the original parameters $\Theta$ completely locked. To match the dimension of the latent space ($64 \times 64$), the spatial condition $c_s$ (e.g., a $512 \times 512$ edge map) is first processed by a lightweight encoder $\mathcal{E}(\cdot)$ consisting of four convolution layers with $4 \times 4$ kernels and $2 \times 2$ strides, gradually increasing channels from 16 to 128.
+ControlNet operates by cloning the trainable parameters of a pre-trained diffusion model. Specifically, it creates a trainable copy of the 12 encoder blocks and 1 middle block of the Stable Diffusion U-Net, while keeping the original parameters $\Theta$ completely locked (executed under \texttt{torch.no\_grad()}). This preserves the generation quality learned from billions of images while allowing the model to learn conditional tasks on small datasets.
 
-The critical innovation allowing these two streams to merge is the Zero Convolution -- a $1 \times 1$ convolutional layer initialized with both weights $W$ and bias $B$ set strictly to zero. Formally, let $\mathcal{F}(\cdot; \Theta)$ be a pretrained block and $\mathcal{F}(\cdot; \Theta_c)$ be its trainable copy. The output $y_c$ is injected back into the main network's skip connections via:
+To match the spatial resolution of the latent feature maps $\z \in \mathbb{R}^{h \times w \times c}$ (typically $64 \times 64$ as defined in Sec.~\ref{subsec:basic_realization}), the spatial condition $\vc_s$ (e.g., a $512 \times 512$ Canny edge map) is first processed by a lightweight \textbf{Hint Encoder} $\mathcal{E}_{\text{hint}}(\cdot)$. Unlike the VAE, this encoder is deeper but narrower, consisting of \textbf{eight} convolution layers with $3 \times 3$ kernels and SiLU activations. It uses three stride-2 layers to downsample the resolution, gradually increasing channels ($16 \to 32 \to 96 \to 256$) before finally projecting to the model dimension (320 channels). Crucially, the final layer of this encoder is zero-initialized.
+
+The critical innovation allowing these two streams to merge is the \textbf{Zero Convolution}—a $1 \times 1$ convolutional layer $\mathcal{Z}(\cdot; \theta_z)$ initialized with both weights $W$ and bias $B$ set strictly to zero. The connectivity follows a specific pattern:
+\begin{enumerate}
+    \item \textbf{Input Injection:} The encoded hint $\mathcal{E}_{\text{hint}}(\vc_s)$ is added \textbf{only} to the first input block of the ControlNet copy.
+    \item \textbf{Output Injection:} The output of each trainable block in the ControlNet copy is passed through a Zero Convolution and then added to the corresponding \textbf{skip connection} of the frozen Stable Diffusion Decoder.
+\end{enumerate}
+
+
+
+Formally, consider the $i$-th block of the U-Net. Let $\mathbf{h}_i$ denote the input feature map to this layer. We abstract the operation of this frozen block as a function $\mathcal{F}_i(\cdot; \Theta_i)$. Accordingly, let $\mathcal{F}_{\text{trainable}}^{(i)}(\cdot; \Theta_{c,i})$ denote its trainable copy in the ControlNet branch. The output $\mathbf{y}_i$ is computed as:
 \begin{equation}
-    y_c = \mathcal{F}(\x; \Theta) + \mathcal{Z}\left( \mathcal{F}(\x + \mathcal{Z}(c_s; \theta_{z1}); \Theta_c); \theta_{z2} \right).
+    \mathbf{y}_i = \mathcal{F}_i(\mathbf{h}_i; \Theta_i) + \mathcal{Z}\left( \mathcal{F}_{\text{trainable}}^{(i)}(\mathbf{h}_i + \mathcal{E}_{\text{hint}}(\vc_s); \Theta_{c,i}); \theta_z \right).
     \label{eq:controlnet}
 \end{equation}
-Because the Zero Convolution $\mathcal{Z}$ is initialized to zero, the term $\mathcal{Z}(\cdot) = 0$ at the first training step. Consequently, the gradient for the weight $W$ becomes:
+
+
+
+
+
+Because the Zero Convolution is initialized to zero, the control term vanishes at the start of training ($\mathcal{Z}(\cdot) = 0$), ensuring the model behaves exactly like the original Stable Diffusion. However, the gradients for the weights $W$ are non-zero:
 \begin{equation}
     \frac{\partial \mathcal{Z}(I; \{W, B\})}{\partial W_{i,j}} = I_{p,i} \neq 0,
 \end{equation}
-where $I$ is the input feature map. This proves that while the output is zero (preserving the original model's behavior perfectly at initialization), the gradient is non-zero, allowing learning to commence immediately.
+where $I$ is the input feature map. This ensures that although the initial influence is zero, learning commences immediately in the first backward pass.
 
 \textbf{Training Dynamics and Experiments.}
-ControlNet is trained to minimize the standard diffusion objective, but with the additional spatial condition $c_f$ (feature map of $c_s$) injected into the noise predictor. The specific learning objective is:
+ControlNet is trained to minimize the standard diffusion objective, but with the additional spatial condition $\vc_s$ injected into the noise predictor. The specific learning objective is:
 \begin{equation}
-    \mathcal{L} = \mathbb{E}_{\z_0, t, \vc_t, c_f, \epsilon \sim \mathcal{N}(0,1)} \left[ \| \epsilon - \epsilon_\theta(\z_t, t, \vc_t, c_f) \|^2 \right],
+    \mathcal{L} = \mathbb{E}_{\z_0, t, \vc_t, \vc_s, \epsilon \sim \mathcal{N}(0,1)} \left[ \| \epsilon - \epsilon_\theta(\z_t, t, \vc_t, \vc_s) \|^2 \right],
 \end{equation}
-where $\vc_t$ represents the text prompt conditioning.
-A unique training phenomenon observed is "sudden convergence." During the initial thousands of steps, the model generates images consistent with the text but ignoring the spatial condition. Suddenly, the model learns to interpret the condition, and the error drops sharply. To force the model to rely on these structural signals rather than just the text (which might contradict the edge map), a crucial training strategy involves CFG-Dropout: randomly replacing 50\% of the text prompts $\vc_t$ with empty strings during training. This compels the encoder to extract semantic meaning directly from the spatial condition $c_f$. Empirically, ControlNet is highly efficient; it requires only $\sim 23\%$ more GPU memory and $\sim 34\%$ more time per iteration compared to standard fine-tuning, yet it can learn robust control from datasets as small as 1,000 samples without overfitting.
+where $\vc_t$ represents the text prompt conditioning and $\z_t$ is the noisy latent. A unique phenomenon observed is "sudden convergence": the model initially ignores the spatial condition, then suddenly snaps to alignment as the error drops sharply. To force the model to rely on structural signals rather than just the text (which might contradict the edge map), a crucial strategy involves \textbf{CFG-Dropout}: randomly replacing 50\% of the text prompts $\vc_t$ with empty strings during training. This compels the network to extract semantic meaning directly from the spatial condition $\vc_s$. Empirically, ControlNet is highly efficient, requiring only $\sim 23\%$ more GPU memory compared to standard fine-tuning, yet effectively learning robust control from datasets as small as 1,000 samples.
 
 
-\paragraph{Structural and Image-Driven Control.}
-While cross-attention excels at semantics, it often fails to capture
-precise spatial constraints (e.g., edges, depth) or reference image
-styles. To address this, ControlNet \cite{zhang2023adding} introduces
-a side-network architecture. Let $\mathcal{F}(\cdot; \Theta)$ be a
-block in the original model and $\Theta_c$ be its trainable copy. The
-output $y_c$ conditioned on a spatial map $c_s$ is given by:
-\begin{equation}
-y_c = \mathcal{F}(x; \Theta) + \mathcal{Z}\left( \mathcal{F}(x +
-\mathcal{Z}(c_s; \theta_{z1}); \Theta_c); \theta_{z2} \right),
-\label{eq:controlnet}
-\end{equation}
-where $\mathcal{Z}(\cdot)$ denotes a zero-initialized convolution.
-This ensures the model retains its original capabilities at
-initialization ($y_c \approx \mathcal{F}(x)$) while learning additive
-structural residuals. Consistent with this additive principle,
-IP-Adapter \cite{ye2023ip} addresses image prompt conditioning via a
-decoupled cross-attention mechanism. Instead of concatenating text
-and image tokens, it adds a separate cross-attention block for image
-features $c_{img}$, yielding an update rule of the form $z' =
-\text{Attn}(Q, K_{txt}, V_{txt}) + \lambda \cdot \text{Attn}(Q,
-K_{img}, V_{img})$, where $K_{img}, V_{img}$ are projected from the
-reference image embedding. This decoupling prevents the dense visual
-information from overwriting the text control. More recent frameworks
-like OminiControl \cite{tan2025ominicontrol} have further unified
-these approaches, enabling a single model to handle diverse
-conditions—from sparse points to dense depth maps—within a shared
-parameter-efficient subspace.
+
+
+
+
+
+
 
 
 \paragraph{Subject-Driven Personalization.}
 While foundational models possess a vast semantic prior, they lack the ability to synthesize specific subject instances (e.g., a user's specific cat) consistently across different contexts. To address this, DreamBooth \citep{ruiz2023dreambooth} introduces a "personalization" fine-tuning protocol. The core challenge is implanting a new subject into the model's output domain without "catastrophic forgetting"—where the model loses its understanding of the general class (e.g., forgetting what a generic cat looks like) or suffers from "language drift" (overwriting the word "cat" with the specific cat's features).
+
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/db_pipeline.pdf}
+    \caption{\textbf{The training and inference pipeline of DreamBooth.} During \textit{subject-driven finetuning}, the text-to-image model is updated using a combined loss: a reconstruction loss to learn the specific subject (e.g., "[V] cat") and a prior preservation loss to maintain generic class knowledge (e.g., "a cat"). At \textit{inference}, the personalized model can generate the specific subject in novel contexts (e.g., "laying on a wooden table") using the unique identifier.}
+    \label{fig:dreambooth_pipeline}
+\end{figure}
+
+
 
 \textbf{Identifier and Data Strategy.}
 Unlike standard training which requires millions of pairs, DreamBooth operates on a "few-shot" dataset provided by the user, typically containing just 3--5 images of the subject. To bind this subject to the model's text space, a unique identifier $[V]$ is required. The authors propose a rare-token selection strategy: rather than using random characters (which might be tokenized into common letters with strong priors), the method searches the tokenizer's vocabulary for rare token sequences (e.g., in the T5-XXL tokenizer range $\{5000, \dots, 10000\}$) that have weak semantic associations. This identifier is always paired with a coarse Class Noun (e.g., "a $[V]$ cat") in the prompt. This "tethering" is crucial: it leverages the model's strong prior for the class (knowing how to render a "cat" in various poses) while binding the specific identity features to the identifier $[V]$.
@@ -3000,12 +2995,6 @@ To prevent the model from overfitting to the few-shot images and losing diversit
 The first term fine-tunes the model weights (typically the entire U-Net and text encoder) to reconstruct the subject images conditioned on the unique prompt $\vc_{\text{subj}}$ (e.g., "a $[V]$ cat"). The second term acts as a regularizer: it supervises the model with its own generated samples of the generic class $\vc_{\text{prior}}$ (e.g., "a cat"). This forces the model to retain its original understanding of the class distribution, ensuring that the identifier $[V]$ learns the specific subject nuances while the class noun "cat" remains generic.
 
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/db_pipeline.pdf}
-    \caption{\textbf{The training and inference pipeline of DreamBooth.} During \textit{subject-driven finetuning}, the text-to-image model is updated using a combined loss: a reconstruction loss to learn the specific subject (e.g., "[V] cat") and a prior preservation loss to maintain generic class knowledge (e.g., "a cat"). At \textit{inference}, the personalized model can generate the specific subject in novel contexts (e.g., "laying on a wooden table") using the unique identifier.}
-    \label{fig:dreambooth_pipeline}
-\end{figure}
 
 
 
@@ -3030,58 +3019,32 @@ More recently, the field has shifted toward Tuning-Free architectures like Photo
 
 \subsection{Extension to Video Generation}
 \label{subsec:video_gen}
-The principles of conditioned 2D generation extend naturally to video
-generation by treating video as a sequence of temporally correlated
-frames $x \in \mathbb{R}^{T \times C \times H \times W}$. However,
-directly modeling this high-dimensional space is computationally
-prohibitive. Consequently, modern state-of-the-art approaches
-typically operate within a compressed latent space, employing an
-"inflation" strategy to adapt pretrained 2D image backbones for 3D
-spatiotemporal data.
+
+The principles of conditioned 2D generation extend naturally to video generation by treating video as a sequence of temporally correlated frames $\mathbf{x} \in \mathbb{R}^{T \times H \times W \times 3}$. However, directly modeling this high-dimensional space is computationally prohibitive. Consequently, modern state-of-the-art approaches typically operate within the compressed latent space defined by the VAE (Sec.~\ref{subsec:basic_realization}), where the video is represented as a tensor $\mathbf{z} \in \mathbb{R}^{T \times h \times w \times c}$.
 
 \paragraph{Spatiotemporal Inflation.}
-To leverage the robust visual priors established by 2D image
-generators, architectures such as VideoLDM \citep{blattmann2023align}
-and AnimateDiff \citep{guo2023animatediff} introduce the concept of
-inflating 2D layers into pseudo-3D layers. This is commonly achieved
-by inserting temporal layers into the frozen 2D backbone.
-Specifically, given a latent feature map $z$ of shape $(B, C, T, H,
-W)$, the model reshapes it to $(B \times H \times W, T, C)$ to
-perform self-attention solely along the temporal axis:
+To leverage the robust visual priors established by 2D image generators, architectures such as VideoLDM~\citep{blattmann2023align} and AnimateDiff~\citep{guo2023animatediff} introduce the concept of "inflating" 2D layers into pseudo-3D layers. This is achieved by reshaping the input tensor $\mathbf{z}$ to alternate between spatial and temporal processing:
+\begin{itemize}
+    \item \textbf{Spatial Layers (Frozen):} The 2D backbone (ResNet and Spatial Attention) processes frames independently by reshaping the input to $(B \cdot T, h, w, c)$. This preserves the pre-trained texture and object generation capabilities.
+    \item \textbf{Temporal Layers (Trainable):} To model motion, the tensor is reshaped to isolate the temporal axis for each spatial location. We treat the spatial grid points ($B \cdot h \cdot w$) as the batch dimension and time ($T$) as the sequence length. A \textbf{Temporal Self-Attention} layer is then applied to exchange information across frames.
+\end{itemize}
+
+Mathematically, let $\mathbf{u} \in \mathbb{R}^{c \times T}$ denote the feature vector at a specific spatial pixel location across time (analogous to the spatial features $\phi_i(\z_t)$ in Sec.~\ref{subsec:basic_realization}). We define the temporal Query ($\mathbf{Q}$), Key ($\mathbf{K}$), and Value ($\mathbf{V}$) matrices using learnable projection weights $\mathbf{U}^{(temp)}$:
 \begin{equation}
-z'_{\text{temporal}} = \text{Attention}(W_Q z, W_K z, W_V z) + z,
+    \mathbf{Q} = \mathbf{U}^{(temp)}_Q \mathbf{u}, \quad \mathbf{K} = \mathbf{U}^{(temp)}_K \mathbf{u}, \quad \mathbf{V} = \mathbf{U}^{(temp)}_V \mathbf{u},
 \end{equation}
-where the attention operates over the sequence length $T$. This
-mechanism ensures that each spatial pixel attends to its
-corresponding location across different frames, enforcing temporal
-consistency. Crucially, the spatial layers (and their
-text-conditioning cross-attention mechanisms discussed in Section
-8.8.2) remain frozen and operate on the shape $(B \times T, C, H,
-W)$. This allows the model to retain its original text-to-image
-capabilities while learning motion dynamics through the new temporal parameters.
+where $\mathbf{U}^{(temp)}_{Q}, \mathbf{U}^{(temp)}_{K}, \mathbf{U}^{(temp)}_{V} \in \mathbb{R}^{c \times c}$. Following the column-wise formulation established in Sec.~\ref{subsec:basic_realization}, the temporal self-attention is computed as:
+\begin{equation}
+    \text{TempAttn}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) \doteq \mathbf{V} \cdot \operatorname{softmax}\left( \frac{\mathbf{K}^\top \mathbf{Q}}{\sqrt{c}} \right) + \mathbf{u}.
+\end{equation}
+Here, the term $\mathbf{K}^\top \mathbf{Q} \in \mathbb{R}^{T \times T}$ represents the temporal attention map, relating every frame to every other frame. Crucially, the output projection layer of this attention block is typically zero-initialized. This ensures that at the start of training, the contribution of the temporal layers vanishes, allowing the model to behave exactly like the pre-trained 2D generator and gradually learn temporal dynamics.
 
 \paragraph{Interactive World Models.}
-Recent advances have moved beyond passive text-to-video synthesis
-toward interactive world simulation, where the generation is
-conditioned on an agent's actions. This effectively treats the video
-generator as a predictive model of physical environments. Formally,
-the goal is to model the transition probability:
+Recent advances have moved beyond passive text-to-video synthesis toward interactive world simulation, effectively treating the video generator as a predictive model of physical environments. Formally, the goal is to model the latent transition probability conditioned on an agent's action $\mathbf{a}_t$:
 \begin{equation}
-p(x_{t+1} | x_{1:t}, a_t),
+    p(\mathbf{z}_{t+1} \mid \mathbf{z}_{1:t}, \mathbf{a}_t),
 \end{equation}
-where $a_t$ represents the action taken at time $t$. In frameworks
-like Genie \citep{bruce2024genie}, the action $a_t$ is discretized
-into a latent token and injected into the network using the same
-conditioning mechanisms used for text or classes. For instance, $a_t$
-can be added to the time-step embedding or utilized as a key/value
-pair in cross-attention layers. This allows the generative model to
-function as a data-driven physics engine, predicting the visual
-consequences of actions (e.g., a character jumping) by minimizing the
-same reconstruction or flow matching objectives used in static image
-generation. Large-scale implementations like Sora
-\citep{openai2024sora} further suggest that scaling this
-autoregressive or diffusion-based prediction leads to emergent 3D
-consistency and object permanence.
+where $\mathbf{a}_t$ represents the control signal (e.g., keyboard input or motor command) at time $t$. In frameworks like Genie~\citep{bruce2024genie}, the action $\mathbf{a}_t$ is discretized into a token and injected into the network using the same conditioning mechanisms used for text. For instance, $\mathbf{a}_t$ can be mapped to an embedding vector and added to the timestep embedding or utilized as a key/value pair in Cross-Attention layers. This allows the generative model to function as a data-driven physics engine, predicting the visual consequences of actions (e.g., a character jumping) by minimizing the reconstruction or flow matching objectives. Large-scale implementations like Sora~\citep{openai2024sora} further suggest that scaling this autoregressive or diffusion-based prediction leads to emergent 3D consistency and object permanence.
 
 
 
