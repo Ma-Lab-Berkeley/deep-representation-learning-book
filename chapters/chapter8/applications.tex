@@ -2262,9 +2262,71 @@ Hence, in this section, we will introduce some other methods to learn representa
 
 
 \subsection{Variational Auto-Encoding of Imagery Data}
-As we have introduced in Section \ref{sec:vae} of Chapter \ref{ch:consistent-representations}, variational auto-encoding is a method that aims to promote the distribution of learned features $\z$ and the conditional distributions between $\x$ and $\z$ to be more Gaussian like.\footnote{One may view such prior is to promote the learned the features to be diverse, in a similar spirit to maximizing the coding rate of all features.} 
+% As we have introduced in Section \ref{sec:vae} of Chapter \ref{ch:consistent-representations}, variational auto-encoding is a method that aims to promote the distribution of learned features $\z$ and the conditional distributions between $\x$ and $\z$ to be more Gaussian like.\footnote{One may view such prior is to promote the learned the features to be diverse, in a similar spirit to maximizing the coding rate of all features.} 
 
-Here we introduce a popular implementation of a VAE for imagery data...
+% Here we introduce a popular implementation of a VAE for imagery data...
+
+
+
+
+% \subsection{Variational Auto-Encoding of Imagery Data}
+\label{sec:VAE-implement}
+
+As we have introduced in Section~\ref{sec:vae} of Chapter~\ref{ch:consistent-representations}, variational auto-encoding is a method that aims to promote the distribution of learned features $\z$ and the conditional distributions between $\x$ and $\z$ to be more Gaussian like.\footnote{One may view such prior is to promote the learned features to be diverse, in a similar spirit to maximizing the coding rate of all features.}
+
+Here we introduce a popular implementation of a VAE for imagery data, following the perceptual compression model leveraged in Stable Diffusion~\citep{rombach2022high}. The key idea is to train an autoencoder that maps high-resolution images into a low-dimensional latent space, while imposing a KL-regularization on the latent distribution to encourage it to be close to a standard Gaussian $\mathcal{N}(\mathbf{0}, \mathbf{I})$. This latent space can subsequently serve as an efficient arena for downstream generative models such as latent diffusion. Both the encoder and decoder are jointly trained end-to-end. We outline the details as follows.
+
+\paragraph{The Encoder ($\mathcal{E}$).}
+The encoder $\mathcal{E}$ maps an input RGB image $\x \in \mathbb{R}^{H \times W \times 3}$ into a low-dimensional latent space. Its architecture, adopted from~\citep{esser2021taming}, is a fully convolutional network. It begins with an input convolution that projects the 3-channel RGB input into a feature map with a base channel count of $128$. This is followed by four stages, each consisting of two ResNet blocks~\citep{he2016deep}. The channel dimension is scaled by multipliers $(1, 2, 4, 4)$ across stages, yielding feature maps with $128, 256, 512, 512$ channels, respectively. Spatial downsampling by a factor of $2\times$ is performed between consecutive stages via strided convolutions, resulting in three downsamplings and an overall downsampling factor of $f = 2^3 = 8$. After the four stages, a middle block consisting of two additional ResNet blocks further refines the features. Finally, an output convolution projects the features to $2c$ channels, which are split into the two quantities that parameterize the latent distribution (described below).
+
+Crucially, unlike a standard autoencoder, the encoder does not output a single deterministic latent vector. Instead, it parameterizes a diagonal Gaussian posterior $q(\z | \x) = \mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\sigma}^2 \mathbf{I})$ by outputting two quantities:
+\begin{itemize}
+    \item A mean $\boldsymbol{\mu} = \mathcal{E}_\mu(\x) \in \mathbb{R}^{h \times w \times c}$, and
+    \item A log-variance $\log \boldsymbol{\sigma}^2 = \mathcal{E}_\sigma(\x) \in \mathbb{R}^{h \times w \times c}$.
+\end{itemize}
+The latent representation is then obtained via the \emph{reparameterization trick}~\citep{kingma2013auto}:
+\begin{equation}
+    \z = \boldsymbol{\mu} + \boldsymbol{\sigma} \odot \boldsymbol{\epsilon}, \quad \boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, \mathbf{I}),
+\end{equation}
+where $\odot$ denotes element-wise multiplication. This formulation enables gradient-based optimization through the stochastic sampling step.
+
+\paragraph{The Decoder ($\mathcal{D}$).}
+The decoder $\mathcal{D}$ learns the reverse mapping from the latent space back to the pixel space, producing the reconstructed image $\tilde{\x} = \mathcal{D}(\z) \in \mathbb{R}^{H \times W \times 3}$. Its architecture is approximately symmetric to the encoder: an input convolution first projects the $c$-channel latent into the feature space, followed by a middle block of two ResNet blocks. Then, four stages---each with two ResNet blocks---progressively upsample the spatial resolution, with the channel dimensions mirroring those of the encoder in reverse order ($512, 512, 256, 128$). A final output convolution maps the features back to 3 RGB channels. Both the encoder and decoder architectures follow the convolutional design introduced in~\citep{esser2021taming}.
+
+\subsubsection{Data}
+We assume access to a dataset $\mathcal{D} = \{\x_i\}_{i=1}^N$ of samples from the original data distribution. Each sample is an image of the form $\x \in \mathbb{R}^{H \times W \times 3}$, where $H$ and $W$ are the height and width, respectively. In~\citep{rombach2022high}, the autoencoder is trained on the OpenImages dataset with images cropped to $256 \times 256$ resolution.
+
+Given the downsampling factor $f = 8$ and latent channel count $c = 4$, the encoder maps each input image to a latent tensor $\z \in \mathbb{R}^{H/f \times W/f \times c}$. For the default training resolution, this yields a latent of size $32 \times 32 \times 4$. At inference time, the autoencoder generalizes to other resolutions; for example, a $512 \times 512 \times 3$ input is encoded into a $64 \times 64 \times 4$ latent.
+
+\subsubsection{Objective and Evaluation Metrics}
+To train the VAE, our goal is to jointly optimize the encoder $\mathcal{E}$ and decoder $\mathcal{D}$ such that the reconstructed data $\tilde{\x} = \mathcal{D}(\mathcal{E}(\x))$ is as close as possible to the original data $\x$, while regularizing the latent distribution to be close to a standard Gaussian prior. An empirically effective choice of the reconstruction loss is a weighted combination of L1, LPIPS~\citep{zhang2018unreasonable}, and adversarial losses as in GAN~\citep{goodfellow2014generative}. Additionally, a KL divergence term is included to regularize the latent space. Formally, the training objective can be expressed as:
+
+\begin{equation}
+\begin{split}
+\min_{\theta_{\mathcal{E}}, \theta_{\mathcal{D}}} \; \mathcal{L}_{\mathrm{VAE}}(\theta_{\mathcal{E}}, \theta_{\mathcal{D}}) = \mathbb{E}_{\x \sim \mathcal{D}} \Big[
+    &\|\tilde{\x} - \x\|_1 + \lambda_1 \, \mathrm{LPIPS}(\tilde{\x}, \x) + \lambda_2 \, \mathcal{L}_{\mathrm{GAN}}(\tilde{\x}, \x) \\
+    &+ \; \lambda_3 \, D_{KL}\!\big(q(\z | \x) \,\big\|\, p(\z)\big)
+\Big],
+\end{split}
+\label{eq:vae_loss}
+\end{equation}
+
+where $\theta_{\mathcal{E}}$ and $\theta_{\mathcal{D}}$ are the parameters of the encoder and decoder, respectively, and $\lambda_1, \lambda_2, \lambda_3$ are hyperparameters that balance the contributions of each loss term. The first three terms enforce sample-wise consistency in the same manner as the reconstruction objectives in Section~\ref{sec:RAE-implement}. The fourth term---the KL divergence between the encoder posterior $q(\z | \x) = \mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\sigma}^2 \mathbf{I})$ and the standard Gaussian prior $p(\z) = \mathcal{N}(\mathbf{0}, \mathbf{I})$---regularizes the latent space. For a diagonal Gaussian posterior, this admits a closed-form expression:
+\begin{equation}
+    D_{KL}\!\big(q(\z | \x) \,\big\|\, p(\z)\big) = \frac{1}{2} \sum_{j=1}^{d} \left( \mu_j^2 + \sigma_j^2 - \log \sigma_j^2 - 1 \right),
+\end{equation}
+where $d = h \times w \times c$ is the total dimensionality of the latent space.
+
+The implementation detail from~\citep{rombach2022high} is that the KL weight $\lambda_3$ is set to a very small value ($\approx 10^{-6}$). This is because the primary purpose of the KL term here is not to enable unconditional sampling from the latent space (as in a traditional VAE), but rather to prevent the latent space from developing arbitrarily high variance, which would degrade the signal-to-noise ratio for downstream models operating in this space.
+
+For evaluation, we measure the reconstruction quality by computing the FID score~\citep{heusel2017gans} on the reconstructed images from the ImageNet-1k validation set, denoted as rFID. A lower rFID indicates better reconstruction quality.
+
+
+
+
+
+
+
 
 \subsection{Representation Auto-Encoding of Imagery Data}
 \label{sec:RAE-implement}
@@ -2833,13 +2895,13 @@ To realize the conditional framework defined in \ref{subsec:cond_problem}, we re
 
 
 \paragraph{Component 1: Perceptual Compression (The VAE).}
-The first pillar of the architecture is a Variational Autoencoder (VAE) trained to abstract away high-frequency details that are perceptually insignificant but computationally expensive to model. This component defines the \textbf{Latent Space} in which the generation occurs.
+The first pillar of the architecture is a Variational Autoencoder (VAE) trained to abstract away high-frequency details that are perceptually insignificant but computationally expensive to model. As we introduced in Section~\ref{sec:VAE-implement}, this component defines the \textbf{Latent Space} in which the generation occurs.
 \begin{itemize}
     \item \textbf{The Encoder ($\mathcal{E}$):} The encoder maps an input RGB image $\mathbf{x} \in \mathbb{R}^{H \times W \times 3}$ into a low-dimensional latent representation $\mathbf{z} = \mathcal{E}(\mathbf{x}) \in \mathbb{R}^{h \times w \times c}$. Following \cite{rombach2022high}, it utilizes a KL-regularized encoder with a downsampling factor of $f=H/h=W/w=8$. For a standard input of $512 \times 512 \times 3$, this yields a compact latent tensor of dimensions $64 \times 64 \times 4$. In the context of the diffusion process (Component 3), this encoded representation serves as the "clean" ground-truth latent $\mathbf{z}_0$.
     
     \item \textbf{The Decoder ($\mathcal{D}$):} The decoder learns the reverse mapping to reconstruct the image from the latent space, denoted as $\tilde{\mathbf{x}} = \mathcal{D}(\mathbf{z}) = \mathcal{D}(\mathcal{E}(\mathbf{x}))$. It is trained to minimize the perceptual difference between $\mathbf{x}$ and $\tilde{\mathbf{x}}$. During the inference phase of the diffusion model, this decoder is frozen and used to map the generated (denoised) latent vectors back to the high-resolution pixel space.
 \end{itemize}
-Note that the VAE is pre-trained with a combination of perceptual loss and patch-based adversarial loss to ensure sharp reconstructions. Once trained, its weights are frozen, and it serves as a static interface for the diffusion model.
+Note that the VAE is pre-trained with a combination of perceptual loss and patch-based adversarial loss to ensure the quality of reconstructions. Once trained, its weights are frozen, and it serves as a static interface for the diffusion model.
 
 \paragraph{Component 2: Semantic Conditioning (The Text Encoder).}
 To guide the generation process, we require a robust semantic representation of the user's prompt $\vc$ (e.g., "A fluffy ginger cat"). Instead of training a text encoder from scratch, Latent Diffusion Models typically leverage the frozen text encoder from CLIP~\citep{radford2021learning}. This pre-trained transformer maps the input text tokens to a sequence of semantic embeddings $\tau_\theta(\vc) \in \mathbb{R}^{d_\tau \times M}$, where $M$ is the sequence length (e.g., 77 tokens) and $d_\tau$ is the embedding dimension (typically 768 or 1024). These embeddings serve as the semantic "Key" and "Value" sources for the generation backbone.
@@ -3351,7 +3413,7 @@ geometric primitives directly, these following methods first project the 3D data
 into a compact, low-dimensional latent space where semantic information 
 is aggregated, effectively decoupling geometric reconstruction from structural modeling.
 
-\textbf{Latent Vector Quantization.} This approach (like AutoSDF~\cite{mittal2022autosdf}) learns a discrete 
+\textbf{Standard Latent Vector Quantization.} This approach (like AutoSDF~\cite{mittal2022autosdf}) learns a discrete 
 codebook to represent the shape via Vector Quantization (VQ). In this framework, a high-dimensional 
 input (e.g., a voxel grid $X$ or  implicit function field $F_\theta$) 
 is compressed by an encoder $E$ into 
@@ -3362,10 +3424,48 @@ q(z_i) = \arg\min_{c_k \in \mathcal{C}} | z_i - c_k |_2^2
 \end{equation}
 This reduces the shape to a sequence of discrete codebook indices that preserve 
 spatial structure while drastically reducing dimensionality. These discrete indices 
-serve as the tokens for subsequent Transformer processing.
+serve as the tokens for subsequent Transformer processing. However, this regular grid-based approach typically treats occupied and empty space uniformly, leading to computational redundancy.
 
 {\color{blue} Update: We add more details of latent vector quantization process and wew specify that the 3D shape is converted to a sequence of tokens.}
 \yima{Then each 3D shape is converted to a single vector, instead of a sequence of tokens?}
+
+\textbf{From Structural Optimization to Semantic Alignment.}
+To address the redundancy of regular grids, approaches such as 
+3DILG~\cite{zhang20223dilg} proposes Irregular Latent Grids. 
+Instead of a dense voxel grid where tokens are wastefully 
+allocated to empty space, 3DILG defines the shape as a set 
+of latent codes floating at arbitrary, adaptive positions 
+in continuous space, typically concentrated on the shape's surface. 
+Specifically, given an input shape represented as a point cloud, the method first encodes it into a set of feature-position pairs $\mathcal{P} = \{(x_i, f_i)\}_{i=1}^M$, where $x_i \in \mathbb{R}^3$ are key points selected via Farthest Point Sampling (FPS) and $f_i \in \mathbb{R}^C$ are their associated continuous feature vectors extracted by a PointNet-based encoder. The conversion of this unstructured set into a token sequence involves three key steps:
+\begin{itemize}\item \textbf{Coordinate Quantization.} First, for a set of $M$ key points selected via Farthest Point Sampling (FPS), the continuous spatial coordinates $x_i \in \mathbb{R}^3$ are discretized into 8-bit integers:
+\begin{equation}
+x_i \rightarrow (x_{i,1}, x_{i,2}, x_{i,3}), \quad \text{where } x_{i,k} \in {0, 1, \dots, 255}
+\end{equation}
+This step effectively converts continuous positions into discrete, tokenizable units.
+
+\item \textbf{Feature Quantization.} Concurrently, the local feature vector associated with each point is compressed into a discrete codebook index $z_i$ via Vector Quantization (VQ):
+\begin{equation}
+    z_i \in \{0, 1, \dots, D-1\}
+\end{equation}
+where $D$ represents the size of the codebook.
+
+\item \textbf{Sequence Construction.} To facilitate autoregressive generation with Transformers, the unstructured set of tuples must be serialized. 3DILG employs lexicographical sorting based on the quantized coordinates. The final shape is represented as a structured sequence $\mathcal{S}$ that explicitly couples positional coordinate and local geometric feature information:
+\begin{equation}
+    \mathcal{S} = \big\{ (x_{0,1}, x_{0,2}, x_{0,3}, z_0), \dots, (x_{M-1,1}, x_{M-1,2}, x_{M-1,3}, z_{M-1}) \big\}
+\end{equation}
+\end{itemize}
+This hybrid formulation drastically reduces sequence length compared to dense grids while preserving high-fidelity surface details.
+
+While 3DILG optimizes the spatial structure of tokens, 
+it largely remains a geometric compression method. 
+In the following, we provide a detailed exposition 
+of Michelangelo, a work that advances this paradigm 
+by addressing the semantic gap. It encodes 3D shapes 
+into a sequence of latent tokens that are not only 
+geometrically compact but also explicitly aligned 
+with the feature space of 2D vision-language models 
+(e.g., CLIP)~\cite{pmlr-v139-radford21a}), thereby 
+facilitating high-quality conditional generation.
 
 % Introduce task and challenges
 \subsection{Task}
@@ -4078,24 +4178,16 @@ Conditional Flow Matching (CFM) objective~\cite{bib}:
 By sampling from this learned model, we can generate a latent code
 $\latent$ which can then be decoded into the final 3D object and camera pose.
 
-\subsection{3D Shape Representation and Tokenizations}
-% {\color{red} maybe we should move this to michealangelo}
+\subsection{3D Shape Representation and Tokenization}
 
 
-A central challenge in 3D shape generation is finding a tokenization
-that is both compact and expressive, capable of high-fidelity
-reconstruction. While \textbf{Michelangelo}~\citep{zhao2023michelangelo} utilizes a learned latent
-vector representation—encoding shapes into a sequence of 1024
-tokens—these vectors lack explicit 3D spatial coordinates. In this
-project, we seek a latent representation that retains explicit 3D
-positional information, allowing us to align shape tokens directly
-with image pixels. By establishing this spatial correspondence, we
-can leverage local pixel information to enhance generation details.
-Consequently, \textbf{Cupid} adopts a 3D voxel-based latent
-representation. {\color{blue} TODO: refine? figure or add a pointer?.}
-%\yima{Probably after finish, we should move the above tokenization
-%section to the previous Michelangelo section, after we are done with
-%discussing different 3D data forms.}
+A central challenge in 3D shape generation is finding a tokenization that is both compact and expressive, capable of high-fidelity reconstruction. While \textbf{Michelangelo}~\citep{zhao2023michelangelo} utilizes a learned latent vector representation—encoding shapes into a sequence of 1024 tokens—these vectors lack explicit 3D spatial coordinates. In this project, we seek a latent representation that retains explicit 3D positional information, allowing us to align shape tokens directly with image pixels. By establishing this spatial correspondence, we can leverage local pixel information to enhance generation details. Consequently, \textbf{Cupid} adopts a 3D voxel-based latent representation and tokenization approach as described in Section\ref{sec:3d_tokenization}. Here, we represent a shape with sparse voxels accompanied by features, which are usually defined by RGB color or more advanced DINO features~\citep{DINOv2} from 2D foundation models. We then train a decoder to map such a representation back to the shape, parameterized by SDF, and to the apperance parameterized by the Gaussian splats~\citep{kerbl20233d}. 
+
+Specifically, given a set of sparse voxel features $\mathbf{F} = \{\mathbf{f}_i\}_{i=1}^N$ located at coordinates $\mathbf{x}_i$, we employ two distinct decoders, $\mathcal{D}_{geo}$ and $\mathcal{D}_{app}$, to disentangle geometry from appearance. The decoding process is formulated as:
+\begin{equation}
+s_i = \mathcal{D}_{geo}(\mathbf{f}_i), \quad \mathcal{G}i = \mathcal{D}_{app}(\mathbf{f}_i),
+\end{equation}
+where $s_i \in \mathbb{R}$ represents the Signed Distance Field (SDF) value used for surface reconstruction, and $\mathcal{G}_i = \{\mathbf{c}_i, \alpha_i, \mathbf{s}_i, \mathbf{q}_i\}$ denotes the set of 3D Gaussian parameters—comprising color, opacity, scaling, and rotation—required for volumetric rendering. We will then use the sparse voxel features as the latent representation for latent flow matching~\citep{rombach2022high}.
 
 \subsection{Architecture and Implementation}
 \label{sub:3d_reconstruction_architecture}
@@ -4196,7 +4288,7 @@ Given a conditioning image \(\image\), this stage generates an occupancy cube an
 
 To improve computational efficiency, we train a 3D VAE to compress the UV cube into a low-resolution feature grid \(\mathbf{S}_{uv} \in \mathbb{R}^{s\times s\times s \times C}\), achieving near-lossless pose recovery (mean RRE/RTE $< 0.5^\circ$). To fine-tune TRELLIS, we concatenate the original feature grid \(\mathbf{S}_o\) with \(\mathbf{S}_{uv}\) and introduce linear projection layers at both the input and output of the flow network $\sflow$. Once the occupancy and UV cubes are generated, we extract the set $\{ (\point_i, \pixcoord_i(\pose)) \}_{i=1}^{\numpts}$ by collecting active voxels and solving for the camera pose via Equation~\ref{eq:pnp}.
 
-{\color{blue} Todo: add a pointer to the 3D tokenization in the previous section}
+{\color{blue} Updated: We have included 3D tokenization in section \ref{sec:3d_tokenization}.}
 \yima{How these voxel-type 3D data are tokenized. Discuss
 relationship or difference from the Perceiver for tokenizing point
 clouds in the Michelangelo project. Also, describe basic deep
