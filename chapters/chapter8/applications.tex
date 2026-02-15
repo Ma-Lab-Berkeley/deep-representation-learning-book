@@ -2651,60 +2651,202 @@ Typically, the denoising vector field $\bar{\z}_{\theta}(t,
 
 
 
-%more detail about the UNet, and refer back to PCA. Add the references.
-\subsubsection{Realizing Denoising with a U-Net.}
-A common architecture for implementing the parametric denoiser
-$\bar{\z}_{\theta}(t, \z_t)$ is the \textit{U-Net}, an encoder-decoder 
-network with skip connections. The encoder progressively downsamples the 
-noisy input to extract multi-scale features, while the decoder upsamples 
-and refines predictions. Skip connections concatenate encoder features to 
-corresponding decoder layers, preserving spatial detail. To capture 
-long-range dependencies, self-attention layers are often inserted at 
-lower resolutions. The convolutional structure provides strong spatial 
-inductive biases, which can be beneficial when training data is limited.
+% %more detail about the UNet, and refer back to PCA. Add the references.
+% \subsubsection{Realizing Denoising with a U-Net.}
+% A common architecture for implementing the parametric denoiser
+% $\bar{\z}_{\theta}(t, \z_t)$ is the \textit{U-Net}, an encoder-decoder 
+% network with skip connections. The encoder progressively downsamples the 
+% noisy input to extract multi-scale features, while the decoder upsamples 
+% and refines predictions. Skip connections concatenate encoder features to 
+% corresponding decoder layers, preserving spatial detail. To capture 
+% long-range dependencies, self-attention layers are often inserted at 
+% lower resolutions. The convolutional structure provides strong spatial 
+% inductive biases, which can be beneficial when training data is limited.
 
-The timestep $t$ is typically embedded via 
-sinusoidal functions (analogous to positional encodings in transformers) 
-and injected through \textit{adaptive group normalization}: the scale and 
-shift parameters of normalization layers are regressed from the timestep 
-embedding. For class-conditional generation, a class embedding is simply 
-added to the timestep embedding before injection. For text conditioning, 
-a pretrained text encoder (e.g., CLIP) produces a sequence of token 
-embeddings, which are incorporated via \textit{cross-attention}: at 
-selected layers, the image features serve as queries while the text 
-embeddings serve as keys and values. This allows the network to attend to 
-relevant parts of the text prompt when denoising each spatial location.
-
-
-% refer the transformer arch back to previous Chapters. Add the references.
-\subsubsection{Realizing Denoising with a DiT.}
-An alternative to the U-Net is the \textit{Diffusion Transformer (DiT)}, 
-which replaces convolutions entirely with transformer blocks. Following 
-the Vision Transformer, the input is divided into patches and linearly 
-embedded as token sequences. Unlike the U-Net, the DiT has no explicit 
-spatial inductive bias---all structure is learned from data. This 
-generality enables the same architecture to handle images, video, and 
-other modalities with minimal modification. Perhaps most importantly, DiT 
-follows favorable scaling laws: larger models and more compute yield 
-predictable improvements in sample quality.
-
-Timestep and class conditioning in DiT is 
-achieved through \textit{adaptive layer normalization} (adaLN-Zero): the 
-scale and shift parameters of each layer normalization are regressed from 
-the conditioning embedding (formed by summing timestep and class 
-embeddings), with these parameters initialized near zero for training 
-stability. For text conditioning, two approaches are common: (1) 
-cross-attention, as in the U-Net, where text token embeddings from a 
-frozen encoder are attended to by the image tokens; or (2) prepending the 
-text tokens directly to the image token sequence, allowing the 
-transformer's self-attention to jointly process both modalities.
+% The timestep $t$ is typically embedded via 
+% sinusoidal functions (analogous to positional encodings in transformers) 
+% and injected through \textit{adaptive group normalization}: the scale and 
+% shift parameters of normalization layers are regressed from the timestep 
+% embedding. For class-conditional generation, a class embedding is simply 
+% added to the timestep embedding before injection. For text conditioning, 
+% a pretrained text encoder (e.g., CLIP) produces a sequence of token 
+% embeddings, which are incorporated via \textit{cross-attention}: at 
+% selected layers, the image features serve as queries while the text 
+% embeddings serve as keys and values. This allows the network to attend to 
+% relevant parts of the text prompt when denoising each spatial location.
 
 
 
-Once we have trained the denoiser, we can use it to generate new
-samples from the learned representation distribution via the denoising
-process. The generated feature samples can then be decoded back to
-the image space with the corresponding decoder $g$.
+
+
+
+\subsection{Realizing Denoising with a U-Net}
+\label{sec:UNet-implement}
+
+The dominant architecture for implementing the denoising network $\boldsymbol{\epsilon}_\theta$ in diffusion models has been the \textit{U-Net}~\citep{ronneberger2015unet}, an encoder-decoder convolutional network with skip connections originally developed for biomedical image segmentation. Ho et al.~\citep{ho2020denoising} first adopted the U-Net as the backbone for Denoising Diffusion Probabilistic Models (DDPM), establishing it as the default architecture for the field. Subsequently, Dhariwal and Nichol~\citep{dhariwal2021diffusion} conducted a systematic series of architectural ablations that substantially improved the U-Net design, producing what they call the \emph{Ablated Diffusion Model} (ADM). Their improved model was the first diffusion model to surpass GANs in sample quality on ImageNet. Building on these foundations, Rombach et al.~\citep{rombach2022high} moved the U-Net from pixel space into the latent space of a pretrained VAE (Section~\ref{sec:VAE-implement}) and introduced cross-attention layers for flexible multi-modal conditioning, giving rise to the \emph{Latent Diffusion Model} (LDM) that underpins Stable Diffusion. In this section, we trace the evolution of the U-Net backbone through these three stages, before discussing the architectural limitations that have motivated the recent transition to transformer-based alternatives (Section~\ref{sec:DiT-implement}).
+
+\paragraph{Encoder-Decoder Structure with Skip Connections.}
+The U-Net follows an encoder-decoder structure. The encoder progressively downsamples the input through a series of resolution stages, extracting features at multiple spatial scales; the decoder then upsamples these features back to the original resolution to produce the output prediction. The distinguishing feature of the U-Net is its \emph{skip connections}: at each resolution level, the encoder feature map is concatenated channel-wise to the corresponding decoder feature map. This allows the decoder to combine coarse, semantically rich features from the bottleneck with fine-grained spatial details from earlier encoder layers, which is essential for producing spatially precise predictions.
+
+In the DDPM U-Net~\citep{ho2020denoising}, the architecture begins with an input convolution that projects the noised input into a feature space with a base channel count (e.g., 128). The encoder then proceeds through multiple resolution stages---four for $32 \times 32$ inputs, or six for $256 \times 256$ inputs---where each stage consists of two convolutional residual blocks. Spatial downsampling by a factor of $2\times$ is performed between consecutive stages via strided convolutions. Self-attention layers are inserted at the $16 \times 16$ resolution level between the convolutional blocks, providing limited long-range modeling at low resolution. At the bottleneck (the lowest resolution), a middle block with additional residual blocks and self-attention further refines the features. The decoder mirrors the encoder: residual blocks at each resolution level followed by upsampling via transposed convolutions, with skip connections concatenating the corresponding encoder activations. The architecture uses group normalization~\citep{wu2018group} throughout, replacing the weight normalization from which the design originates.
+
+When the U-Net operates in pixel space, its input and output are the noised image $\x_t \in \mathbb{R}^{H \times W \times 3}$ and the predicted noise $\hat{\boldsymbol{\epsilon}} \in \mathbb{R}^{H \times W \times 3}$, respectively. When operating in the latent space of a pretrained VAE (as in LDM), the input becomes $\z_t \in \mathbb{R}^{h \times w \times c}$ and the output is $\hat{\boldsymbol{\epsilon}} \in \mathbb{R}^{h \times w \times c}$, with $h = H/f$, $w = W/f$ as defined in Section~\ref{sec:VAE-implement}.
+
+\paragraph{Timestep Conditioning via Adaptive Group Normalization.}
+The denoising network must be conditioned on the diffusion timestep $t$ so that it can adapt its behavior across different noise levels. Following the positional encoding scheme from the Transformer~\citep{vaswani2017attention}, the timestep $t$ is first mapped to a sinusoidal frequency embedding:
+\begin{equation}
+    \mathrm{Embed}(t)_{2i} = \sin\!\left(\frac{t}{10000^{2i/d_e}}\right), \quad
+    \mathrm{Embed}(t)_{2i+1} = \cos\!\left(\frac{t}{10000^{2i/d_e}}\right),
+\end{equation}
+where $d_e$ is the embedding dimension and $i$ indexes its entries. This embedding is then passed through a small MLP (typically two linear layers with a nonlinearity) to produce a timestep vector $\mathbf{e}_t \in \mathbb{R}^{d_e}$.
+
+Rather than simply concatenating $\mathbf{e}_t$ to the input, the U-Net injects the timestep information into every residual block via \emph{Adaptive Group Normalization} (AdaGN)~\citep{dhariwal2021diffusion}. After the first convolution within each residual block, a group normalization operation is applied, followed by an affine modulation whose scale and shift parameters are regressed from the timestep embedding:
+\begin{equation}
+    \mathrm{AdaGN}(\mathbf{h}, \mathbf{e}_t) = \mathbf{y}_s \odot \mathrm{GroupNorm}(\mathbf{h}) + \mathbf{y}_b,
+    \label{eq:adagn}
+\end{equation}
+where $\mathbf{h}$ denotes the intermediate feature map, $[\mathbf{y}_s, \mathbf{y}_b] = \mathrm{Linear}(\mathbf{e}_t)$ are the scale and shift vectors obtained from a linear projection of the timestep embedding, and $\odot$ denotes element-wise multiplication. This mechanism is analogous to adaptive instance normalization~\citep{dumoulin2017learned} and FiLM conditioning~\citep{perez2018film}, and allows each layer to modulate its activations based on the current noise level. Ablation experiments in~\citep{dhariwal2021diffusion} show that removing AdaGN degrades FID by over 2 points, confirming its importance.
+
+For class-conditional generation, a class embedding $\mathrm{Embed}(c)$ (a learned lookup table) is simply added to the timestep embedding before injection, so that $\mathbf{e}_t$ is replaced by $\mathbf{e}_t + \mathrm{Embed}(c)$ in Eq.~\eqref{eq:adagn}. This mechanism is lightweight but limited to categorical labels; richer conditioning modalities such as text require the cross-attention mechanism introduced in Section~\ref{sec:unet-ldm}.
+
+\subsubsection{Architecture Improvements: From DDPM to ADM}
+\label{sec:unet-adm}
+
+Dhariwal and Nichol~\citep{dhariwal2021diffusion} conducted a systematic ablation study to identify which architectural modifications most improve sample quality. Starting from the baseline DDPM U-Net~\citep{ho2020denoising}, they explored the following changes on ImageNet $128 \times 128$: (a) expanding self-attention from the $16 \times 16$ resolution to three resolutions ($32 \times 32$, $16 \times 16$, $8 \times 8$); (b) increasing the number of attention heads, using 64 channels per head to better match the Transformer convention; (c) adopting the BigGAN~\citep{brock2019large} residual block for both upsampling and downsampling, which improves gradient flow; and (d) including the AdaGN conditioning layer (described above) in every residual block by default. All of these changes improve FID, and their effects compound positively. The resulting model, which they name ADM, serves as the new default U-Net design for subsequent work.
+
+In addition to architectural improvements, Dhariwal and Nichol introduced \emph{classifier guidance} as a mechanism for trading off sample diversity against fidelity. A classifier $p_\phi(c|\z_t, t)$ is trained on noisy images, and its gradients are used to steer the sampling trajectory toward high-probability regions of the desired class:
+\begin{equation}
+    \hat{\boldsymbol{\mu}}_\theta(\z_t, t) = \boldsymbol{\mu}_\theta(\z_t, t) + s \, \boldsymbol{\Sigma}_\theta(\z_t, t) \, \nabla_{\z_t} \log p_\phi(c|\z_t),
+\end{equation}
+where $s > 1$ is a guidance scale that sharpens the effective class distribution. With this technique, ADM achieved a state-of-the-art FID of 4.59 on class-conditional ImageNet $256 \times 256$, surpassing the long-standing GAN benchmark of BigGAN-deep (FID 6.95) for the first time. The guided model (ADM-G) further improved FID to 3.94 when combined with an upsampling stack (ADM-U).
+
+The main drawback of classifier guidance is that it requires training a separate classifier on noisy images. This limitation was subsequently addressed by \emph{classifier-free guidance}~\citep{ho2022classifier}, which avoids the external classifier entirely by jointly learning conditional and unconditional denoising within a single model---a technique we describe in detail in Section~\ref{sec:DiT-implement}.
+
+\subsubsection{The U-Net in Latent Diffusion (Stable Diffusion)}
+\label{sec:unet-ldm}
+
+While ADM operates directly in pixel space, Rombach et al.~\citep{rombach2022high} observed that much of the computational burden is spent modeling perceptually irrelevant high-frequency details. Their key idea is to separate \emph{perceptual compression} from \emph{generative modeling}: a pretrained autoencoder (Section~\ref{sec:VAE-implement}) first compresses the image into a low-dimensional latent space, and the diffusion model then operates entirely within this latent space. For a $256 \times 256$ image with downsampling factor $f = 8$, the U-Net processes a $32 \times 32 \times 4$ latent tensor rather than a $256 \times 256 \times 3$ pixel tensor---a reduction of roughly $48\times$ in spatial elements. This yields a speedup of at least $2.7\times$ in both training and sampling throughput while improving FID.
+
+Beyond computational savings, the latent diffusion framework introduces a general-purpose \emph{cross-attention conditioning mechanism} that enables the U-Net to condition on arbitrary modalities such as text prompts, semantic maps, or bounding boxes. In brief, a domain-specific encoder $\tau_\theta$ maps the conditioning input $y$ into an intermediate representation $\tau_\theta(y) \in \mathbb{R}^{M \times d_\tau}$, which is then injected into the U-Net at multiple resolution levels via cross-attention layers: the image features serve as queries while the conditioning embeddings serve as keys and values, allowing each spatial location to attend to relevant parts of the conditioning signal. We defer the full mathematical description of this cross-attention mechanism and the conditional training objective to Section~\ref{subsec:basic_realization}.
+
+In Stable Diffusion~\citep{rombach2022high}, the text encoder $\tau_\theta$ is instantiated as the pretrained CLIP ViT-L/14 model~\citep{radford2021learning}, which maps text prompts to a sequence of token embeddings. The U-Net itself retains the ADM improvements---BigGAN residual blocks, attention at three resolution levels, AdaGN for timestep injection---and additionally interleaves cross-attention layers at these same resolution levels for text conditioning. The full model contains approximately 860M parameters in the U-Net and 123M in the text encoder.
+
+\subsubsection{Limitations of the U-Net Architecture}
+\label{sec:unet-limitations}
+
+Despite its success, the U-Net has several limitations that have motivated alternative backbones. First, \textbf{scaling} a U-Net is cumbersome: its encoder-decoder structure involves many coupled design choices (channel multipliers, attention placement, up/downsampling block types), and it is unclear how to allocate additional compute optimally. In contrast, the plain Transformer scales along two simple axes, depth and width, and exhibits well-characterized scaling laws~\citep{kaplan2020scaling}. Second, the U-Net's convolutional layers encode a strong \textbf{spatial inductive bias} (locality, translation equivariance) that helps in low-data regimes but limits long-range modeling on large datasets. Self-attention partially addresses this, yet in standard U-Net designs it is applied only at low-resolution stages due to its quadratic cost, leaving high-resolution features entirely local. Third, the U-Net is a \textbf{vision-specific} architecture that does not readily transfer to other modalities. The Transformer, having proven effective across language, vision, audio, and multimodal settings~\citep{vaswani2017attention}, offers a unified backbone that can leverage cross-domain scaling insights.
+
+These considerations motivated the Diffusion Transformer (DiT)~\citep{peebles2023scalable}, which replaces the U-Net entirely with a plain Transformer operating on latent patches. As we describe in Section~\ref{sec:DiT-implement}, DiT matches and surpasses the best U-Net-based models while exhibiting cleaner scaling behavior (Gflops--FID correlation of $-0.93$) and a simpler architecture.
+
+
+
+
+
+
+
+
+
+% % refer the transformer arch back to previous Chapters. Add the references.
+% \subsubsection{Realizing Denoising with a DiT.}
+% An alternative to the U-Net is the \textit{Diffusion Transformer (DiT)}, 
+% which replaces convolutions entirely with transformer blocks. Following 
+% the Vision Transformer, the input is divided into patches and linearly 
+% embedded as token sequences. Unlike the U-Net, the DiT has no explicit 
+% spatial inductive bias---all structure is learned from data. This 
+% generality enables the same architecture to handle images, video, and 
+% other modalities with minimal modification. Perhaps most importantly, DiT 
+% follows favorable scaling laws: larger models and more compute yield 
+% predictable improvements in sample quality.
+
+% Timestep and class conditioning in DiT is 
+% achieved through \textit{adaptive layer normalization} (adaLN-Zero): the 
+% scale and shift parameters of each layer normalization are regressed from 
+% the conditioning embedding (formed by summing timestep and class 
+% embeddings), with these parameters initialized near zero for training 
+% stability. For text conditioning, two approaches are common: (1) 
+% cross-attention, as in the U-Net, where text token embeddings from a 
+% frozen encoder are attended to by the image tokens; or (2) prepending the 
+% text tokens directly to the image token sequence, allowing the 
+% transformer's self-attention to jointly process both modalities.
+
+
+
+% Once we have trained the denoiser, we can use it to generate new
+% samples from the learned representation distribution via the denoising
+% process. The generated feature samples can then be decoded back to
+% the image space with the corresponding decoder $g$.
+
+
+
+\subsection{Realizing Denoising with a Diffusion Transformer}
+\label{sec:DiT-implement}
+
+An alternative to the U-Net for implementing the denoising network $\boldsymbol{\epsilon}_\theta$ is the \textit{Diffusion Transformer (DiT)}~\citep{peebles2023scalable}, which replaces convolutions entirely with transformer blocks. The key insight is that the U-Net's spatial inductive bias is \emph{not crucial} to the performance of diffusion models: a standard transformer operating on sequences of latent patches can match and surpass the U-Net while inheriting the favorable scaling properties of the transformer architecture class~\citep{vaswani2017attention}. Unlike the U-Net, the DiT has no explicit spatial inductive bias---all spatial structure is learned from data. This generality enables the same architecture to handle images, video, and other modalities with minimal modification.
+
+DiT operates within the latent space of a pretrained VAE (Section~\ref{sec:VAE-implement}), making the complete image generation pipeline a hybrid architecture: a convolutional VAE for perceptual compression and a transformer-based DDPM for generative modeling. Following the Vision Transformer (ViT)~\citep{dosovitskiy2020image}, the input latent is divided into patches and linearly embedded as a token sequence. We describe the architecture in detail below.
+
+\paragraph{Patchify and Positional Encoding.}
+The input to DiT is a noised latent $\z_t \in \mathbb{R}^{h \times w \times c}$, where $h = H/f$ and $w = W/f$ are the spatial dimensions of the latent space defined by the VAE encoder (e.g., $32 \times 32 \times 4$ for $256 \times 256$ images with $f = 8$, $c = 4$). The first layer, called \emph{patchify}, partitions $\z_t$ into a grid of non-overlapping patches of size $p \times p$ and linearly embeds each patch into a $d$-dimensional token representation. This produces a sequence of
+\begin{equation}
+    T = \left(\frac{h}{p}\right) \times \left(\frac{w}{p}\right)
+\end{equation}
+tokens in $\mathbb{R}^d$. Standard sinusoidal positional embeddings (the sine-cosine variant from ViT) are added to each token to encode spatial position. The patch size $p$ is a key design parameter: halving $p$ quadruples $T$ and thus at least quadruples the total Gflops of the transformer, while leaving the parameter count essentially unchanged. In~\citep{peebles2023scalable}, the design space includes $p \in \{2, 4, 8\}$; the finest setting $p = 2$ yields the best generation quality.
+
+\paragraph{DiT Block with adaLN-Zero.}
+After patchification, the token sequence is processed by a stack of $N$ transformer blocks. Each block follows the standard transformer structure~\citep{vaswani2017attention}: layer normalization, multi-head self-attention (MHSA), a second layer normalization, and a pointwise feedforward network (MLP with GELU activations).
+
+The central design question is how to inject the conditioning information---the diffusion timestep $t$ and the class label $c$---into each block. Peebles and Xie~\citep{peebles2023scalable} compare four strategies: (1) \emph{in-context conditioning}, which appends $t$ and $c$ as extra tokens in the input sequence; (2) \emph{cross-attention}, which introduces an additional multi-head cross-attention layer that attends to the conditioning embeddings; (3) \emph{adaptive layer normalization (adaLN)}, which regresses the scale and shift parameters of each layer normalization from the conditioning signal; and (4) \emph{adaLN-Zero}, which extends adaLN with an additional gating mechanism initialized to zero. Among these, adaLN-Zero achieves the lowest FID while being the most compute-efficient, and is therefore adopted as the default.
+
+In the adaLN-Zero block, the conditioning information is first formed by summing the embeddings of the timestep and class label:
+\begin{equation}
+    \mathbf{e} = \mathrm{Embed}(t) + \mathrm{Embed}(c),
+\end{equation}
+where $\mathrm{Embed}(t)$ is obtained by passing a sinusoidal frequency embedding of $t$ through a two-layer MLP with SiLU activations, and $\mathrm{Embed}(c)$ is a learned class embedding. From $\mathbf{e}$, a linear layer regresses six sets of dimension-wise parameters: $\boldsymbol{\gamma}_1, \boldsymbol{\beta}_1, \boldsymbol{\alpha}_1$ for the self-attention sub-block and $\boldsymbol{\gamma}_2, \boldsymbol{\beta}_2, \boldsymbol{\alpha}_2$ for the feedforward sub-block. The adaptive layer normalization applies as:
+\begin{equation}
+    \mathrm{adaLN}(\mathbf{h}, \boldsymbol{\gamma}, \boldsymbol{\beta}) = \boldsymbol{\gamma} \odot \mathrm{LayerNorm}(\mathbf{h}) + \boldsymbol{\beta},
+\end{equation}
+where $\odot$ denotes element-wise multiplication. The parameters $\boldsymbol{\alpha}_1$ and $\boldsymbol{\alpha}_2$ serve as dimension-wise \emph{gating factors} applied immediately before each residual connection:
+\begin{equation}
+\begin{aligned}
+    \mathbf{h}' &= \mathbf{h} + \boldsymbol{\alpha}_1 \odot \mathrm{MHSA}\!\big(\mathrm{adaLN}(\mathbf{h}, \boldsymbol{\gamma}_1, \boldsymbol{\beta}_1)\big), \\
+    \mathbf{h}'' &= \mathbf{h}' + \boldsymbol{\alpha}_2 \odot \mathrm{MLP}\!\big(\mathrm{adaLN}(\mathbf{h}', \boldsymbol{\gamma}_2, \boldsymbol{\beta}_2)\big).
+\end{aligned}
+\end{equation}
+The ``Zero'' in adaLN-Zero refers to the initialization: all $\boldsymbol{\alpha}$ parameters are initialized to the zero vector by the MLP that regresses them, so that each DiT block acts as the \emph{identity function} at the start of training. This zero-initialization strategy, inspired by similar practices in ResNets~\citep{goyal2017accurate} and diffusion U-Nets, is important for training stability and yields significantly lower FID than vanilla adaLN.
+
+We note that adaLN applies the \emph{same} conditioning function to all tokens uniformly. For text-to-image generation where the conditioning signal is a variable-length sequence of text tokens, two alternative approaches are common: (1) cross-attention, where text token embeddings from a frozen encoder are attended to by the image tokens; or (2) prepending the text tokens directly to the image token sequence, allowing the transformer's self-attention to jointly process both modalities.
+
+\paragraph{Output Projection.}
+After the final DiT block, the model must decode the sequence of token representations back into a spatial prediction. A final adaptive layer normalization (conditioned on $\mathbf{e}$) is applied, followed by a linear layer that projects each token into a tensor of shape $p \times p \times 2c$. The factor of $2c$ accounts for the two quantities the model predicts: the noise estimate $\hat{\boldsymbol{\epsilon}} \in \mathbb{R}^{h \times w \times c}$ and the diagonal covariance $\boldsymbol{\Sigma}_\theta \in \mathbb{R}^{h \times w \times c}$. The decoded tokens are then rearranged (un-patchified) back into their original spatial layout of $\mathbb{R}^{h \times w \times c}$ for each output.
+
+
+\subsubsection{Training}
+The DiT is trained as a class-conditional latent diffusion model on the ImageNet dataset~\citep{deng2009imagenet} at $256 \times 256$ and $512 \times 512$ image resolution. The diffusion process operates on the latent representations produced by the pretrained VAE from Section~\ref{sec:VAE-implement}: for $256 \times 256$ images, the input to DiT is $\z_t \in \mathbb{R}^{32 \times 32 \times 4}$; for $512 \times 512$ images, it is $\z_t \in \mathbb{R}^{64 \times 64 \times 4}$.
+
+The training objective combines two terms. The noise prediction loss trains $\boldsymbol{\epsilon}_\theta$ via the simple mean-squared error:
+\begin{equation}
+    \mathcal{L}_{\mathrm{simple}}(\theta) = \mathbb{E}_{\z_0, \boldsymbol{\epsilon}, t}\left[\|\boldsymbol{\epsilon}_\theta(\z_t, t) - \boldsymbol{\epsilon}\|_2^2\right],
+\end{equation}
+where $\z_0$ is the clean latent, $\boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ is the sampled noise, and $\z_t = \sqrt{\bar{\alpha}_t}\,\z_0 + \sqrt{1 - \bar{\alpha}_t}\,\boldsymbol{\epsilon}$ is the noised latent at timestep $t$. The learned covariance $\boldsymbol{\Sigma}_\theta$ is additionally trained with the full variational lower bound $D_{KL}$ term, following the approach of Nichol and Dhariwal~\citep{nichol2021improved}. A linear variance schedule is used with $t_{\max} = 1000$ steps, ranging from $1 \times 10^{-4}$ to $2 \times 10^{-2}$.
+
+All models are trained with AdamW~\citep{loshchilov2019decoupled} using a constant learning rate of $1 \times 10^{-4}$, no weight decay, and a batch size of $256$. Data augmentation consists solely of random horizontal flips. An exponential moving average (EMA) of the model weights is maintained with a decay of $0.9999$; all reported results use the EMA model. Notably, unlike supervised ViT training, DiT requires \emph{no} learning rate warmup and \emph{no} regularization---training is highly stable across all model configurations, with no observed loss spikes.
+
+\subsubsection{Classifier-Free Guidance}
+To significantly improve sample quality, DiT employs \emph{classifier-free guidance}~\citep{ho2022classifier}. During training, the class label $c$ is randomly dropped with some probability and replaced by a learned null embedding $\varnothing$, so that the model learns both the conditional $\boldsymbol{\epsilon}_\theta(\z_t, c)$ and unconditional $\boldsymbol{\epsilon}_\theta(\z_t, \varnothing)$ noise predictions. At inference time, the guided noise prediction is computed as:
+\begin{equation}
+    \hat{\boldsymbol{\epsilon}}_\theta(\z_t, c) = \boldsymbol{\epsilon}_\theta(\z_t, \varnothing) + s \cdot \big(\boldsymbol{\epsilon}_\theta(\z_t, c) - \boldsymbol{\epsilon}_\theta(\z_t, \varnothing)\big),
+    \label{eq:cfg}
+\end{equation}
+where $s > 1$ is the guidance scale ($s = 1$ recovers standard unguided sampling). The motivation follows from Bayes' rule: since $\nabla_{\z_t} \log p(c | \z_t) \propto \nabla_{\z_t} \log p(\z_t | c) - \nabla_{\z_t} \log p(\z_t)$, the guided estimate in Eq.~\eqref{eq:cfg} effectively steers the sampling trajectory toward regions of high conditional likelihood $p(c | \z_t)$. This technique has a dramatic effect on generation quality: DiT-XL/2 achieves an FID of $9.62$ without guidance, which improves to $2.27$ with a guidance scale of $s = 1.5$---surpassing all prior diffusion models on the class-conditional ImageNet $256 \times 256$ benchmark.
+
+\subsubsection{Generation}
+Once the denoising network $\boldsymbol{\epsilon}_\theta$ (i.e., the DiT) has been trained, new images can be generated by running the learned reverse process. Starting from pure noise $\z_{t_{\max}} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$, the model iteratively denoises by sampling $\z_{t-1} \sim p_\theta(\z_{t-1} | \z_t)$ at each step, using the predicted noise $\hat{\boldsymbol{\epsilon}}_\theta$ and covariance $\boldsymbol{\Sigma}_\theta$ to parameterize the reverse transition. After $t_{\max}$ denoising steps, the resulting clean latent $\z_0$ is decoded back to the image space via the VAE decoder: $\tilde{\x} = \mathcal{D}(\z_0) \in \mathbb{R}^{H \times W \times 3}$.
+
+
+
+
+
+
 
 \section{Conditioned 2D Image/Video Generation}
 \label{sec:cond_gen}
