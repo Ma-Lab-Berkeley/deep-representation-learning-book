@@ -48,9 +48,10 @@ More recently, deep neural networks have achieved remarkable success
 across a wide range of data and applications. A neural network
 \begin{equation}
     f(\cdot, \bm \theta) \colon \x
-    \xrightarrow{\hspace{1mm} f^0 \hspace{1mm}} \z^0 \rightarrow \cdots
+    \xrightarrow{\hspace{1mm} f^{\mathrm{pre}} \hspace{1mm}} \z^1
+    \rightarrow \cdots
     \rightarrow \z^\ell \xrightarrow{\hspace{1mm} f^\ell \hspace{1mm}}
-    \z^{\ell+1} \rightarrow  \cdots \to \z^L = \z.
+    \z^{\ell+1} \rightarrow  \cdots \to \z^{L+1} = \z.
 \end{equation}
 can learn effective features/representations for downstream
 applications. For example, a trained deep neural network $f(\cdot,
@@ -372,11 +373,11 @@ According to equation \eqref{eqn:DR-gradient}, the gradient cannot be
 evaluated at a point whose membership is not known, as illustrated in
 \Cref{fig:gradient-flow}. Hence, in order to find the optimal
 $f(\x,\bm  \theta)$ explicitly, we may consider constructing a small
-increment transform $g(\cdot, \bm{\theta}^{\ell})$ on the $\ell$-th
+increment transform $g(\cdot, \theta^{\ell})$ on the $\ell$-th
 layer feature $\z^\ell$ to emulate the above (projected) gradient scheme:
 \begin{equation}
     \z^{\ell + 1}   \; \propto \; \z^{\ell} + \eta\cdot  g(\z^{\ell},
-    \bm{\theta}^{\ell}) \quad \mbox{subject to} \quad \z^{\ell +1}
+    \theta^{\ell}) \quad \mbox{subject to} \quad \z^{\ell +1}
     \in \mathbb{S}^{d-1}
     \label{eqn:gradient-descent-transform}
 \end{equation}
@@ -675,7 +676,7 @@ a nearest subspace classifier.
     for the depth of the network needed.
 
     As shown in \Cref{fig:redu-3d-gaussian-diagram}, we can observe
-    that after the mapping $f(\cdot, \bm{\theta})$, samples from the
+    that after the mapping $f(\cdot, \theta)$, samples from the
     same class are highly compressed and converge to a single cluster
     and the angle between two different clusters is approximately
     $\pi/2$, which is well aligned with the optimal solution
@@ -709,9 +710,9 @@ a nearest subspace classifier.
         \vspace{-0.1in}
         \caption{\small Original samples  and learned representations
             for 3D Mixture of Gaussians. We visualize data points
-            $\bm{X}$ (before mapping $f(\cdot, \bm{\theta})$) in
+            $\bm{X}$ (before mapping $f(\cdot, \theta)$) in
             (\textbf{a}) and learned features $\bm{Z}$ (after mapping
-            $f(\cdot, \bm{\theta})$) in (\textbf{b}) by scatter plot. In
+            $f(\cdot, \theta)$) in (\textbf{b}) by scatter plot. In
             each scatter plot, each color represents one class of
             samples. In (\textbf{c}), we also show the plots for the
         progression of values of the objective functions.}
@@ -1191,8 +1192,8 @@ reduction on the input sparse codes.
     the image in the (sampled) polar coordinate as a multi-channel
     signal $\bm{x}_p \in\R^{\Gamma\times C}$.
     The goal here is to learn a rotation invariant representation,
-    i.e., we expect to learn $f(\cdot, \bm{\theta})$ such that
-    $\{f(\bm{x}_p \circ \mathfrak{g}, \bm{\theta})\}_{\mathfrak{g}
+    i.e., we expect to learn $f(\cdot, \theta)$ such that
+    $\{f(\bm{x}_p \circ \mathfrak{g}, \theta)\}_{\mathfrak{g}
     \in\mathbb{G}}$ lie in the same subspace, where $\mathfrak{g}$ is
     the cyclic-shift in polar angle.
     We use $N=100$ training samples ($10$ from each class) and set
@@ -1316,8 +1317,21 @@ Transformer architecture.
 
 \subsection{Unrolled Optimization for Sparse Rate Reduction}
 
-We consider a general learning setup associated with real-world
-signals. Let \(\X = \mat{\x_{1}, \dots, \x_{N}} \in \bR^{D \times
+For the past several years, as the amount and quality of data
+available for training deep networks has increased dramatically,
+the field has moved from considering inputs as ``atoms'' to inputs as
+``sequences of tokens'', where each token is a part of the overall input.
+This shift in perspective has both philosophical and pragmatic
+improvements: philosophically, it allows us to measure and model each
+part of the input and their interactions; pragmatically, it allows us
+to use similar deep networks, \textit{sequence-to-sequence models}
+such as Transformers, to learn every kind of data distribution. Now,
+it falls to us to understand representation learning in the
+``token-centric'' model of data as token sequences, and to cope with
+the aforementioned challenges (such as, in the context of the rate
+reduction framework, not having labels for each token).
+
+Formally, let \(\X = \mat{\x_{1}, \dots, \x_{N}} \in \bR^{D \times
 N}\) denote random variables representing our data source. In vision
 tasks, each \(\x_{i} \in \bR^{D}\) is interpreted as a
 \textit{token}, typically corresponding to an image patch. In
@@ -1351,14 +1365,16 @@ the random variables that defines our representations, where \(\z_{i}
     representations are designed to capture meaningful features of
     the input that are useful for downstream tasks such as
     classification, generation, or regression. Please refer to
-    \Cref{sec:contrastive_learning} for more details about these
-    concepts in implementations.
+    \Cref{sec:contrastive_learning} for more details about this
+    vocabulary and how it relates to implementations.
 \end{remark}
 
 \paragraph{Objective for Learning a Structured and Compact Representation.}
-Following the framework of rate reduction
-\Cref{sec:chap4-white-box-model-via-unrolling}, we contend
-that the goal of representation learning is to find a feature mapping \(f
+Inspired by the previous discussion of rate reduction
+(\Cref{sec:chap4-white-box-model-via-unrolling}), we propose that the
+objective of representation learning
+in this token-centric model for our data is to find a
+feature mapping \(f
 \colon \X \in \bR^{D \times N} \to \Z\in \bR^{d \times N}\) which
 transforms input tokens \(\{\bm x_i\}_{i=1}^N \subset \R^D\) with a
 potentially nonlinear and multi-modal distribution to a (piecewise)
@@ -1497,13 +1513,13 @@ simple \textit{incremental and local} operations $f^\ell$ that push
 the representation distribution towards the desired parsimonious
 model distribution:
 \begin{equation}
-    f\colon \X = \bm Z^0 \xrightarrow{\hspace{1mm} f^0 \hspace{1mm}}
+    f\colon \X \xrightarrow{\hspace{1mm} f^{\mathrm{pre}} \hspace{1mm}}
     \Z^1 \rightarrow \cdots \rightarrow \Z^\ell
     \xrightarrow{\hspace{1mm} f^{\ell} \hspace{1mm}} \Z^{\ell+1}
-    \rightarrow  \cdots \xrightarrow{\hspace{1mm} f^{L-1}} \Z^L = \Z,
+    \rightarrow  \cdots \xrightarrow{\hspace{1mm} f^{L}} \Z^{L+1} = \Z,
     \label{eq:incremental}
 \end{equation}
-where $f^0: \bR^{D} \rightarrow \bR^{d}$ is the pre-processing
+where $f^{\mathrm{pre}}: \bR^{D} \rightarrow \bR^{d}$ is the pre-processing
 mapping that transforms each input token $\x_{i} \in \bR^{D}$ to the
 initial token representations $\z_{i}^{1} \in \bR^{d}$.
 Each incremental \textit{forward mapping} $\Z^{\ell + 1} =
@@ -2297,9 +2313,9 @@ that it performs an approximate low-rank projection, where the
 specific directions that are suppressed are those which are not
 strongly aligned with other tokens in the group.
 
-\paragraph{Practical Implementation Details.} Having introduced our
-proposed attention operator, we now discuss further practical
-considerations.  First, until this point in the presentation, we have
+\paragraph{Computational considerations.} Having introduced our
+proposed attention operator, we now discuss how it can be computed
+practically. First, until this point in the presentation, we have
 avoided discussion of how tokens are ``grouped'' into various
 attention heads via the $\bm\Pi$ matrix, but clearly a means of
 constructing $\bm\Pi$ is needed to implement our method.
@@ -2717,8 +2733,8 @@ heuristic tuning, with our mathematically grounded ReduNet architectures:
         \to 0} \frac{\nabla R(\bm Z+ t\bm D) - \nabla R(\bm Z)}{t},
         \bm D \right\rangle.
     \end{align*}
-    \smallskip 
-    
+    \smallskip
+
     \noindent
     2. Please show that
     \begin{align*}
