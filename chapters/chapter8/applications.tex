@@ -1285,7 +1285,7 @@ over those of DINO.
 \section{Weakly Supervised Image Representation via Text Binding}\label{sec:CLIP}
 %\yima{Robin, please provide a vignette about CLIP or its simplified version. Sam will give a general description of concepts and methods for joint image/text embedding and related work in Chapter 7. }
 
-Another influential contrastive learning approach departs from purely visual comparisons and instead leverages the natural alignment between images and language. Rather than defining similarity solely through multiple views or regions of the same image, this line of work exploits the fact that many images in the wild are accompanied by textual descriptions that provide weak semantic supervision. A prominent example of this paradigm is CLIP (Contrastive Language–Image Pretraining) \citep{Radford2021-ir}. In CLIP, images and their corresponding captions are treated as positive pairs, while mismatched image–text pairs are treated as negatives. The learning objective encourages the representation of an image to be close to the representation of its associated caption, and far from captions that do not describe it. By grounding visual representations in natural language, CLIP learns semantically rich features that capture high-level concepts beyond appearance alone.
+Another influential contrastive learning approach departs from purely visual comparisons and instead leverages the natural alignment between images and language. Rather than defining similarity solely through multiple views of the same image, this line of work exploits the fact that many images in the wild are accompanied by textual descriptions that provide weak semantic supervision. A prominent example of this paradigm is CLIP (Contrastive Language–Image Pretraining) \citep{Radford2021-ir}. In CLIP, images and their corresponding captions are treated as positive pairs, while mismatched image–text pairs are treated as negatives. The learning objective encourages the representation of an image to be close to the representation of its associated caption, and far from captions of other images. By grounding visual representations in natural language, CLIP learns semantically rich features that capture high-level concepts beyond appearance alone.
 
 \subsection{Data}
 
@@ -1294,112 +1294,82 @@ The data that we will use to explore the CLIP methodology are {\em text-image pa
 Because raw web-scraped pairs are often extremely noisy (e.g., images that do not match their associated text, boilerplate alt-text, spam, duplicates, or unsafe content), CLIP-style datasets are typically constructed with a post-processing pipeline that filters and cleans candidates before training. Typical methods include basic quality filters (e.g., dropping pairs with extremely short text or very small or corrupted images), language identification to retain captions in a target language, deduplication, and the removal of potentially malicious content.
 
 \subsection{The CLIP Task and Objective}
-Our task remains to learn a good representation of the data. In the CLIP setting, however, the notion of “similarity” is not induced by two augmented views of the same image, but by the weak semantic supervision provided by natural-language descriptions. Concretely, we would like an image representation to be close to the representation of its associated caption, and far from captions which do not describe it. Equivalently, if two images admit similar textual descriptions, their learned visual features should be similar, whereas images described by unrelated text should be separated in latent space.
+Our goal is to learn a good representation of the data. In the CLIP setting, however, the notion of “similarity” is not induced by two augmented views of the same image, but by the weak semantic supervision provided by natural-language descriptions. Concretely, we would like an image representation to be close to the representation of its associated caption, and far from captions of other images. Equivalently, if two images admit similar textual descriptions, their learned visual features should be similar, whereas images described by unrelated text should be separated in latent space.
 
-We formalize the notion of ``similarity'' between representations using \textit{cosine similarity}. Concretely, let \(f^{I}_{\theta}\) be an image encoder and \(f^{T}_{\phi}\) be a text encoder (whose architecture will be elaborated in the next section), both mapping into a common latent space \(\mathbb{R}^{d}\). Given an image \(\vX \in \cI\) and a text string \(\vT \in \cT\), we form normalized embeddings
+We formalize the notion of ``similarity'' between representations using \textit{cosine similarity}. Concretely, let \(f^{I}_{\theta}\) be an image encoder and \(f^{T}_{\phi}\) be a text encoder (whose architecture will be elaborated in the next section), both mapping into a common latent space \(\vZ \in \mathbb{R}^{d}\). Given an image \(\vX \in \cI\) and a text string \(\vT \in \cT\), we form normalized embeddings
 \begin{equation}
     \vz^{I}_{\theta}(\vX) \doteq \frac{f^{I}_{\theta}(\vX)}{\|f^{I}_{\theta}(\vX)\|_2},
     \qquad
     \vz^{T}_{\phi}(\vT) \doteq \frac{f^{T}_{\phi}(\vT)}{\|f^{T}_{\phi}(\vT)\|_2}.
 \end{equation}
-Then the cosine similarity between \(\vX\) and \(\vT\) is defined as:
+Then the cosine similarity between embeddings is defined as:
 \begin{equation}
     s(\vX,\vT)
     =
     \left\langle \vz^{I}_{\theta}(\vX), \vz^{T}_{\phi}(\vT)\right\rangle
     \in [-1,1].
 \end{equation}
-Thus, ``making an image close to its caption'' corresponds to increasing \(s(\vX,\vT)\) for matched pairs.
-
-The next question is how to simultaneously make an image less similar to captions which do not belong to it. The standard CLIP answer is to construct a multi-class discrimination problem. Within a mini-batch containing \(n\) text-image pair, for an image \(\vX_i\), the correct text is \(\vT_i\), and the incorrect texts are \(\{\vT_j\}_{j \neq i}\) drawn from all other samples in the batch. Let \(\tau > 0\) be a temperature parameter, and define the image-to-text softmax probability of the i-th positive pair as 
-\begin{eqnarray}
-    p_{\theta,\phi}^{I\to T}(i \mid i)
-    &\doteq&
-    \frac{\exp(s(\vX_i,\vT_i)/\tau)}{\exp(s(\vX_i,\vT_i)/\tau) + \sum_{j=1,j\neq i}^{n}\exp(s(\vX_i,\vT_j)/\tau)}\nonumber \\
-    &=&
-    \frac{\exp(s(\vX_i,\vT_i)/\tau)}{\sum_{k=1}^{n}\exp(s(\vX_i,\vT_k)/\tau)}.
-\end{eqnarray}
-Maximizing this term forces \(s(\vX_i,\vT_i)\) to dominate the denominator (i.e. make \(\vX_i\) closer to its caption \(\vT_i\)), which in turn pushes \(s(\vX_i,\vT_j)\) downward for \(j \neq i\) (i.e. make \(\vX_i\) further from all other captions). We want to maximize the sum of \(p_{\theta,\phi}^{I\to T}(i \mid i)\) for all positive pairs in the mini-batch
-\begin{equation}
+Therefore, our objective is to maximize the cosine similarity between matched pairs and minimize it between mismatched pairs. To achieve that, we can use a simple symmetric cross-entropy loss as discussed in \cref{sub:text-cond}. Concretely, given a mini-batch of \(n\) text-image pairs \((\vX_i, \vT_i)_{i=1}^{n}\), we can define the loss as:
+\begin{equation}\label{eq:practical_clip_loss}
+    \cL_{\text{CLIP}} = -\frac{1}{n}\left(
     \sum_{i=1}^{n}
-    p_{\theta,\phi}^{I\to T}(i \mid i).
-\end{equation}
-Symmetrically, we can ask the reverse question: how should a text representation become close to its corresponding image representation and far from all other image representations? We can mirror the previous setup and derive the text-to-image softmax probability of the i-th positive pair in a mini-batch as
-\begin{eqnarray}
-    p_{\theta,\phi}^{T\to I}(i \mid i)
-    &\doteq&
-    \frac{\exp(s(\vT_i,\vX_i)/\tau)}{\exp(s(\vT_i,\vX_i)/\tau) + \sum_{j=1,j\neq i}^{n}\exp(s(\vT_i,\vX_j)/\tau)}\nonumber\\
-    &=&
-    \frac{\exp(s(\vT_i,\vX_i)/\tau)}{\sum_{k=1}^{n}\exp(s(\vT_i,\vX_k)/\tau)}.
-\end{eqnarray}
-Likewise, we want to maximize it for all pairs in the mini-batch
-\begin{equation}
-    \sum_{i=1}^{n}
-    p_{\theta,\phi}^{T\to I}(i \mid i).
-\end{equation}
-Finally, assembling these two directions yields the CLIP objective
-\begin{equation}
-    \cL_{\text{CLIP}} = -\frac{1}{2n}(
-    \sum_{i=1}^{n}
-    p_{\theta,\phi}^{T\to I}(i \mid i)
+    \frac{\exp(s(\vX_i,\vT_i)/\tau)}{\sum_{k=1}^{n}\exp(s(\vX_i,\vT_k)/\tau)}
     +
     \sum_{i=1}^{n}
-    p_{\theta,\phi}^{T\to I}(i \mid i)
-    ).
+    \frac{\exp(s(\vT_i,\vX_i)/\tau)}{\sum_{k=1}^{n}\exp(s(\vT_i,\vX_k)/\tau)}
+    \right),
 \end{equation}
+where \(\tau > 0\) is a temperature parameter that controls the sharpness of the softmax function. 
 
 \subsection{Architecture: Vision Tower}\label{sub:clip_vision_tower}
-As discussed in the previous section, CLIP's objective jointly involves both image and text representations in the same latent space. Accordingly, its architecture trains a vision encoder \(f^{I}_{\theta}: \cI \to \mathbb{R}^{d} \) and a text encoder \(f^{T}_{\phi}: \cT \to \mathbb{R}^{d} \) , as known as the ``dual-tower architecture''.
+The objective of CLIP is to learn both image and text representations in the same latent space. Accordingly, its architecture trains a vision encoder \(f^{I}_{\theta}: \cI \to \mathbb{R}^{d} \) and a text encoder \(f^{T}_{\phi}: \cT \to \mathbb{R}^{d} \) , also known as the ``dual-tower architecture''.
 
-A major advantage of CLIP is that it imposes essentially no restriction on the choice of vision encoder backbone \(f_\theta^{\text{bb}}\) (and the encoder embedding 
-\(f_\theta^{\text{emb}}\) paired with each backbone). Most mainstream backbones can be used in practice: for instance, convolutional networks such as ResNet~\citep{He2016-lc}, as well as the Vision Transformer~\citep{dosovitskiy2020image} discussed in \cref{sub:contrastive_learning_architecture}, both work well.
+In terms of architecture, most vision backbones can be used: for instance, convolutional networks such as ResNet~\citep{He2016-lc}, as well as the Vision Transformer~\citep{dosovitskiy2020image} (detailed in \cref{sub:contrastive_learning_architecture}) are all valid choices for CLIP. In practice, the Vision Transformer is more commonly used due to better performance and versatility. Similarly to DINO, we take the class token feature as the representation for each image: \(f^{I}_{\theta}(\vX) = \vz_{\cls}\). This is because the class token is meant to aggregate global information about the entire image and is commonly used for downstream prediction tasks.
 
-\paragraph{Feature Extractor.}
-Following the backbone, CLIP requires an additional feature extractor \(f^{\text{ext}}_{\theta}: \mathbb{R}^{t \times d^\prime} \to \mathbb{R}^{1 \times d^\prime} \), where \(t\) is the sequence length of the backbone's output and \(d^\prime\) is its hidden dimension. There are two mainstream designs of CLIP’s \(f^{\text{ext}}_{\theta}\), differing only in how they aggregate the backbone’s sequence output into a single \(d\)-dimensional image representation. The first is a \emph{mean extractor}: assume the backbone produces a sequence of latent features \([\vz_1,\dots,\vz_t] \in \mathbb{R}^{t\times d'}\), we take the pooled feature to be the average of token embeddings,
-\[
-\vz^{ext} =
-f^{\text{ext}}_{\theta}([\vz_1,\dots,\vz_t]) = \frac{1}{t}\sum_{i=1}^{t}\vz_i \in \mathbb{R}^{d'}.
-\]
-The second is a \emph{class-token extractor}, as is standard for Vision Transformers: assume the backbone output includes a designated class token along other latent features \([\vz_{\cls}, \vz_1,\dots,\vz_t] \in \mathbb{R}^{(t+1)\times d'}\), then we have
-\[
-\vz^{ext} = \vz_{\cls}.
-\]
+% \paragraph{Feature Extractor.}
+% Following the backbone, CLIP requires an additional feature extractor \(f^{\text{ext}}_{\theta}: \mathbb{R}^{t \times d^\prime} \to \mathbb{R}^{1 \times d^\prime} \), where \(t\) is the sequence length of the backbone's output and \(d^\prime\) is its hidden dimension. There are two mainstream designs of CLIP’s \(f^{\text{ext}}_{\theta}\), differing only in how they aggregate the backbone’s sequence output into a single \(d\)-dimensional image representation. The first is a \emph{mean extractor}: assume the backbone produces a sequence of latent features \([\vz_1,\dots,\vz_t] \in \mathbb{R}^{t\times d'}\), we take the pooled feature to be the average of token embeddings,
+% \[
+% \vz^{ext} =
+% f^{\text{ext}}_{\theta}([\vz_1,\dots,\vz_t]) = \frac{1}{t}\sum_{i=1}^{t}\vz_i \in \mathbb{R}^{d'}.
+% \]
+% The second is a \emph{class-token extractor}, as is standard for Vision Transformers: assume the backbone output includes a designated class token along other latent features \([\vz_{\cls}, \vz_1,\dots,\vz_t] \in \mathbb{R}^{(t+1)\times d'}\), then we have
+% \[
+% \vz^{ext} = \vz_{\cls}.
+% \]
 
-\paragraph{Task-specific Head.}
-The feature extractor is typically followed by a projection head \(f^{\text{emb}}_{\theta} : \mathbb{R}^{d'} \to \mathbb{R}^{d}\) (often a learned linear map) to project \( \vz^{ext} \) into the \(d\)-dimension latent space shared of by the final image and text representation
-\[
-\vz^{ext} = 
-\vW^{proj}\vz^{pool}
-\qquad
-\vW^{proj} \in \mathbb{R}^{d^\prime \times d}\,
-\]
-which is the final output of \(f^{I}_{\theta}\) and will later be used in the objective.
+% \paragraph{Task-specific Head.}
+% The feature extractor is typically followed by a projection head \(f^{\text{emb}}_{\theta} : \mathbb{R}^{d'} \to \mathbb{R}^{d}\) (often a learned linear map) to project \( \vz^{ext} \) into the \(d\)-dimension latent space shared of by the final image and text representation
+% \[
+% \vz^{ext} = 
+% \vW^{proj}\vz^{pool}
+% \qquad
+% \vW^{proj} \in \mathbb{R}^{d^\prime \times d}\,
+% \]
+% which is the final output of \(f^{I}_{\theta}\) and will later be used in the objective.
 
 \subsection{Architecture: Text Tower}
-Most mainstream CLIP text towers \(f^{T}_{\phi}\) adopt a Transformer-based text encoder to produce text representations. In what follows, we describe how this architecture operates on language data in a formal manner, organized around the four key components of the encoder. It is also worth noting that follow-up works have demonstrated substantial flexibility in the choice of CLIP’s text encoder: fixed text representations contained in large language models, and even simple bag-of-words features, can also be effective. We discuss these variants in \cref{sub:follow-up}.
+The CLIP text tower \(f^{T}_{\phi}\) typically adopts a Transformer-based architecture similar to the Vision Transformer described earlier. The main difference lies in the embedding layer, which is used to convert the text sequence into a sequence of latent representations in the latent space \(\vZ \in \mathbb{R}^{d}\). 
 
 \paragraph{Embedding.} Given a text sequence \(\vT \in \cT\) (e.g., a
 sentence or document), we embed it as a sequence of tokens in
-\(\R^{d^\prime}\) using the map \(f_{\theta}^{\text{emb}}\), as follows.
+\(\R^d\) using the map \(f_{\theta}^{\text{emb}}\), as follows.
 \begin{enumerate}
     \item First, we tokenize \(\vT\) into a sequence of discrete
         symbols (subwords/characters) from a vocabulary \(\cV\) of
         size \(|\cV|\). Concretely, a tokenizer
         \(t^{\tok} : \cT \to \cV^{N}\) produces a length-\(N\) token
-        sequence \((\tau_{1},\dots,\tau_{N})\), where
-        \(\tau_i \in \cV\). In practice one often augments this
+        sequence\footnote{In practice one often augments this
         sequence with special tokens (e.g., \(\langle \text{bos}\rangle\) and
         \(\langle \text{eos}\rangle\)
-        token) and may pad shorter sequences, but we keep the notation
-        generic and treat these as elements of \(\cV\).
+        tokens that are used to indicate the beginning and end of the sequence) and may pad shorter sequences, but we keep the notation
+        generic and treat these as elements of \(\cV\).} \((\tau_{1},\dots,\tau_{N})\), where
+        \(\tau_i \in \cV\).
     \item We convert tokens to integer indices by a vocabulary map
-        \(\mathrm{id}:\cV\to\{1,\dots,|\cV|\}\), yielding an index
+        \(\cV\to\{1,\dots,|\cV|\}\), yielding an index
         sequence \((s_{1},\dots,s_{N})\). We place these indices into
-        a matrix \(\vS \in \{0,1\}^{|\cV|\times N}\) using one-hot
-        columns, where the
+        a matrix \(\vS \in \{0,1\}^{|\cV|\times N}\), where the
         \(i\)-th column is the one-hot vector \(\ve_{s_i}\).
-    \item We then perform the following operation on \(\vS\) to project it to \(\R^{d^\prime \times n}\)
-        where \(n \doteq N + 1\):
+    \item We then perform the following operation on \(\vS\) to project it to \(\R^{d \times (N+1)}\):
         \begin{equation}
             \vS \mapsto [\vz_{\cls}^{1}, \vW^{\tok}\vS] + \vE^{\pos}.
         \end{equation}
@@ -1409,7 +1379,7 @@ sentence or document), we embed it as a sequence of tokens in
             \item \(\vW^{\tok} \in \R^{d \times |\cV|}\) is a matrix
                 whose \(j\)-th column is the learned embedding vector
                 for the \(j\)-th vocabulary item. Thus \(\vW^{\tok}\vS
-                \in \R^{d\times N}\) replaces each discrete token by a
+                \in \R^{d\times N}\) maps each discrete token to a
                 continuous feature in \(\R^{d}\).
             \item \(\vz_{\cls}^{1} \in \R^{d}\) is a special
                 \textit{classification} (or \textit{summary}) token.
@@ -1426,19 +1396,20 @@ sentence or document), we embed it as a sequence of tokens in
         \end{itemize}
 \end{enumerate}
 All parameters \(\vz_{\cls}^{1}, \vW^{\tok}, \vE^{\pos}\) are
-contained in the parameter set \(\theta\). The vocabulary \(\cV\) and tokenizer \(t^{\tok}\) are fixed.
+contained in the parameter set \(\theta\). The vocabulary \(\cV\) and tokenizer \(t^{\tok}\) are fixed. 
 
-\paragraph{Backbone.} Now, our text input (a string) has been transformed into a sequence of latent representations
-\([\vz_{\cls}, \vz_{1}, \ldots, \vz_{n}]\) in the latent space \(\R^{d'}\). Therefore, its subsequent processing follows the same procedure as in \cref{sub:contrastive_learning_architecture} for image latent representations.
+Other components of the text tower, such as the backbone and the task-specific head, follow similar design choices as the image tower and are omitted for brevity. It is also worth noting that follow-up works have demonstrated substantial flexibility in the choice of CLIP's text encoder: fixed text representations contained in large language models, and even simple bag-of-words features, can also be effective. We discuss these variants in \cref{sub:follow-up}.
 
-\paragraph{Feature Extractor.} The text transformer adopts a class-token extractor similar to the one in \cref{sub:clip_vision_tower}.
+% \paragraph{Backbone.} Now, our text input (a string) has been transformed into a sequence of latent representations
+% \([\vz_{\cls}, \vz_{1}, \ldots, \vz_{n}]\) in the latent space \(\R^{d}\). Therefore, its subsequent processing follows the same procedure as in \cref{sub:contrastive_learning_architecture} for image latent representations.
 
-\paragraph{Task-specific Head.} The text transformer adopts a linear head similar to the one in \cref{sub:clip_vision_tower}.
+% \paragraph{Feature Extractor.} The text transformer adopts a class-token extractor similar to the one in \cref{sub:clip_vision_tower}.
+
+% \paragraph{Task-specific Head.} The text transformer adopts a linear head similar to the one in \cref{sub:clip_vision_tower}.
 
 \subsection{Optimization Strategy}
 We train CLIP using a standard end-to-end stochastic optimization
-procedure. In particular, CLIP can be optimized with essentially
-any mainstream SGD-based optimizer (e.g., SGD with momentum, AdamW). Below we present a generic process.
+procedure (e.g. SGD with momentum, AdamW). Below we present a generic process.
 
 At each timestep \(k\), we:
 \begin{itemize}
@@ -1451,28 +1422,24 @@ At each timestep \(k\), we:
     associated text.
 
     \item \textbf{Compute latent representations.} For each pair
-    \((\vX_i^{(k)}, \vT_i^{(k)})\), compute an image embedding via the
-    vision encoder \(f_\theta^{I}\) and a text embedding via the text
-    encoder \(f_\phi^{T}\):
+    \((\vX_i^{(k)}, \vT_i^{(k)})\), compute normalized embeddings using the vision and text encoders \(f^{I}_{\theta}\) and \(f^{T}_{\phi}\):
     \begin{equation}
-        \vz_{i}^{I,(k)} \doteq z_{\theta}^{I}(\vX_i^{(k)}) \doteq \frac{f_{\theta}^{I}(\vX_i^{(k)})}{\|f_{\theta}^{I}(\vX_i^{(k)})\|_2},
+        z_{\theta}^{I}(\vX_i^{(k)}) \doteq \frac{f_{\theta}^{I}(\vX_i^{(k)})}{\|f_{\theta}^{I}(\vX_i^{(k)})\|_2},
         \qquad
-        \vz_{i}^{T,(k)} \doteq z_{\phi}^{T}(\vT_i^{(k)}) \doteq \frac{f_{\phi}^{T}(\vT_i^{(k)})}{\|f_{\phi}^{T}(\vT_i^{(k)})\|_2}.
+        z_{\phi}^{T}(\vT_i^{(k)}) \doteq \frac{f_{\phi}^{T}(\vT_i^{(k)})}{\|f_{\phi}^{T}(\vT_i^{(k)})\|_2}.
     \end{equation}
 
-    \item \textbf{Form the stochastic CLIP loss.} Using the two sets
-    of normalized latent features \(\{\vz_{i}^{I,(k)}\}_{i=1}^{n}\) and
-    \(\{\vz_{i}^{T,(k)}\}_{i=1}^{n}\), construct the minibatch
-    contrastive objective (symmetric text\(\to\)image and
-    image\(\to\)text directions):
+    \item \textbf{Compute CLIP loss.} Compute the CLIP loss as defined in \cref{eq:practical_clip_loss}:
     \begin{equation}
-        \min_{\theta, \phi}
         \hat{\cL}_{\text{CLIP}}^{(k)}
         \doteq
-        -\frac{1}{2n}\left(
-        \sum_{i=1}^{n} p_{\theta,\phi}^{T\to I}(i \mid i)
-        \;+\;
-        \sum_{i=1}^{n} p_{\theta,\phi}^{I\to T}(i \mid i)
+        -\frac{1}{n}\left(    
+        \textstyle
+        \sum_{i=1}^{n}
+        \frac{\exp(s(\vX_i^{(k)},\vT_i^{(k)})/\tau)}{\sum_{k=1}^{n}\exp(s(\vX_i^{(k)},\vT_k^{(k)})/\tau)}
+        +
+        \sum_{i=1}^{n}
+        \frac{\exp(s(\vT_i^{(k)},\vX_i^{(k)})/\tau)}{\sum_{k=1}^{n}\exp(s(\vT_i^{(k)},\vX_k^{(k)})/\tau)}
         \right).
     \end{equation}
 
@@ -1500,9 +1467,7 @@ At each timestep \(k\), we:
 
 
 \subsection{Evaluation Methodology}\label{sub:clip_eval}
-Because CLIP does not introduce a novel architecture for either the vision encoder or the text encoder—both follow standard, widely used model formats—it can be evaluated using most generic evaluation methodologies for vision and language encoders. For example, as mentioned earlier, one can perform linear probing by training a lightweight classification head and use classification accuracy to assess the quality of the learned representations.
-
-However, such approaches typically require fine-tuning on an additional labeled dataset. In contrast, CLIP’s particular design enables a classification method that requires no fine-tuning on any extra dataset (i.e., zero-shot classification). We now focus on explaining this zero-shot evaluation protocol.
+Since CLIP is architecture-agnostic, most standard evaluation protocols for vision and language encoders can be applied. For example, one can perform linear probing by training a lightweight classification head on top of the vision encoder to assess the quality of the learned representations in image classification tasks. Further, one can perform zero-shot classification without any additional training thanks to the dual-tower architecture of CLIP.
 
 Recall that in a standard \(n\)-way image classification setup, we are given a dataset of images
 \(\{\vX_i\}_{i=1}^{N}\subseteq\cI\), each annotated with one of \(n\) class labels from the set
@@ -1515,8 +1480,7 @@ the (top-1) classification accuracy of \(P\) on this dataset is then computed as
 \frac{1}{N}\sum_{i=1}^{N}\boldsymbol{1}\{\hat{y}_i = y_i\}.
 \]
 
-So the question is naturally how CLIP builds such a pipeline \(P\) without any additional fine-tuning. 
-At a high level, CLIP first uses its text encoder \(f_{\phi}^{T}\) to construct a \emph{text dictionary}
+In CLIP, we can construct a \emph{text dictionary} using the text encoder \(f_{\phi}^{T}\):
 \(\vD\in\R^{n\times d}\), whose \(j\)-th row stores the normalized latent representation of the \(j\)-th class label.
 Concretely, for each class \(\ell_j \in \cL\), we form a textual description (prompt) \(\vT_j\) (e.g.,
 ``a photo of a \(\ell_j\)''), and compute its normalized embedding

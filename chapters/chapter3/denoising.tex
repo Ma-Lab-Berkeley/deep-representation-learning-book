@@ -689,7 +689,7 @@ in the following example.
     different from the distribution of \(x\).
 \end{example}
 
-\subsubsection{Incremental Denoising.}
+\subsubsection{Incremental Denoising}
 Therefore, if we want to denoise the very noisy sample \(\vx_{T}\)
 (where—recall—\(T\) is the maximum time), we cannot just use the
 denoiser \textit{once}. Instead, we must use the denoiser many times,
@@ -1313,14 +1313,18 @@ where \(\tau \sim \dUnif([0, T])\), i.e., is drawn uniformly from \([0, T]\).
 Similar to Step 1, where we used more timesteps closer to \(t = 0\)
 to ensure a better sampling process, we may want to ensure that the
 denoiser is higher quality closer to \(t = 0\), and thereby
-\textit{weight the loss} so that \(t\) near \(0\) has higher weight.
+\textit{weight the loss} so that \(t\) near \(0\) has higher
+weight.\footnote{In practice, the distribution of sampled \(t\) may
+    also be non-uniform, in order to ensure (in conjunction with the
+    weighting scheme) that the Monte Carlo estimate for the loss has
+small variance, greatly improving training stability.}
 Letting \(w_{t}\) be the weight at time \(t\), the weighted loss would look like
 \begin{equation}\label{eq:parametric_denoising_loss}
     \min_{\theta}\Ex[w_{\tau}\norm{\bar{\vx}_{\theta}(\tau,
     \vx_{\tau}) - \vx}_{2}^{2}].
 \end{equation}
 One reasonable choice of weight in practice is \(w_{t} =
-\alpha_{t}/\sigma_{t}\). The precise reason will be covered in the
+\alpha_{t}^{2}/\sigma_{t}^{2}\). The precise reason will be covered in the
 next paragraph, but generally it serves to up-weight the losses
 corresponding to \(t\) near \(0\) while still remaining reasonably
 numerically stable. Also, of course, we cannot compute the
@@ -1329,7 +1333,9 @@ Monte-Carlo average to estimate it. The series of changes made here
 have several conceptual and computational benefits: we do not need to
 train multiple denoisers, we can train on one set of timesteps and
 sample using a subset (or others entirely), etc. The full pipeline is
-discussed in \Cref{alg:learning_denoiser}.
+discussed in \Cref{alg:learning_denoiser}. Certainly, this pipeline
+works in practice; we discuss some results in
+\Cref{sec:auto-encode-img-gen,sec:cond_gen,sec:object-generation,sec:shape-and-pose,sec:egoallo}.
 
 \begin{algorithm}
     \begin{algorithmic}[1]
@@ -1381,13 +1387,16 @@ discussed in \Cref{alg:learning_denoiser}.
     \label{alg:learning_denoiser}
 \end{algorithm}
 
-\paragraph{(Optional) Step 4: changing the estimation target.} Note
+\paragraph{Step 4: changing the estimation target.} Note
 that it is common to instead reorient the whole denoising pipeline
 around \textit{noise predictors}, i.e., estimates of \(\Ex[\vg \mid
 \vx_{t}]\). In practice, noise predictors are slightly easier to
 train because their output is (almost) always of comparable size to a
-Gaussian random variable, so training is more numerically stable.
-Note that by \eqref{eq:gen_additive_gaussian_noise_model} we have
+Gaussian random variable, so training is more numerically stable, but
+in practice may require larger models since they predict a
+full-dimensional target instead of potentially low-dimensional data
+\citep{li2025back}. Note that by
+\eqref{eq:gen_additive_gaussian_noise_model} we have
 \begin{equation}
     \vx_{t} = \alpha_{t}\Ex[\vx \mid \vx_{t}] + \sigma_{t}\Ex[\vg
     \mid \vx_{t}] \implies \Ex[\vg \mid \vx_{t}] =
@@ -1410,14 +1419,15 @@ are also the same as the denoiser, up to the factor of
     \Ex\rs{w_{\tau}\frac{\alpha_{\tau}^{2}}{\sigma_{\tau}^{2}}\norm{\vx
     - \bar{\vx}(\tau, \vx_{\tau})}_{2}^{2}},
 \end{equation}
-recalling that \(\tau \sim \dUnif([0, T])\). For the sake of
-completeness we will mention that other targets have
-been proposed for different tasks, e.g., \(\Ex[\odv*{\vx_{t}}{t} \mid
-\vx_{t}]\) (called \(v\)-prediction or velocity prediction), etc.,
-but denoising and noise prediction remain commonly used. Throughout
-the rest of this book we will only consider denoising.
+recalling that \(\tau \sim \dUnif([0, T])\). Other targets have
+been proposed for different tasks, e.g., \(\Ex[\vv_{t} \mid
+\vx_{t}]\) where \(\vv_{t} = \odv*{\vx_{t}}{t}\) (called
+\(v\)-prediction or velocity prediction), etc. This turns out to be
+equivalent to denoising and noise prediction, but also fundamentally
+useful for generalizations of diffusion such as flow matching, which
+we will discuss in \Cref{rem:flow_matching}.
 
-\subsubsection{Sampling Error Rate of the Denoising Process.}
+\subsubsection{Sampling Error Rate of the Denoising Process}
 We have made many changes to our original platonic noising/denoising
 process. To assure ourselves that the new process still works in
 practice, we can compute numerical examples (such as
@@ -1533,10 +1543,87 @@ heuristically argued previously.
     equivalently the score function) when taking a step.
 \end{remark}
 
+\begin{remark}\label{rem:flow_matching}
+    The diffusion/denoising processes and associated models provide a
+    way to transport the data distribution to and from a high-entropy
+    (Gaussian or Gaussian-like) distribution. On the other hand, it
+    may be useful to transport the data distribution to and from an
+    arbitrary target distribution, which could be Gaussian, a
+    Gaussian mixture, or even another type of data distribution. If
+    we have this desideratum, we can use the \textit{flow matching}
+    framework to achieve this. Suppose the target random variable is
+    \(\vy\), and our flow is
+    \begin{equation}
+        \vx_{t} = \alpha_{t}\vx + \sigma_{t}\vy, \qquad \forall t \in [0, 1].
+    \end{equation}
+    such that \(\alpha_{0} = \sigma_{1} = 1\) and \(\alpha_{1} =
+    \sigma_{0} = 0\), such that \(\vx_{0} = \vx\) and \(\vx_{1} =
+    \vy\). Actually, \textit{nothing about our strategy changes}: we
+    can train a denoiser \(\bar{\vx}_{\theta}\) to denoise
+    \(\vx_{t}\) back to \(\vx\) (or equivalently a ``noise''
+    predictor to predict \(\vy\)), and then apply our iterative
+    denoising algorithms to start from a realization of \(\vy\) to
+    obtain \(\vx\). The only thing missing is Tweedie's formula which
+    connects the score \(\nabla \log p_{t}\) of the denoiser to the
+    denoiser; such does not exist in general.
+
+    In practice, inspired by the concept of learning a so-called
+    \textit{transport map} between data pairs \(\vx\) and \(\vy\),
+    practitioners often wish to train a \textit{velocity predictor}
+    \(\bar{\vv}_{\theta}\) to predict \(\vv_{t} = \odv*{\vx_{t}}{t} =
+    \alpha_{t}^{\prime}\vx + \sigma_{t}^{\prime}\vy\) instead of a
+    denoiser \(\bar{\vx}_{\theta}\), or rather train
+    \(\bar{\vv}_{\theta}\) to predict \(\Ex[\vv_{t} \mid \vx_{t}]\).
+    In this case, it is simplest to take the choice of coefficients
+    \(\alpha_{t} = 1 - t\) and
+    \(\sigma_{t} = t\) (for \(t \in [0, 1]\)), so that the prediction
+    target is \(\vv_{t} = \vy - \vx\) for each time \(t\). Given the
+    estimator \(\bar{\vv}_{\theta}\), the standard sampling algorithm
+    follows the field backwards in time, i.e., starting from a
+    realization of \(\vy\), we can iteratively update the iterate as follows:
+    \begin{equation}
+        \hat{\vx}_{t_{\ell - 1}} = \hat{\vx}_{t_{\ell}} -
+        \bar{\vv}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}}) \Delta t,
+    \end{equation}
+    where \(\Delta t = t_{\ell} - t_{\ell - 1}\) is the timestep.
+    Note that velocity prediction is algebraically equivalent to
+    denoising (see \Cref{exercise:velocity_prediction}). See
+    \Cref{sec:auto-encode-img-gen,sec:shape-and-pose} for practical
+    applications of flow matching.
+\end{remark}
+
+\begin{remark}
+    In practice, diffusion usually takes many steps and many function
+    evaluations of the denoiser. It is therefore natural to ask:
+    ``can we speed up the sampling process by using a smaller number
+    of steps and function evaluations?'' The answer is yes, and such
+    models are often called \textit{consistency models} or more
+    descriptively \textit{few-step models}. The core idea is to use a
+    denoiser which takes in two times \(\bar{\vx}_{\theta}(s, t,
+    \vx_{t})\) and estimates \(\Ex[\vx_{s} \mid \vx_{t}]\), which in
+    some sense is
+    an easier task, or alternatively using a velocity predictor
+    \(\bar{\vv}_{\theta}(s, t, \vx_{t})\) and estimating the average
+    velocity \(\Ex[(\vx_{t} - \vx_{s})/(t - s) \mid \vx_{t}]\). Such
+    denoisers have additional consistency
+    conditions such as \(\bar{\vx}_{\theta}(u, t,
+    \bar{\vx}_{\theta}(s, u, \vxi)) = \bar{\vx}_{\theta}(s, t, \vxi)\)
+    which motivate auxiliary training losses. Once such a predictor
+    is learned, the
+    sampling process becomes very simple and efficient, as it only
+    requires a few steps of the form:
+    \begin{equation}
+        \hat{\vx}_{s} = \bar{\vx}_{\theta}(s, t, \hat{\vx}_{t}) =
+        \hat{\vx}_{t} - \bar{\vv}_{\theta}(s, t, \hat{\vx}_{t})\cdot(t - s).
+    \end{equation}
+    Relevant formulations include flow maps \cite{boffi2025build} and
+    mean flows \cite{geng2025mean}.
+\end{remark}
+
 \section{Memorization, Generalization, and Coding Rates}
 \label{sec:diffusion_memorization}
 
-The calculation presented at the end of the last
+The calculation presented at the end of
 \Cref{sub:intro_diffusion_denoising} seems to suggest (loosely
 speaking) that in practice, using a transformer-like network is a
 good choice for learning or approximating a denoiser. This is
@@ -2603,8 +2690,8 @@ inexhaustive list.
                 building a sampler for Gaussian mixtures.
             \item Reproduce \Cref{fig:ve_forward_denoising} and
                 \Cref{fig:vp_gmm_denoising}.
-            \item We now introduce a separate process called \textit{Flow
-                Matching (FM)}, as follows:
+            \item We now introduce \textit{Flow
+                Matching (FM)} (see \Cref{rem:flow_matching}), as follows:
                 \begin{equation}
                     \alpha_{t} = 1 - t, \qquad \sigma_{t} = t.
                 \end{equation}
@@ -2612,6 +2699,25 @@ inexhaustive list.
                 for sampling in high dimensions. Which process seems to give
                 better or more stable results?
         \end{enumerate}
+    \end{exercise}
+
+    \begin{exercise}\label{exercise:velocity_prediction}
+        Consider the somewhat familiar interpolation
+        \begin{equation}
+            \vx_{t} = \alpha_{t}\vx + \sigma_{t}\vy, \qquad \forall t
+            \in [0, T].
+        \end{equation}
+        where \(\vy\) is a (not necessarily Gaussian) random
+        variable. We define the \textit{velocity} as
+        \begin{equation}
+            \vv_{t} = \odv*{\vx_{t}}{t} = \alpha_{t}^{\prime}\vx +
+            \sigma_{t}^{\prime}\vy, \qquad \forall t \in [0, T].
+        \end{equation}
+        Compute an algebraic relationship writing \(\Ex[\vv_{t} \mid
+        \vx_{t}]\) in terms of \(\Ex[\vx \mid \vx_{t}]\) and vice
+        versa, showing that velocity prediction is algebraically
+        equivalent to denoising and thus also to noise prediction
+        (see \Cref{rem:flow_matching}).
     \end{exercise}
 
     \end{document}
