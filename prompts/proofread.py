@@ -28,7 +28,7 @@ DEFAULT_MODEL = "moonshotai/kimi-k2"
 
 SUFFIX_INSTRUCTION = (
     "\n\nApply the above instructions to the following LaTeX excerpt. "
-    "If the instructions are not relevant to this excerpt, return it unchanged. "
+    "If the instructions are not relevant to this excerpt (as may often be the case), return it unchanged. "
     "Return ONLY the corrected LaTeX. No explanations, no markdown formatting. "
     "Preserve whitespace and indentation exactly."
 )
@@ -64,12 +64,14 @@ def split_into_chunks(content: str) -> list[Chunk]:
 
     # Preamble chunk
     if doc_start is not None and doc_start > 0:
-        chunks.append(Chunk(
-            text="\n".join(lines[: doc_start + 1]),
-            start_line=1,
-            end_line=doc_start + 1,
-            is_preamble=True,
-        ))
+        chunks.append(
+            Chunk(
+                text="\n".join(lines[: doc_start + 1]),
+                start_line=1,
+                end_line=doc_start + 1,
+                is_preamble=True,
+            )
+        )
         body_start = doc_start + 1
     else:
         body_start = 0
@@ -84,11 +86,13 @@ def split_into_chunks(content: str) -> list[Chunk]:
     def flush(end_idx: int):
         if not current_lines:
             return
-        chunks.append(Chunk(
-            text="\n".join(current_lines),
-            start_line=chunk_start + 1,
-            end_line=end_idx + 1,
-        ))
+        chunks.append(
+            Chunk(
+                text="\n".join(current_lines),
+                start_line=chunk_start + 1,
+                end_line=end_idx + 1,
+            )
+        )
 
     for i in range(body_start, body_end):
         line = lines[i]
@@ -102,12 +106,14 @@ def split_into_chunks(content: str) -> list[Chunk]:
         if line.strip() == "" and not env_stack:
             flush(i - 1 if current_lines else i)
             current_lines = []
-            chunks.append(Chunk(
-                text="",
-                start_line=i + 1,
-                end_line=i + 1,
-                is_blank=True,
-            ))
+            chunks.append(
+                Chunk(
+                    text="",
+                    start_line=i + 1,
+                    end_line=i + 1,
+                    is_blank=True,
+                )
+            )
             chunk_start = i + 1
         else:
             if not current_lines:
@@ -119,12 +125,14 @@ def split_into_chunks(content: str) -> list[Chunk]:
 
     # Postamble chunk
     if doc_end is not None:
-        chunks.append(Chunk(
-            text="\n".join(lines[doc_end:]),
-            start_line=doc_end + 1,
-            end_line=len(lines),
-            is_preamble=True,
-        ))
+        chunks.append(
+            Chunk(
+                text="\n".join(lines[doc_end:]),
+                start_line=doc_end + 1,
+                end_line=len(lines),
+                is_preamble=True,
+            )
+        )
 
     return chunks
 
@@ -139,12 +147,17 @@ def get_openai_client():
     try:
         from openai import OpenAI
     except ImportError:
-        print("Error: openai package not installed. Run: pip install openai", file=sys.stderr)
+        print(
+            "Error: openai package not installed. Run: pip install openai",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
-        print("Error: OPENROUTER_API_KEY environment variable not set.", file=sys.stderr)
+        print(
+            "Error: OPENROUTER_API_KEY environment variable not set.", file=sys.stderr
+        )
         sys.exit(1)
 
     return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
@@ -186,7 +199,10 @@ def call_llm(
             time.sleep(wait)
         except APIStatusError as e:
             if e.status_code == 401:
-                print("Error: Authentication failed. Check OPENROUTER_API_KEY.", file=sys.stderr)
+                print(
+                    "Error: Authentication failed. Check OPENROUTER_API_KEY.",
+                    file=sys.stderr,
+                )
                 sys.exit(1)
             print(f"  API error ({e.status_code}): {e.message}", file=sys.stderr)
             return None
@@ -406,9 +422,17 @@ def main():
     )
     parser.add_argument("file", type=Path, help="Path to the .tex file")
     parser.add_argument("instructions", type=Path, help="Markdown instructions file")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"OpenRouter model ID (default: {DEFAULT_MODEL})")
-    parser.add_argument("--dry-run", action="store_true", help="Show chunks without calling the LLM")
-    parser.add_argument("--skip-to", type=int, default=1, help="Resume from chunk N (1-based)")
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"OpenRouter model ID (default: {DEFAULT_MODEL})",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show chunks without calling the LLM"
+    )
+    parser.add_argument(
+        "--skip-to", type=int, default=1, help="Resume from chunk N (1-based)"
+    )
     parser.add_argument("--verbose", action="store_true", help="Show chunk details")
     args = parser.parse_args()
 
@@ -430,7 +454,9 @@ def main():
     chunks = split_into_chunks(content)
 
     # Processable = not blank, not preamble/postamble
-    processable = [(i, c) for i, c in enumerate(chunks) if not c.is_blank and not c.is_preamble]
+    processable = [
+        (i, c) for i, c in enumerate(chunks) if not c.is_blank and not c.is_preamble
+    ]
     total = len(processable)
 
     print(f"\n{BOLD}Proofreading: {tex_path.name}{RESET}")
@@ -442,7 +468,9 @@ def main():
         for i, chunk in enumerate(chunks):
             kind = "BLANK" if chunk.is_blank else "PRE" if chunk.is_preamble else "    "
             preview = chunk.text[:60].replace("\n", " ")
-            print(f"  [{i + 1:3d}] {kind}  L{chunk.start_line}-{chunk.end_line}  {DIM}{preview}{RESET}")
+            print(
+                f"  [{i + 1:3d}] {kind}  L{chunk.start_line}-{chunk.end_line}  {DIM}{preview}{RESET}"
+            )
         print()
 
     if total == 0:
@@ -471,7 +499,9 @@ def main():
             )
 
         if args.verbose:
-            print(f"{DIM}  [{display_idx}/{total}] lines {chunk.start_line}-{chunk.end_line}{RESET}")
+            print(
+                f"{DIM}  [{display_idx}/{total}] lines {chunk.start_line}-{chunk.end_line}{RESET}"
+            )
 
         if args.dry_run:
             print(
@@ -506,7 +536,9 @@ def main():
             write_file(tex_path, chunks)
             continue
 
-        decision, final_text = review_change(display_idx, total, chunk, corrected, args.dry_run)
+        decision, final_text = review_change(
+            display_idx, total, chunk, corrected, args.dry_run
+        )
 
         if decision in ("accept", "accept_all"):
             chunk.text = final_text

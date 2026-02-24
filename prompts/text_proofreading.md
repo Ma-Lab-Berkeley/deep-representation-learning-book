@@ -1,4 +1,4 @@
-Can you go through this excerpt and fix streamlining/grammar/wording/awkward turn-of-phrase issues? Try to be surgical with the edits, and DO NOT change the technical content. In addition, please do the following LaTeX edits:
+Can you go through this excerpt and fix streamlining/grammar/wording/awkward turn-of-phrase issues? Be as surgical as possible with the edits, and DO NOT change the technical content. In addition, please do the following LaTeX edits:
 
 - use \textit instead of \em or \emph
 - use --- instead of em-dash and -- instead of en-dash, but generally avoid using dashes
