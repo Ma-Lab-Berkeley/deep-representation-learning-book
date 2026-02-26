@@ -1,0 +1,1452 @@
+\providecommand{\toplevelprefix}{../..}  %
+\documentclass[../../book-main_zh.tex]{subfiles}
+
+\begin{document}
+
+\chapter{通过去噪追寻低维分布}
+\label{ch:denoising}
+
+\begin{quote}
+    \hfill  ``{\textit{信息是不确定性的消解}}。''
+
+    \(~\)\hfill --- 克劳德·香农，1948
+\end{quote}
+\vspace{5mm}
+
+在\Cref{ch:classic-models}中，我们展示了如何学习一些简单类别的分布，这些分布的支撑集被假设为一个低维子空间、若干这样的子空间的混合，或是低秩高斯分布。为简化起见，不同的（隐式）线性或高斯模态被假定为正交或独立，\footnote{或者在较为温和的条件下可约化为这种理想情况。}如\Cref{fig:subspaces}所示。对于这些特殊分布，可以推导出简单而有效的学习算法，并具有正确性和效率保证，且相关算法中运算的几何与统计解释清晰。
+
+在实践中，线性和独立性都是理想化假设，真实世界高维数据的分布\textit{极少}满足它们。我们唯一可以拥有的假设是：分布的内在维度远低于数据所嵌入的环境空间的维度。因此，本章我们将展示如何在\textit{不}必然（分段）线性的高维空间中，学习更一般的低维分布类别。
+
+真实世界分布通常包含多个分量或模态，例如对应于图像中不同物体类别。这些模态可能并非统计独立，甚至可能具有不同的内在维度。因此，我们通常可以假设数据分布于高维空间嵌入的若干低维非线性子流形的混合上。\Cref{fig:mixture-manifolds}便描述了这样一种分布。另一个约束是，在现实情境下，我们通常只能访问数据分布的有限样本，而非对分布本身的先验知识。
+
+在这些条件下学习这样的分布，我们必须解决三个基本问题：
+\begin{itemize}
+    \item 在高维空间中学习与表示低维分布的一般途径是什么？
+    \item 我们如何度量分布的复杂度，以便有效地利用其低维特性进行学习？
+    \item 当环境维度高且样本量大时，如何使学习过程在计算上可行且可扩展？
+\end{itemize}
+正如我们将看到的，\textit{压缩}或\textit{降维}这一基本思想——我们已在线性/独立情形下证明其有效——仍是针对一般非线性低维分布开发计算模型与方法的核心指导原则。
+
+由于其理论与实践重要性，我们将更深入地考察当感兴趣的分布可被很好地建模或近似为低维子空间或低秩高斯混合时，这一基于压缩的框架如何具体实现。后续章节将表明，这些看似受限的模型类别，实际上充当了在一般分布上执行压缩的算法的基本构建块。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{\toplevelprefix/chapters/chapter3/figs/mixed-manifolds.png}
+    \caption{数据\(\vX\)分布于非常高维的环境空间（例如\(\R^{D}\)）中若干低维子流形\(\cup_{j} \cM_{j}\)的混合上。请注意，这比前一章\Cref{ch:classic-models}所研究的特殊情形要一般得多，在那些情形中子流形被假定为分段线性，从而允许参数化形式与解析解。}
+    \label{fig:mixture-manifolds}
+\end{figure}
+
+\section{熵最小化与压缩}
+
+\subsection{熵与编码率}
+在\Cref{ch:intro}中我们提到，学习的目标是找到生成给定数据集的最简单方式。概念上，Kolmogorov复杂度旨在提供这样一种复杂度度量，但它不可计算，且不与任何可实际重现数据的实现方案相关联。因此，我们需要一种可计算且可实现的复杂度替代度量。这引出了由香农于1948年提出的\textit{熵}的概念~\cite{Shannon-1948}。
+
+为说明熵的构造性，让我们从最简单情形入手。假设我们有一离散随机变量，它以等概率\(1/N\)取\(N\)个不同值或\textit{标记}\(\{\vx_{1}, \dots, \vx_{N}\}\)。我们可以用\(i\)的\(\log_2 N\)位二进制表示为每个标记\(\vx_{i}\)编码。该编码方案可推广到任意离散分布~\cite{Cover-Thomas}：给定分布\(p\)满足\(\sum_{i=1}^{N} p(\vx_{i}) = 1\)，可为每个概率为\(p(\vx_{i})\)的标记\(\vx_{i}\)分配一个长度为\(\log_2 [1/p(\vx_{i})] = - \log_2 p(\vx_{i})\)位的二进制码。因此，编码来自分布\(p(\cdot)\)的任意样本所需的平均比特数或\textit{编码率}由下式给出\footnote{根据信息论惯例~\cite{Cover-Thomas}，这里的\(\log\)以2为底，因此熵以（二进制）比特度量。}：
+\begin{equation}
+    H(p) \doteq \Ex_{\vx \sim p}[-\log p(\vx)]  = - \sum_{i=1}^{N}
+    p(\vx_{i}) \log  p(\vx_{i}).
+    \label{eqn:entropy-discrete}
+\end{equation}
+这就是（离散）分布\(p(\cdot)\)的\textit{熵}。注意该熵恒非负，且当且仅当存在某个\(i \in [N]\)使\(p(\vx_{i}) = 1\)时为零。\footnote{这里我们用到\(\lim_{p\rightarrow 0} p \log p = 0\)。}对于随机变量\(\vx\)，我们常写\(H(\vx)\)以指代其（边缘）分布的熵。
+
+\subsection{微分熵}
+
+当随机变量\(\vx \in \R^{D}\)连续且具有概率密度\(p\)时，可将上述求和\eqref{eqn:entropy-discrete}的极限视为与积分相关：
+\begin{equation}
+    h(p) \doteq \Ex_{\vx \sim p}[-\log p(\vx)] = - \int_{\R^{D}}
+    p(\vxi) \log p(\vxi) \odif{\vxi}.
+    \label{eqn:entropy-differential}
+\end{equation}
+更精确地说，给定\(\R^{D}\)上的连续概率分布\(p\)，可将\(\R^{D}\)离散化为边长为\(\epsilon^{1/D}\)的不相交立方体\(C_{i}^{\epsilon}\)的并集，每个立方体中心为\(\vx_{i}\)，并通过\(p^{\epsilon}(\vx_{i}) = \Pr_{\vx \sim p}[\vx \in C_{i}^{\epsilon}]\)定义离散化分布\(p^{\epsilon}\)。则可证明\(H(p^{\epsilon}) + \log \epsilon \approx h(p)\)。当\(\epsilon\)很小时，我们观察到微分熵\(h(p)\)可为负。感兴趣的读者可参阅\cite{Cover-Thomas}以获取更详细解释。与离散熵类似，我们常写\(h(\vx)\)以指代其（边缘）分布的熵。
+
+\begin{example}[高斯分布的熵]
+    通过直接计算可证明，高斯随机变量\(\vx \sim \dNorm(\mu, \sigma^{2})\)的熵为：
+    \begin{equation}
+        h(\vx) = \frac{1}{2}\log (2\pi
+        \sigma^{2}) + \frac{1}{2}.
+        \label{eqn:entropy-Gaussian}
+    \end{equation}
+    \(\R^{D}\)中多元高斯随机变量\(\vx \sim \dNorm(\vmu, \vSigma)\)的熵为：
+    \begin{equation}
+        h(\vx) = \frac{D}{2}(1 + \log(2\pi)) +
+        \frac{1}{2}\logdet(\vSigma).
+        \label{eqn:entropy-Gaussian-multi}
+    \end{equation}
+\end{example}
+
+与离散分布的熵类似，我们希望微分熵与某种可实现编码方案的编码率相关联。例如，如上所述，若我们以网格尺寸\(\epsilon > 0\)且中心为\(\vx_{i}\)的方式离散化分布域，一种可能的编码方案是将每个\(\vx\)映射到其最近中心\(\vx_{i}\)，所得离散分布的熵近似于微分熵\cite{Cover-Thomas}。
+
+微分熵的定义存在一些注意事项。对于高维空间中的分布，当其支撑集退化（低维）时，其微分熵发散至\(-\infty\)。该事实在\Cref{thm:max_entropy}中予以证明，但即便在高斯分布\eqref{eqn:entropy-Gaussian-multi}这一简单显式情形中，当协方差\(\vSigma\)奇异时，我们也能看到\(\logdet(\vSigma) = -\infty\)，从而\(h(\vx) = -\infty\)（注意根据\Cref{thm:max_entropy}，高斯分布在具有相同均值和协方差的所有分布中具有最大熵）。在此情形下，如何恰当地量化或编码该分布尚不明确。然而，退化（高斯）分布正是高维空间中最简单的低维分布实例，且可以说最重要。下一章我们将完整解决这一看似棘手的退化难题。
+
+\subsection{最小化编码率}\label{sub:min_entropy}
+请记住，学习问题是从一组从分布中抽取的样本\(\{\vx_{1}, \ldots, \vx_{N}\}\)中恢复（可能连续的）分布\(p(\vx)\)。为便于阐述，我们写\(\vX = [\vx_{1}, \ldots, \vx_{N}] \in \R^{D\times N}\)。鉴于这里感兴趣的分布（几乎）是低维的，我们应预期其（微分）熵非常小。然而，与前一章研究的情形不同，一般而言我们并不知道分布\(p(\vx)\)所属的（解析）低维模型族。因此，检验熵是否小似乎是识别并建模分布的唯一可依靠的准则。
+
+现在，仅凭样本而不知\(p(\vx)\)为何，理论上它们可被解释为来自任何一般分布的样本。特别地，它们可被解释为以下任一种：
+\begin{enumerate}
+    \item 来自经验分布\(p^{\vX}\)本身的样本，该分布为每个样本\(\vx_{i}, i=1, \ldots, N\)赋予概率\(1/N\)；
+    \item 来自标准正态分布\(\vx^{n} \sim p^{n} \doteq \dNorm(\vzero, \sigma^{2} \vI)\)的样本，其中方差\(\sigma^{2}\)足够大（例如大于样本范数的平方）；
+    \item 来自正态分布\(\vx^{e} \sim p^{e} \doteq \dNorm(\vzero, \hat{\vSigma})\)的样本，其中协方差\(\hat{\vSigma} = \frac{1}{N} \vX \vX^{\top}\)为样本的经验协方差；
+    \item 来自分布\(\hat \vx \sim \hat{q}(\vx)\)的样本，该分布紧密逼近真实分布\(p\)。
+\end{enumerate}
+问题是：哪种解释更好，以何种意义？假设你相信这些数据\(\vX\)来自特定分布\(q(\vx)\)，它可能是上述考虑的分布之一。那么我们便可用针对分布\(q(\vx)\)的最优码本对数据点编码。所需的平均编码长度（或编码率）由所谓的\textit{交叉熵}给出：
+\begin{equation}
+    \CE(p \mmid q) \doteq \Ex_{\vx \sim p}[-\log q(\vx)],
+\end{equation}
+当样本数\(N\)趋于无穷时。若我们已识别出正确分布\(p(\vx)\)，则编码率由熵\(h(p) = \Ex_{\vx \sim p}[-\log p(\vx)]\)给出。结果表明，上述编码长度\(\CE(p \mmid q)\)恒大于或等于熵\(h(\vx)\)，除非\(p = q\)。
+
+因此，给定一组采样数据\(\vX\)，为在\(p^{n}\)、\(p^{e}\)和\(\hat{q}\)中确定哪个分布更好地刻画数据，我们可以比较它们对\(\vX\)的编码率，看哪个给出最低速率。由上文可知，分布的（理论上可达）编码率与其熵密切相关。一般而言，我们有
+\begin{equation}
+    h(p^{n}) > h(p^{e}) > h(\hat{q})。
+\end{equation}
+若用与这些分布相关的码本对数据\(\vX\)编码，则\(\vX\)的编码率将因此一般地按相同顺序递减：
+\begin{equation}
+    \CE(p \mmid p^{n}) > \CE(p \mmid p^{e}) > \CE(p \mmid \hat{q})。
+\end{equation}
+
+这一观察为我们追求具有低维结构的分布\(p(\vx)\)提供了一般指导。它建议了两种可能途径：
+\begin{enumerate}[label={A\arabic*.}, leftmargin=*]
+    \item 从具有高熵的一般分布（如正态分布）出发，通过降低熵逐步将分布变换到（经验）数据分布；
+    \item 在具有显式编码方案的大量（参数或非参数）分布族中，逐步搜索给出更低编码率的更佳编码方案。
+\end{enumerate}
+概念上，途径A1与A2试图做同一件事。对于A1，我们需要确保存在这样一条可计算的变换路径。对于A2，所选分布族必须足够丰富，并能紧密逼近（或包含）真实分布。对于任一途径，我们都需要确保具有更低熵或更佳编码率的解可高效计算，并快速收敛到期望分布。\footnote{例如真实世界数据如图像和文本的分布。}我们将在本章剩余部分探讨这两种途径。
+
+\section{通过去噪实现压缩}\label{sub:compression_denoising}
+
+本节我们将描述一种\textit{自然}且\textit{计算可行}的方法，通过为我们的分布学习一个参数化编码，使得该表示具有最小熵或编码率，然后利用该编码将来自标准高斯的高熵样本变换为来自目标分布的低熵样本，从而学习分布\(p(\vx)\)，如\Cref{fig:diffusion-chapter3}所示。这构成了一种同时利用上述途径A1和A2以从分布中学习与采样的方法论。
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter3/figs/diffusion_pipeline.png}
+    \caption{说明一个迭代去噪过程，该过程从各向同性高斯分布出发，收敛到任意数据分布。}
+    \label{fig:diffusion-chapter3}
+\end{figure}
+
+\subsection{扩散与去噪过程}
+\label{sub:intro_diffusion_denoising}
+
+我们首先希望找到一种方法，将给定的高噪声样本的熵降低为来自数据分布的低熵样本。在此，我们描述一种可能的途径——众多途径之一，但或许是最自然的攻击方式。首先，我们找到一种方法\textit{逐步增加}来自数据分布的现有样本的熵。然后，我们找到该过程的\textit{近似逆}。但一般而言，增加熵的运算没有逆，因为来自原始分布的信息可能被破坏。因此我们将处理一个特殊情形，其中（1）增加熵的运算具有简单、可计算且可逆的形式；（2）我们可以获得数据分布的（参数化）编码，如上两条途径所暗示。正如我们将看到的，上述两个因素将确保我们的方法可行。
+
+\subsubsection{扩散过程}
+
+我们将以可能最简单的方式增加熵，即\textit{添加各向同性高斯噪声}。更精确地说，给定随机变量\(\vx\)，我们考虑\textit{随机过程}\((\vx_{t})_{t \in [0, T]}\)，它逐步添加噪声，即
+\begin{equation}\label{eq:additive_gaussian_noise_model}
+    \vx_{t} \doteq \vx + t\vg, \qquad \forall t \in [0, T],
+\end{equation}
+其中\(T \in [0, \infty)\)为时间范围，\(\vg \sim \dNorm(\vzero, \vI)\)独立于\(\vx\)抽取。此过程是\textit{扩散过程}的一个例子，因其随时间将概率质量扩散到整个\(\R^{D}\)，从而随时间增加熵。该直觉由\Cref{fig:ve_forward_density}图形化确认，并由以下定理严格论证。
+\begin{theorem}[简化版本\Cref{thm:diffusion_entropy_increases}]
+    假设\((\vx_{t})_{t \in [0, T]}\)遵循模型\eqref{eq:additive_gaussian_noise_model}。对任意\(t \in (0, T]\)，随机变量\(\vx_{t}\)具有概率密度\(p_{t}\)且微分熵\(h(\vx_{t}) > -\infty\)。此外，在对\(\vx\)的某些技术性条件下，
+    \begin{equation}
+        \odv*{h(\vx_{t})}{t} > 0, \qquad \forall t \in (0, T],
+    \end{equation}
+    即\(\vx_{t}\)分布的熵随时间\(t\)增加。
+\end{theorem}
+证明初等但较长，故推迟至\Cref{sub:diffusion_entropy_increases}。该结果的主要未陈述推论是\(h(\vx_{t}) > h(\vx_{s})\)对所有\(t > s \geq 0\)成立。为验证这一点，注意若\(s = 0\)且\(h(\vx) = h(\vx_{0}) = -\infty\)，则对所有\(t > 0\)有\(h(\vx_{t}) > -\infty\)，故结论成立；否则由微积分基本定理\(h(\vx_{t}) = h(\vx_{s}) + \int_{s}^{t}[\odv*{h(\vx_{u})}{u}]\odif{u} > h(\vx_{s})\)，因此两种情形下均有\(h(\vx_{t}) > h(\vx_{s})\)对所有\(t > s \geq 0\)成立。
+
+\begin{figure}
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/ve_forward_diffusion_density.png}
+    \caption{\small\textbf{扩散高斯混合\(\vx\)。}
+        从左至右，我们观察\(\vx_{t}\)的密度\(p_{t}\)随\(t\)从\(0\)增至\(10\)的演化，以及若干代表性样本（红色）。平面由概率密度\(p_{t}\)着色；高密度区域为更深的蓝色。我们观察到概率质量随\(t\)增大而变得不集中，表明熵增加。}
+    \label{fig:ve_forward_density}
+\end{figure}
+
+\begin{example}[向高斯混合添加噪声]\label{ex:gaussian_mixture}
+    本例中，我们考虑向\(K\)个高斯混合添加噪声的过程。即，选取\(K\)个均值\(\vmu_{1}, \dots, \vmu_{K} \in \R^{D}\)，\(K\)个协方差矩阵\(\vSigma_{1}, \dots, \vSigma_{K} \in \PSD(D)\)，以及概率\(\pi_{1}, \dots, \pi_{K} \in [0, 1]\)使得\(\sum_{k = 1}^{K}\pi_{k} = 1\)。则我们的数据\(\vx\)按如下方式采样。
+    \begin{itemize}
+        \item 首先，采样一个索引（或\textit{标签}）\(y \in [K]\)，使得\(y = k\)的概率为\(\pi_{k}\)。
+        \item 其次，从正态分布\(\dNorm(\vmu_{y}, \vSigma_{y})\)中采样\(\vx\)。即若\(y = k\)，则从\(\dNorm(\vmu_{k}, \vSigma_{k})\)中采样\(\vx\)的值。
+    \end{itemize}
+    于是\(\vx\)具有高斯混合模型分布
+    \begin{equation}
+        \vx \sim \sum_{k = 1}^{K}\pi_{k}\dNorm(\vmu_{k}, \vSigma_{k})。
+    \end{equation}
+    高斯混合模型之所以相关，是因为它们可以逼近许多类型的分布：特别地，给定\(\vx\)的分布，存在高斯混合模型可任意好地逼近它。为此，高斯混合模型是多模态与复杂数据分布的流行解析易处理代理。本书中，我们将广泛地使用它们作为“模型问题”来理解并开发几乎每个概念。目前，我们用高斯混合模型表示数据\(\vx\)。添加噪声后，我们看到\(\vx_{t}\)的分布也是高斯混合模型：
+    \begin{equation}
+        \vx_{t} = \vx + t\vg \sim \sum_{k =
+        1}^{K}\pi_{k}\dNorm(\vmu_{k}, \vSigma_{k} + t^{2}\vI)。
+    \end{equation}
+    为通过示例理解熵如何随时间变化，假设\(K=1\)，即\(\vx \sim \dNorm(\vmu, \vSigma)\)。由\eqref{eqn:entropy-Gaussian-multi}可知（\(\vx_{t}\)分布的）熵为
+    \begin{equation}
+        h(\vx_{t}) = \frac{D}{2}(1 + \log(2\pi)) +
+        \frac{1}{2}\logdet(\vSigma + t^{2}\vI)。
+    \end{equation}
+    于是，我们可直接计算熵的时间导数（见\Cref{app:optimization}），得到
+    \begin{equation}
+        \odv*{h(\vx_{t})}{t} = t\tr((\vSigma + t^{2}\vI)^{-1}) =
+        \sum_{i = 1}^{D}\frac{t}{\lambda_{i} + t^{2}} > 0
+    \end{equation}
+    其中\(\lambda_{i}\)是\(\vSigma\)的（非负）特征值。由于该导数为正，带噪数据分布的熵\(h(\vx_{t})\)随时间增加。
+\end{example}
+
+\subsubsection{去噪过程}
+添加噪声的逆运算称为\textit{去噪}。它是信号处理与系统理论中经典且研究充分的主题，实例包括维纳滤波与卡尔曼滤波（见\Cref{sec:analytical}）。在\Cref{ch:classic-models}中讨论的若干问题，如PCA、ICA和字典学习，都是去噪问题的具体实例。对固定的\(t\)与加性高斯噪声模型\eqref{eq:additive_gaussian_noise_model}，可将去噪问题表述为试图学习一个函数\(\bar{\vx}^{\ast}(t, \cdot)\)，使其在给定\(t\)和\(\vx_{t}\)的情况下，在期望意义下最佳逼近真实随机变量\(\vx\)：
+\begin{equation}\label{eq:denoising_loss}
+    \bar{\vx}^{\ast}(t, \cdot) \in \argmin_{\bar{\vx}(t,
+    \cdot)}\Ex\norm{\vx - \bar{\vx}(t, \vx_{t})}_{2}^{2}。
+\end{equation}
+当在所有可能的（平方可积）函数上优化\(\bar{\vx}(t, \cdot)\)时，该问题的解是所谓的\textit{贝叶斯最优去噪器}，并恰好为条件期望：
+\begin{equation}\label{eq:optimal_denoiser}
+    \bar{\vx}^{\ast}(t, \vxi) \doteq \Ex[\vx \mid \vx_{t} = \vxi]。
+\end{equation}
+
+该表达式证明了记号\(\bar{\vx}\)的合理性，它旨在计算条件期望（即条件均值或条件平均）。简言之，它试图从带噪输入中移除噪声，输出（在期望意义下且关于\(\ell^{2}\)距离）最可能的（去噪后的）原始随机变量猜测。
+
+\begin{example}[高斯混合的高斯噪声去噪]\label{example:denoising_gaussian_mixture}
+    本例中我们计算一类极其重要分布的贝叶斯最优去噪器，即\Cref{ex:gaussian_mixture}中的高斯混合模型。令\(\phi(\vx ; \vmu, \vSigma)\)表示\(\dNorm(\vmu, \vSigma)\)在\(\vx\)处的概率密度。在此记号下，\(\vx_{t}\)的密度为
+    \begin{equation}
+        p_{t}(\vx_{t}) = \sum_{k = 1}^{K}\pi_{k}\phi(\vx_{t} ;
+        \vmu_{k}, \vSigma_{k} + t^{2}\vI)。
+    \end{equation}
+
+    给定\(y\)时，变量为联合高斯：若我们写\(\vx = \vmu_{y} + \vSigma_{y}^{1/2}\vu\)，其中\((\cdot)^{1/2}\)为矩阵平方根且\(\vu \sim \dNorm(\vzero, \vI)\)独立于\(y\)（和\(\vg\)），则我们有
+    \begin{equation}
+        \mat{\vx \\ \vx_{t}} = \mat{\vmu_{y} \\ \vmu_{y}} +
+        \mat{\vSigma_{y}^{1/2} & \vzero \\ \vSigma_{y}^{1/2} &
+        t\vI}\mat{\vu \\ \vg}。
+    \end{equation}
+    这表明给定\(y\)时\(\vx\)和\(\vx_{t}\)为联合高斯，如所声称。于是我们可以写
+    \begin{equation}
+        \mat{\vx \\ \vx_{t}} \sim \dNorm\rp{\mat{\vmu_{y}
+            \\ \vmu_{y}}, \mat{\vSigma_{y} & \vSigma_{y} \\ \vSigma_{y} &
+        \vSigma_{y} + t^{2}\vI}}。
+    \end{equation}
+    于是给定\(\vx_{t}\)时\(\vx\)的条件期望（即给定\(y\)时的贝叶斯最优去噪器）众所周知（另见\Cref{exercise:conditional_gaussian}）
+    \begin{equation}
+        \Ex[\vx \mid \vx_{t}, y] = \vmu_{y} + \vSigma_{y}(\vSigma_{y}
+        + t^{2}\vI)^{-1}(\vx_{t} - \vmu_{y})。
+    \end{equation}
+    为求总体贝叶斯最优去噪器，我们使用迭代期望律，得到
+    \begin{align}
+        \bar{\vx}^{\ast}(t, \vx_{t})
+        &= \Ex[\vx \mid \vx_{t}] \\
+        &= \Ex[\Ex[\vx \mid \vx_{t}, y] \mid \vx_{t}] \\
+        &= \sum_{k = 1}^{K}\Pr[y = k \mid \vx_{t}]\Ex[\vx \mid \vx_{t}, y = k]。
+    \end{align}
+    该概率可按如下方式处理。令\(p_{t \mid y}\)为给定\(y\)值时\(\vx_{t}\)的概率密度。则
+    \begin{align}
+```
+        \Pr[y = k \mid \vx_{t}]
+        &= \frac{p_{t \mid y}(\vx_{t} \mid k)\pi_{k}}{p_{t}(\vx_{t})} \\
+        &= \frac{\pi_{k}\phi(\vx_{t} ; \vmu_{k}, \vSigma_{k}
+        + t^{2}\vI)}{\sum_{i = 1}^{K}\pi_{i}\phi(\vx_{t} ; \vmu_{i},
+        \vSigma_{i} + t^{2}\vI)}.
+    \end{align}
+    另一方面，条件期望如前所述：
+    \begin{equation}
+        \Ex[\vx \mid \vx_{t}, y = k] = \vmu_{k} +
+        \vSigma_{k}(\vSigma_{k} + t^{2}\vI)^{-1}(\vx_{t} - \vmu_{k}).
+    \end{equation}
+    因此，将所有内容整合起来，真正的贝叶斯最优去噪器为
+    \begin{align}\label{eq:gmm_bayes_optimal_denoiser}
+        \bar{\vx}^{\ast}(t, \vx_{t}) &= \sum_{k =
+        1}^{K}\Bigg\{\frac{\pi_{k}\phi(\vx_{t}
+            ;\vmu_{k}, \vSigma_{k} + t^{2}\vI)}{\sum_{i =
+                1}^{K}\pi_{i}\phi(\vx_{t}
+            ;\vmu_{i}, \vSigma_{i} + t^{2}\vI)}\\
+            &\qquad \qquad \qquad \qquad   \cdot \bp{\vmu_{k} +
+        \vSigma_{k}(\vSigma_{k} + t^{2}\vI)^{-1}(\vx_{t} - \vmu_{k})}\Bigg\}.
+    \end{align}
+    这个例子尤其重要，若干特例将在后续给予我们极大的概念洞察。现在，让我们尝试从最优去噪器的函数形式 \eqref{eq:gmm_bayes_optimal_denoiser} 中提取一些几何直观。
+
+    为了直观地理解 \eqref{eq:gmm_bayes_optimal_denoiser}，我们首先令 \(K = 1\)（即单个高斯），使得 \(\vx \sim \dNorm(\vmu, \vSigma)\)。接着对 \(\vSigma\) 进行对角化 \(\vSigma = \vV\vLambda \vV^{\top}\)。于是贝叶斯最优去噪器为
+    \begin{align}
+        \bar{\vx}^{\ast}(t, \vx_{t}) & = \vmu + \vSigma(\vSigma +
+        t^{2}\vI)^{-1}(\vx_{t} - \vmu) \\
+        & = \vmu + \vV\mat{\lambda_{1}/(\lambda_{1} + t^{2}) & & \\ &
+            \ddots & \\ & & \lambda_{D}/(\lambda_{D} +
+        t^{2})}\vV^{\top}(\vx_{t} - \vmu),\label{eq:gaussian_denoiser}
+    \end{align}
+    其中 \(\lambda_{1}, \dots, \lambda_{D}\) 为 \(\vSigma\) 的特征值。我们可以观察到该去噪器包含三个步骤：
+    \begin{itemize}
+        \item 将输入 \(\vx_{t}\) 平移 \(\vmu\)。
+        \item 在每个特征向量方向上，将（平移后的）输入 \(\vx_{t} - \vmu\) 按 \(\lambda_{i}/(\lambda_{i} + t^{2})\) 收缩。如果平移后的输入是低秩且 \(\vSigma\) 的某些特征值为零，则这些方向会立即被去噪器收缩到 \(0\)，从而保证收缩后的输出同样低秩。
+        \item 将输出再平移回 \(\vmu\)。
+    \end{itemize}
+    这就是对 \textit{单个} 高斯去噪器的几何解释。高斯混合模型的整体去噪器 \eqref{eq:gmm_bayes_optimal_denoiser} 使用了 \(K\) 个这样的去噪器，并以后验概率 \(\Pr[y = k \mid \vx_{t}]\) 对其输出进行加权。如果各高斯的均值彼此分离良好，则这些后验概率在每个均值或聚类附近非常接近 \(0\) 或 \(1\)。在此情形下，整体去噪器 \eqref{eq:gmm_bayes_optimal_denoiser} 具有与上述单个高斯去噪器相同的几何解释。
+\end{example}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/ve_forward_diffusion_denoising.png}\vspace{-0.15in}
+    \caption{\small \textbf{高斯混合模型的贝叶斯最优去噪器与得分。} 在与 \Cref{fig:ve_forward_density} 相同的设置下，我们通过绘制某些选定的 \(t\) 和 \(\vx_{t}\) 的 \(\vx_{t}\)（红色）与 \(\bar{\vx}^{\ast}(t, \vx_{t})\)（绿色）来展示贝叶斯最优去噪器 \(\bar{\vx}^{\ast}\) 的效果。根据 Tweedie 公式 \Cref{thm:tweedie}，二者之间的残差正比于所谓的（Hyv\"arinen）得分 \(\nabla_{\vx_{t}}\log p_{t}(\vx_{t})\)。我们可以看到，得分指向 \(\vx_{t}\) 分布的众数。}
+    \label{fig:ve_forward_denoising}
+\end{figure}
+
+直观上，正如我们从 \Cref{example:denoising_gaussian_mixture} 所见，贝叶斯最优去噪器 \(\bar{\vx}^{\ast}(t, \cdot)\) 应将其输入 \(\vx_{t}\) 移向 \(\vx\) 分布的众数。事实证明，我们确实可以通过证明贝叶斯最优去噪器 \textit{在 \(\vx_{t}\) 的（对数）密度上执行一次梯度上升步} 来量化这一点，而（回忆）我们将其记为 \(p_{t}\)。也就是说，跟随去噪器意味着将输入迭代移动到该（扰动）分布中概率更高的区域。对于较小的 \(t\)，扰动很小，因此我们的初始直觉几乎完全正确。该图景在 \Cref{fig:ve_forward_denoising} 中可视化，并作为 Tweedie 公式 \cite{Robbins1956AnEB} 被严格表述。
+\begin{theorem}[Tweedie 公式]\label{thm:tweedie}
+    假设 \((\vx_{t})_{t \in [0, T]}\) 服从 \eqref{eq:additive_gaussian_noise_model}。令 \(p_{t}\) 为 \(\vx_{t}\) 的密度（如前所述）。则
+    \begin{equation}\label{eq:tweedie}
+        \Ex[\vx \mid \vx_{t}] = \vx_{t} + t^{2}\nabla_{\vx_{t}} \log
+        p_{t}(\vx_{t}).
+    \end{equation}
+\end{theorem}
+\begin{proof}
+    为证明起见，假设 \(\vx\) 具有密度，\footnote{注意，该定理无需此假设亦成立，只需对证明稍作修改，使用概率测度而非密度即可。} 并记此密度为 \(p\)。令 \(p_{0 \mid t}\) 与 \(p_{t \mid 0}\) 分别为给定 \(\vx_{t}\) 时 \(\vx = \vx_{0}\) 的条件密度与给定 \(\vx\) 时 \(\vx_{t}\) 的条件密度。令 \(\phi(\vx ; \vmu, \vSigma)\) 为 \(\dNorm(\vmu, \vSigma)\) 在 \(\vx\) 处的密度，于是 \(p_{t \mid 0}(\vx_{t} \mid \vx) = \phi(\vx_{t} ; \vx, t^{2}\vI)\)。一个简单的计算给出
+    \begin{align}
+        \nabla_{\vx_{t}} \log p_{t}(\vx_{t})
+        &= \frac{\nabla_{\vx_{t}}p_{t}(\vx_{t})}{p_{t}(\vx_{t})} \\
+        &=
+        \frac{1}{p_{t}(\vx_{t})}\nabla_{\vx_{t}}\int_{\R^{D}}p(\vx)p_{t
+        \mid 0}(\vx_{t} \mid \vx)\odif{\vx} \\
+        &=
+        \frac{1}{p_{t}(\vx_{t})}\nabla_{\vx_{t}}\int_{\R^{D}}p(\vx)\phi(\vx_{t}
+        ;\vx, t^{2}\vI)\odif{\vx} \\
+        &=
+        \frac{1}{p_{t}(\vx_{t})}\int_{\R^{D}}p(\vx)[\nabla_{\vx_{t}}\phi(\vx_{t}
+        ;\vx, t^{2}\vI)]\odif{\vx} \\
+        &= \frac{1}{p_{t}(\vx_{t})}\int_{\R^{D}}p(\vx)\phi(\vx_{t} ;
+        \vx, t^{2}\vI)\bs{-\frac{\vx_{t} - \vx}{t^{2}}}\odif{\vx} \\
+        &=
+        \frac{1}{t^{2}p_{t}(\vx_{t})}\int_{\R^{D}}p(\vx)\phi(\vx_{t}
+        ; \vx, t^{2}\vI)[\vx - \vx_{t}]\odif{\vx} \\
+        &= \frac{1}{t^{2}p_{t}(\vx_{t})}\int_{\R^{D}}p(\vx)\phi(\vx_{t} ; \vx,
+        t^{2}\vI)\vx \odif{\vx} \\
+        & \quad -
+        \frac{\vx_{t}}{t^{2}p_{t}(\vx_{t})}\int_{\R^{D}}p(\vx)\phi(\vx_{t}
+        ; \vx, t^{2}\vI)\odif{\vx}\nonumber \\
+        &= \frac{1}{t^{2}p_{t}(\vx_{t})}\int_{\R^{D}}p(\vx)p_{t \mid
+        0}(\vx_{t} \mid \vx)\vx \odif{\vx} -
+        \frac{\vx_{t}}{t^{2}p_{t}(\vx_{t})}p_{t}(\vx_{t}) \\
+        &=
+        \frac{1}{t^{2}p_{t}(\vx_{t})}\int_{\R^{D}}p_{t}(\vx_{t})p_{0
+        \mid t}(\vx \mid \vx_{t})\vx \odif{\vx} -
+        \frac{\vx_{t}}{t^{2}p_{t}(\vx_{t})}p_{t}(\vx_{t}) \\
+        &= \frac{1}{t^{2}}\int_{\R^{D}}p_{0 \mid t}(\vx \mid
+        \vx_{t})\vx \odif{\vx} - \frac{\vx_{t}}{t^{2}} \\
+        &= \frac{1}{t^{2}}\Ex[\vx \mid \vx_{t}] - \frac{\vx_{t}}{t^{2}} \\
+        &= \frac{\Ex[\vx \mid \vx_{t}] - \vx_{t}}{t^{2}}.
+    \end{align}
+    对上述等式进行简单整理即可证明该定理。
+\end{proof}
+这一结果在去噪与优化之间建立了联系：贝叶斯最优去噪器在扰动数据密度 \(p_{t}\) 上执行一次梯度上升步，且步长自适应地变小（即采取更精确的步），随着对数据分布扰动的减小。量 \(\nabla_{\vx_{t}}\log p_{t}(\vx_{t})\) 被称为 \textit{（Hyv\"arinen）得分}，并频繁出现在关于去噪等的讨论中；它最初出现在 Aapo Hyv\"arinen 关于 ICA 的论文中 \cite{hyvarinen05a}。
+
+类似于在实践中当远离最优解初始化时，一步梯度下降几乎从不足以最小化目标函数，当 \(t\) 较大时，贝叶斯最优去噪器 \(\bar{\vx}^{\ast}(t, \cdot)\) 的输出几乎从不位于数据分布的高概率区域，\textit{尤其} 当数据具有低维结构时。我们在以下示例中明确说明这一点。
+\begin{example}[去噪两点混合]\label{example:denoising_twopoints}
+    令 \(x\) 在两点集 \(\{-1, +1\}\) 上均匀分布，并令 \((x_{t})_{t \in [0, T]}\) 服从 \eqref{eq:additive_gaussian_noise_model}。这正是一个退化的两点高斯混合模型，先验均为 \(\frac{1}{2}\)，均值为 \(\{-1, +1\}\)，协方差均为 \(0\)。对于固定的 \(t > 0\)，我们可以使用 \eqref{eq:gmm_bayes_optimal_denoiser} 中的贝叶斯最优去噪器计算得到（证明留作练习）
+    \begin{equation}
+        \bar{x}^{\ast}(t, x_{t}) = \frac{\phi(x_{t} ; +1, t^{2}) - \phi(x_{t}
+        ; -1, t^{2})}{\phi(x_{t} ; 1, t^{2}) + \phi(x_{t} ; -1,
+        t^{2})} = \tanh\rp{-\frac{x_{t}}{t^{2}}}.
+    \end{equation}
+    当 \(t\) 接近 \(0\) 时，对于几乎所有输入 \(\bar{x}^{\ast}(t, x_{t})\)，该量接近 \(\{-1, +1\}\)。然而，当 \(t\) 较大时，该量甚至不一定近似于 \(x\) 的原始支撑集，记住，它是 \(\{-1, +1\}\)。特别地，当 \(x_{t} \approx 0\) 时，有 \(\bar{x}^{\ast}(t, x_{t}) \approx 0\)，完全位于两个可能点之间。因此 \(\bar{x}^{\ast}\) \textit{不会输出“真实”的 \(x\)}。更严格地说，\(\bar{x}(t, x_{t})\) 的分布与 \(x\) 的分布非常不同。
+\end{example}
+
+\subsubsection{增量去噪}
+因此，如果我们想对非常嘈杂的样本 \(\vx_{T}\)（其中——回忆——\(T\) 为最大时间）进行去噪，我们不能仅使用一次去噪器。相反，我们必须多次使用去噪器，类似于梯度下降使用 \textit{递减步长}，以收敛到驻点 \(\hat{\vx}\)。也就是说，我们将使用去噪器从 \(\vx_{T}\) 到 \(\hat{\vx}_{T - \delta}\)（近似 \(\vx_{T - \delta}\)），然后从 \(\hat{\vx}_{T - \delta}\) 到 \(\hat{\vx}_{T - 2\delta}\)，依此类推，一路从 \(\hat{\vx}_{\delta}\) 到 \(\hat{\vx} = \hat{\vx}_{0}\)。每次执行去噪步时，去噪器的作用越来越像对原始（对数）密度的梯度步。
+
+更正式地，我们将 \([0, T]\) 均匀离散化为 \(L + 1\) 个时间步 \(0 = t_{0} < t_{1} < \cdots < t_{L} = T\)，即
+\begin{equation}
+    t_{\ell} = \frac{\ell}{L}T, \qquad \ell \in \{0, 1, \dots, L\}.
+\end{equation}
+然后对于每个 \(\ell \in [L] = \{1, 2, \dots, L\}\)，从 \(\ell = L\) 到 \(\ell = 1\)，我们可以运行迭代
+\begin{align}
+    \hat{\vx}_{t_{\ell - 1}}
+    &= \Ex[\vx_{t_{\ell - 1}} \mid \vx_{t_{\ell}} = \hat{\vx}_{t_{\ell}}] \\
+    &= \Ex[\vx + t_{\ell - 1}\vg \mid \vx_{t_{\ell}} = \hat{\vx}_{t_{\ell}}] \\
+    &= \Ex\rs{\vx + t_{\ell - 1}\cdot\frac{\vx_{t_{\ell}} -
+    \vx}{t_{\ell}} \given \vx_{t_{\ell}} = \hat{\vx}_{t_{\ell}}} \\
+    &= \frac{t_{\ell - 1}}{t_{\ell}}\hat{\vx}_{t_{\ell}} + \bp{1 -
+    \frac{t_{\ell - 1}}{t_{\ell}}}\Ex[\vx \mid \vx_{t_{\ell}} =
+    \hat{\vx}_{t_{\ell}}] \\
+    &= \bp{1 - \frac{1}{\ell}} \hat{\vx}_{t_{\ell}} + \frac{1}{\ell}
+    \bar{\vx}^{\ast}(t_{\ell}, \hat{\vx}_{t_{\ell}}). \label{eq:iter denoise}
+\end{align}
+
+在迭代开始时，\(\ell\) 较大，我们几乎不信任去噪器的输出，主要保留当前迭代。这很合理，因为去噪器可能具有巨大方差（参见 \Cref{example:denoising_twopoints}）。当 \(\ell\) 较小时，去噪器将“锁定”到数据分布的众数，因为去噪步基本上在真实分布的对数密度上执行梯度步，我们可以相信它不会产生不合理样本，因此去噪步主要涉及去噪器的输出。在 \(\ell = 1\) 时，我们甚至丢弃当前迭代，仅保留去噪器的输出。
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/ve_gmm_denoising.png}
+    \caption{\small\textbf{对低秩高斯混合去噪。} 每幅图表示来自真实数据分布的样本（灰色、橙色、红色）以及经历去噪过程 \eqref{eq:denoising-iteration-basic} 的样本（浅蓝色）。左上角，过程刚开始，噪声非常大。随着过程继续，噪声被进一步推向低秩数据分布的支撑。最后，在右下角，生成的样本与数据支撑完美对齐，看起来非常像从低秩高斯混合模型中抽取的样本。}
+    \label{fig:ve_gmm_denoising}
+\end{figure}
+
+我们在 \(\R^{3}\) 中可视化收敛过程，见 \Cref{fig:ve_gmm_denoising}。虽然我们稍后将发展一些关于收敛的严格结果，但现在我们给出一个迭代去噪过程应用于高斯数据分布的闭式示例。
+
+\begin{example}[单个高斯的迭代去噪]
+    \label{ex:single_gaussian_denoising}
+    为了直观地理解上述迭代去噪迭代，我们将其应用于对 \eqref{eq:additive_gaussian_noise_model} 中定义的 \(\vx_{T}\) 去噪，其中 \(\vx \sim \dNorm(\vmu, \vSigma)\)。使用 \eqref{eq:iter denoise}，我们计算
+    \begin{align}
+        \hat{\vx}_{t_{\ell - 1}} - \vmu
+        &= \bp{1 - \frac{1}{\ell}}\hat{\vx}_{t_{\ell}} +
+        \frac{1}{\ell}\bar{\vx}^{\ast}(t_{\ell}, \hat{\vx}_{t_{\ell}}) - \vmu \\
+        &= \bp{1 - \frac{1}{\ell}}(\hat{\vx}_{t_{\ell}} - \vmu) +
+        \frac{1}{\ell}(\bar{\vx}^{\ast}(t_{\ell}, \hat{\vx}_{t_{\ell}}) - \vmu).
+    \end{align}
+    然后，代入我们从 \eqref{eq:gaussian_denoiser} 得到的 \(\bar{\vx}^{\ast}\) 形式，并进行一些繁琐的矩阵代数运算，我们得到
+    \begin{equation}
+        \vx_{t_{\ell - 1}} - \vmu = \vV\mat{1 - \frac{\ell
+            T^{2}}{\lambda_{1}L^{2} + \ell^{2} T^{2}} & & \\ & \ddots &
+            \\ & & 1 - \frac{\ell T^{2}}{\lambda_{D}L^{2} +
+        \ell^{2}T^{2}}}\vV^{\top}(\vx_{t_{\ell}} - \vmu).
+    \end{equation}
+    注意，此对角矩阵中的所有元素都在 \((0, 1)\) 内。取 \(\ell^{2}\) 范数并使用一个廉价但紧的上界，有
+    \begin{equation}\label{eq:denoising_contraction_1step}
+        \norm{\vx_{t_{\ell - 1}} - \vmu}_{2} \leq \underbrace{\max_{i
+            \in [D]}\bc{1 - \frac{\ell T^{2}}{\lambda_{i}L^{2} +
+        \ell^{2}T^{2}}}}_{c_{\ell, L}} \cdot \norm{\vx_{t_{\ell}} - \vmu}_{2}.
+    \end{equation}
+    乍一看，这个不等式似乎暗示去噪迭代在概念上非常接近 \textit{收缩映射}，如幂迭代（\eqref{eq:power_iteration}），将迭代 \(\vx_{t}\) 发送到均值 \(\vmu\)，因为对于任何 \(\ell\) 和 \(L\)，\(c_{\ell, L}\) 都在 \((0, 1)\) 内。然而，这是错误的。为了看清原因，观察到通过迭代 \eqref{eq:denoising_contraction_1step}，有
+    \begin{equation}
+        \norm{\vx_{0} - \vmu}_{2} \leq \prod_{\ell = 1}^{L}c_{\ell,
+        L} \cdot \norm{\vx_{T} - \vmu}_{2}.
+    \end{equation}
+    如果每次去噪更新都具有与收缩映射类似的性质，那么 \(\prod_{\ell = 1}^{L}c_{\ell, L}\) 将随着 \(L \to \infty\) 趋于 \(0\)，迭代将极快地收敛到 \(\vmu\)，使得采样器完全无用或空洞。但实际上，去噪迭代 \textit{实际上并非收缩映射}，因为 \(c_{\ell, L}\) 随索引 \(\ell\) 和 \(L\) 变化，使得 \(\prod_{\ell =
+    1}^{L}c_{\ell, L}\) 不随 \(L \to \infty\) 趋于 \(0\)，如 \Cref{fig:not_contraction_mapping} 所示（也可以解析地计算极限）。实际上，采样器确保最终迭代在数据分布的支撑中扩散，从而实现从数据分布中实际采样，这与幂迭代的目标（例如）完全不同。
+    \begin{figure}
+        \centering
+        \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/not_contraction_mapping.png}
+        \caption{\small\textbf{来自 \Cref{ex:single_gaussian_denoising} 的去噪迭代不是收缩映射。} 绘制收缩系数乘积 \(\prod_{\ell = 1}^{L}c_{\ell, L}\) 的图，其中数据维度 \(D = 1\)，时间范围 \(T = 1\)，数据方差 \(\lambda_{1} = a\)，取不同的 \(a\) 值。如果去噪迭代（在概念上）类似于收缩映射，这些乘积将趋于 \(0\)，但实际上它们收敛到非零值。}
+        \label{fig:not_contraction_mapping}
+    \end{figure}
+\end{example}
+
+回想一下，我们希望通过构建迭代去噪过程来降低迭代的熵。虽然我们确实通过反转一个增加熵的过程以迂回的方式做到了这一点，但现在是我们付出代价并确认我们的迭代去噪过程确实降低熵的时候了。
+
+\begin{theorem}[\Cref{thm:conditioning_reduces_entropy} 的简化版本]
+    假设 \((\vx_{t})_{t \in [0, T]}\) 服从 \eqref{eq:additive_gaussian_noise_model}。则在 \(\vx\) 的某些技术条件下，对于每个 \(s < t\) 且 \(s, t \in (0, T]\)，
+    \begin{equation}
+        h(\Ex[\vx_{s} \mid \vx_{t}]) < h(\vx_{t}).
+    \end{equation}
+\end{theorem}
+该定理的完整陈述及其证明本身需要一些技术性，因此被推迟到 \Cref{sub:denoising_entropy_decreases}。
+
+\subsubsection{计算去噪器}
+我们最后讨论的是，很多时候，我们 \textit{无法计算} 任何 \(t\) 的 \(\bar{\vx}^{\ast}(t, \cdot)\)，因为我们没有分布 \(p_{t}\)。但我们可以尝试 \textit{从数据中学习一个}。回想一下，去噪器 \(\bar{\vx}^{\ast}\) 在 \eqref{eq:denoising_loss} 中被定义为最小化均方误差 \(\Ex\norm{\bar{\vx}(t, \vx_{t}) -
+\vx}_{2}^{2}\)。我们可以将此均方误差作为损失或目标函数来学习去噪器。例如，我们可以用神经网络参数化 \(\bar{\vx}(t, \cdot)\)，将其写为 \(\bar{\vx}_{\theta}(t, \cdot)\)，并在参数空间 \(\Theta\) 上优化损失：
+\begin{equation}
+    \min_{\theta \in \Theta}\Ex\norm{\bar{\vx}_{\theta}(t, \vx_{t}) -
+    \vx}_{2}^{2}.
+\end{equation}
+通过梯度下降或类似算法实现此优化问题的解，将为我们提供一个 \(\bar{\vx}_{\theta^{\ast}}(t, \cdot)\)，它是 \(\bar{\vx}^{\ast}(t, \cdot)\) 的良好近似（至少如果训练成功），我们将用它作为我们的去噪器。
+
+这个神经网络 \(\bar{\vx}_{\theta^{\ast}}(t, \cdot)\) 的合适架构是什么？为了回答这个问题，我们首先尝试理解数据 \(\vx\) 为 \textit{低秩} 的情况，即具有低秩支撑。表示低秩数据的最规范方式是通过 \textit{低秩高斯}，因此我们首先假设 \(\vx\) 近似地来自低秩高斯：
+\begin{equation}\label{eq:x_gaussian_distribution}
+    \vx \sim \dNorm(\vzero, \vU\vU^{\top}),
+\end{equation}
+其中 \(\vU \in \O(D, P)\) 是一个高正交矩阵，\(P \leq D\)（为方便记法使用零均值）。在 \eqref{eq:x_gaussian_distribution} 下的最优去噪器为（来自 \Cref{example:denoising_gaussian_mixture}）：
+\begin{equation}\label{eq:optimal denoiser}
+    \bar{\vx}^{\ast}(t, \vx_{t}) = \vU\vU^{\top}(\vU\vU^{\top} +
+    t^{2}\vI)^{-1}\vx_{t}.
+\end{equation}
+矩阵 \(\vU\vU^{\top} + t^{2}\vI\) 是全秩矩阵 \(t^{2}\vI\) 的低秩扰动，因此可以通过 \textit{Sherman-Morrison-Woodbury 恒等式} 简化，即对于矩阵 \(\vA, \vC, \vU, \vV\) 使得 \(\vA\) 和 \(\vC\) 可逆，
+\begin{equation}\label{eq:sherman_morrison_woodbury}
+    (\vA + \vU\vC\vV)^{-1} = \vA^{-1} - \vA^{-1}\vU(\vC^{-1} +
+    \vV\vA^{-1}\vU)^{-1}\vV\vA^{-1}.
+\end{equation}
+我们在 \Cref{exercise:sherman_morrison_woodbury_identity} 中证明此恒等式。现在我们将此恒等式应用于 \(\vA = t^{2}\vI\)，\(\vU = \vU\)，\(\vV = \vU^{\top}\)，和 \(\vC = \vI\)，得到
+\begin{align}
+    (\vU\vU^{\top} + t^{2}\vI)^{-1}
+    &= \frac{1}{t^{2}}\vI - \frac{1}{t^{4}}\vU\bp{\vI +
+    \frac{1}{t^{2}}\vU^{\top}\vU}^{-1}\vU^{\top} \\
+    &= \frac{1}{t^{2}}\vI - \frac{1}{t^{4}\bp{1 +
+    \frac{1}{t^{2}}}}\vU\vU^{\top} \\
+    &= \frac{1}{t^{2}}\bp{\vI - \frac{1}{1 +
+    t^{2}}\vU\vU^{\top}}.\label{eq:gaussian_lowrank_inverse_perturbation_simplified}
+\end{align}
+这意味着
+\begin{align}
+    \vU\vU^{\top}(\vU\vU^{\top} + t^{2}\vI)^{-1}
+    &= \frac{1}{t^{2}}\vU\vU^{\top}\bp{\vI - \frac{1}{1 +
+    t^{2}}\vU\vU^{\top}} \\
+    &= \frac{1}{t^{2}}\bp{1 - \frac{1}{1 + t^{2}}}\vU\vU^{\top} \\
+    &= \frac{1}{1 +
+    t^{2}}\vU\vU^{\top}.\label{eq:gaussian_lowrank_denoiser_simplified}
+\end{align}
+我们的最优去噪器是对支撑我们数据分布的低秩子空间的（重缩放）线性投影。这本质上与 \Cref{ch:classic-models} 中的概率 PCA 相同（参见 \Cref{subsec:probabilistic PCA}）。我们可以通过考虑一类子空间参数化去噪器来形式化这种直觉：
+\begin{equation}\label{eq:optimal nn}
+    \bar{\vx}_{\vV}(t, \vx_{t}) = \frac{1}{1 + t^{2}}\vV\vV^{\top}\vx_{t},
+\end{equation}
+并证明去噪问题 \(\min_{\vV \in \O(D,
+    P)}\Ex\norm{\bar{\vx}_{\vV}(t, \vx_{t}) -
+\vx}_{2}^{2}\) 获得与概率 PCA（\Cref{subsec:probabilistic PCA}）相同的解。确实，将我们的子空间去噪器代入训练损失 \eqref{eq:denoising_loss}，我们得到
+\begin{equation}
+    \min_{\vV \in \O(D, P)}\Ex\norm{\bar{\vx}_{\vV}(t,
+    \vx_{t}) - \vx}_{2}^{2} = \Ex\norm*{\frac{1}{1 +
+    t^{2}}\vV\vV^{\top}(\vx + t\vg) - \vx}_{2}^{2},
+\end{equation}
+其中等式由 \eqref{eq:additive_gaussian_noise_model} 得到。在 \(\vx\) 条件下（从而对 \(\vg\) 积分），我们计算
+\begin{align}
+    & \Ex_{\vg}\norm*{\frac{1}{1 + t^{2}}\vV\vV^{\top}(\vx + t\vg) -
+    \vx}_{2}^{2} \\
+    &= \norm*{\frac{1}{1 + t^{2}}\vV\vV^{\top}\vx - \vx}_{2}^{2} -
+    \frac{t}{1+t^2}\Ex_{\vg} \ip*{\vx - \frac{1}{1 +
+    t^{2}}\vV\vV^{\top}\vx}{\vV\vV^{\top}\vg} \\
+    &\quad + \frac{t^2}{(1+t^2)^2} \Ex_{\vg}\norm*{\vV\vV^{\top} \vg}_{2}^{2} \\
+    &= \norm*{\frac{1}{1 + t^{2}}\vV\vV^{\top}\vx - \vx}_{2}^{2} +
+    \frac{t^2P}{(1+t^2)^2}
+\end{align}
+其中第二个等式由 \(\vg \sim \dNorm(\vzero,
+\vI)\) 以及 \(\vV \in \O(D, P)\) 使得 \(
+    \Ex_{\vg}\norm{\vV\vV^\top
+    \vg}_{2}^{2} =
+\Ex_{\vg}\norm{\vV^\top \vg}_{2}^{2} = P\) 得到。因此，去噪问题等价于
+\begin{align}
+    \min_{\vV \in \O(D, P)} & \Bigg\{\Ex \norm*{\frac{1}{1 +
+        t^{2}}\vV\vV^{\top}\vx - \vx}_{2}^{2} \\
+        & \qquad = \Ex\norm{\vx}_{2}^{2} + \bp{\frac{1}{(1 +
+            t^{2})^{2}} - \frac{2}{1 +
+    t^{2}}}\Ex\norm{\vV^{\top}\vx}_{2}^{2}\Bigg\},
+\end{align}
+这又等价于问题
+\begin{equation}\label{eq:PCA}
+    \max_{\vV \in \O(D, P)}\Ex\norm{\vV^{\top}\vx}_{2}^{2}
+\end{equation}
+在 \Cref{sub:pca} 中已证明其等价于问题
+\begin{equation}
+    \min_{\vV \in \O(D, P)}\Ex\norm{\vx - \vV\vV^{\top}\vx}_{2}^{2},
+\end{equation}
+即概率 PCA 公式 \eqref{eq:PPCA}。
+
+因此，如果我们假设数据来自低秩高斯，我们的去噪算法本质上将由许多 PCA 迭代组成，依次应用于逐渐不那么嘈杂的数据。虽然这种方法听起来非常简单，但当应用于实际数据时，它实际上可以产生复杂且相对强大的去噪行为，如 PCANet \parencite{chan2015pcanet} 所示。然而，为了获得一个可能适用于复杂和多模态数据分布的更通用的去噪算子，我们将考虑一个更广泛的数据分布类别：无处不在的 \textit{低秩高斯混合模型} 类别，其去噪器我们在 \Cref{ex:gaussian_mixture} 和 \Cref{example:denoising_gaussian_mixture} 中计算过。在去噪的背景下，由于高斯混合模型可以任意好地逼近非常广泛的分布类别，在实践中，在高斯混合模型的去噪器类别中优化，有可能为我们提供接近真实数据分布最优去噪器的东西。
+
+形式上，我们现在假设 \(\vx\) 来自低秩高斯混合模型 \(\frac{1}{K}\sum_{k = 1}^{K}\dNorm(\vzero,
+\vU_{k}\vU_{k}^{\top})\)，其中 \(\vU_{k} \in \O(D, P)\) 是高正交矩阵，其列张成支持 \(K\) 个低秩高斯分量之一的 \(P\) 维子空间。我们写
+\begin{equation}\label{eq:MoG1}
+    \vx \sim \frac{1}{K}\sum_{k = 1}^{K}\dNorm(\vzero, \vU_{k}\vU_{k}^{\top}).
+\end{equation}
+然后在 \eqref{eq:additive_gaussian_noise_model} 下的最优去噪器为（来自
+\Cref{example:denoising_gaussian_mixture})
+\begin{align}
+    \bar{\vx}^{\ast}(t, \vx_{t})
+    &= \sum_{k = 1}^{K}\Bigg\{\frac{\phi(\vx_{t} ; \vzero,
+        \vU_{k}\vU_{k}^{\top} + t^{2}\vI)}{\sum_{i = 1}^{K}\phi(\vx_{t} ;
+                \vzero, \vU_{i}\vU_{i}^{\top} +
+        t^{2}\vI)} \\
+        &\qquad \qquad \qquad \qquad
+        \cdot\bp{\vU_{k}\vU_{k}^{\top}(\vU_{k}\vU_{k}^{\top} +
+    t^{2}\vI)^{-1}\vx_{t}}\Bigg\}.
+\end{align}
+应用与\eqref{eq:gaussian_lowrank_inverse_perturbation_simplified}中相同的Sherman-Morrison-Woodbury恒等式，我们得到
+\begin{equation}
+    (\vU_{k}\vU_{k}^{\top} + t^{2}\vI)^{-1} = \frac{1}{t^{2}}\bp{\vI
+    - \frac{1}{1 + t^{2}}\vU_{k}\vU_{k}^{\top}}.
+\end{equation}
+然后我们可以如下计算后验概率。注意，由于\(\vU_{k}\)都是正交的，\(\det(\vU_{k}\vU_{k}^{\top}
++ t^{2}\vI)\)对每个\(k\)都相同。因此
+\begin{align}
+    &\frac{\phi(\vx_{t} ; \vzero, \vU_{k}\vU_{k}^{\top} + t^{2}\vI)}{\sum_{i
+    = 1}^{K}\phi(\vx_{t} ; \vzero, \vU_{i}\vU_{i}^{\top} + t^{2}\vI)} \\
+    &= \frac{\exp\rp{-\frac{1}{2}\vx_{t}^{\top}(\vU_{k}\vU_{k}^{\top}
+    + t^{2}\vI)^{-1}\vx_{t}}}{\sum_{i =
+        1}^{K}\exp\rp{-\frac{1}{2}\vx_{t}^{\top}(\vU_{i}\vU_{i}^{\top} +
+    t^{2}\vI)^{-1}\vx_{t}}} \\
+    &= \frac{\exp\rp{-\frac{1}{2t^{2}}\vx_{t}^{\top}\bp{\vI -
+    \frac{1}{1 + t^{2}}\vU_{k}\vU_{k}^{\top}}\vx_{t}}}{\sum_{i =
+        1}^{K}\exp\rp{-\frac{1}{2t^{2}}\vx_{t}^{\top}\bp{\vI - \frac{1}{1
+    + t^{2}}\vU_{i}\vU_{i}^{\top}}\vx_{t}}} \\
+    &= \frac{\exp\rp{-\frac{1}{2t^{2}}\norm{\vx_{t}}_{2}^{2} +
+            \frac{1}{2t^{2}(1 +
+    t^{2})}\norm{\vU_{k}^{\top}\vx_{t}}_{2}^{2}}}{\sum_{i =
+        1}^{K}\exp\rp{-\frac{1}{2t^{2}}\norm{\vx_{t}}_{2}^{2} +
+    \frac{1}{2t^{2}(1 + t^{2})}\norm{\vU_{i}^{\top}\vx_{t}}_{2}^{2}}} \\
+    &=
+    \frac{\exp\rp{-\frac{1}{2t^{2}}\norm{\vx_{t}}_{2}^{2}}\exp\rp{\frac{1}{2t^{2}(1
+                    +
+    t^{2})}\norm{\vU_{k}^{\top}\vx_{t}}_{2}^{2}}}{\exp\rp{-\frac{1}{2t^{2}}\norm{\vx_{t}}_{2}^{2}}\sum_{i
+        = 1}^{K}\exp\rp{\frac{1}{2t^{2}(1 +
+    t^{2})}\norm{\vU_{i}^{\top}\vx_{t}}_{2}^{2}}} \\
+    &= \frac{\exp\rp{\frac{1}{2t^{2}(1 +
+    t^{2})}\norm{\vU_{k}^{\top}\vx_{t}}_{2}^{2}}}{\sum_{i =
+        1}^{K}\exp\rp{\frac{1}{2t^{2}(1 +
+    t^{2})}\norm{\vU_{i}^{\top}\vx_{t}}_{2}^{2}}}.
+\end{align}
+这是一个softmax操作，其权重由\(\vx_{t}\)在每个子空间上的投影\(\norm{\vU_{i}^{\top}\vx_{t}}_{2}\)（由温度\(2t^{2}(1 + t^{2})\)调节）决定。同时，分量去噪器可以写成与\eqref{eq:gaussian_lowrank_denoiser_simplified}相同的形式，得到
+\begin{equation}
+    \vU_{k}\vU_{k}^{\top}(\vU_{k}\vU_{k}^{\top} +
+    t^{2}\vI)^{-1}\vx_{t} = \frac{1}{1 + t^{2}}\vU_{k}\vU_{k}^{\top}\vx_{t}.
+\end{equation}
+将这些结果结合起来，我们得到
+\begin{equation}\label{eq:gmm_lowrank_denoiser}
+    \bar{\vx}^{\ast}(t, \vx_{t}) = \frac{1}{1 + t^{2}}\sum_{k =
+    1}^{K}\frac{\exp\rp{\frac{1}{2t^{2}(1 +
+    t^{2})}\norm{\vU_{k}^{\top}\vx_{t}}_{2}^{2}}}{\sum_{i =
+        1}^{K}\exp\rp{\frac{1}{2t^{2}(1 +
+    t^{2})}\norm{\vU_{i}^{\top}\vx_{t}}_{2}^{2}}}\vU_{k}\vU_{k}^{\top}\vx_{t},
+\end{equation}
+即，将\(\vx_{t}\)投影到\(K\)个子空间上，并通过\(\vx_{t}\)的二次函数的softmax操作加权。这种函数形式类似于transformer架构中的\textit{注意力机制}！正如我们将在\Cref{ch:deep-networks}中看到的，这绝非巧合；去噪与有损压缩之间的深层联系（将在\Cref{sec:lossy_compression}中介绍）使得transformer去噪器在实践中如此有效。因此，我们的高斯混合模型理论为使用类transformer神经网络进行去噪提供了动机。
+
+总体而言，学习到的去噪器架构对应于给定数据的一个（隐式参数化）编码方案，因为它可以用于去噪/投影到数据分布上。训练去噪器等同于寻找更好的编码方案，这在一定程度上满足了\Cref{sub:min_entropy}末尾的一个期望（即，通过寻找具有更好编码率的方案来逼近分布）。接下来，我们将讨论如何实现另一个期望。
+
+\subsection{通过迭代去噪采样分布}\label{sub:sampling_denoising}
+
+回想在\Cref{sub:min_entropy}的末尾，我们讨论了两种追求具有低维结构分布的方法。第一种方法（A1）是从一个正态分布开始，比如高熵分布，并逐渐降低其熵，直到达到数据分布。我们将此过程称为\textit{采样}，因为我们正在生成新样本。现在是我们用已构建的工具包讨论如何实现这一点的时候了。
+
+我们知道如何将非常嘈杂的样本\(\vx_{T}\)去噪，以获得与目标随机变量\(\vx\)分布相似的近似\(\hat{\vx}\)。但该方法指出，为了采样，我们希望从一个\textit{不受}\(\vx\)分布影响的模板分布开始，并使用去噪器将迭代引导向\(\vx\)的分布。我们该如何做到这一点？一种方法如下：
+\begin{equation}\label{eq:ve_converge_to_large_gaussian}
+    \frac{\vx_{T}}{T} = \frac{\vx + T\vg}{T} = \frac{\vx}{T} + \vg
+    \xrightarrow{T\to +\infty} \vg \sim \dNorm(\vzero, \vI).
+\end{equation}
+因此，\(\vx_{T} \approx \dNorm(\vzero, T^{2}\vI)\)。这种近似对几乎所有实际分布都相当好，并在\Cref{fig:xT_vs_noise}中可视化。
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\textwidth]{\toplevelprefix/chapters/chapter3/figs/xT_vs_noise.png}
+    \caption{\small\textbf{可视化\(\vx_{T}\)与\(\dNorm(\vzero, T^{2}\vI)\)。} \textit{左：}高斯混合模型数据\(\vx\)的图。 \textit{右：}\(\vx\)以及\(\vx_{T}\)和\(\dNorm(\vzero, T^{2}\vI)\)的独立样本的图，其中\(T = 10\)。在右图中，\(\vx\)与左图颜色相同：然而，\(\vx_{T}\)和\(\dNorm(\vzero, T^{2}\vI)\)的样本平均而言比\(\vx\)的样本大得多，因此由于缩放而显得小得多。尽管有这种大幅放大，我们仍清楚地观察到\(\vx_{T}\)和\(\dNorm(\vzero, T^{2}\vI)\)分布的相似性。}
+    \label{fig:xT_vs_noise}
+\end{figure}
+
+因此，将\([0, T]\)离散化为\(0 = t_{0} < t_{1} < \cdots < t_{L}
+= T\)，使用\(t_{\ell} = T\ell / L\)（如前一节），从纯噪声中采样的一种可能方式是：
+\begin{itemize}
+    \item 采样\(\hat{\vx}_{T} \sim \dNorm(\vzero, T^{2}\vI)\)
+        （与所有其他内容独立）
+    \item 运行如\Cref{sub:intro_diffusion_denoising}中的去噪迭代，即，
+        \begin{equation}\label{eq:denoising-iteration-basic}
+            \hat{\vx}_{t_{\ell - 1}} = \bp{1 -
+            \frac{1}{\ell}}\cdot\hat{\vx}_{t_{\ell}} +
+            \frac{1}{\ell}\cdot\bar{\vx}^{\ast}(t_{\ell}, \hat{\vx}_{t_{\ell}}).
+        \end{equation}
+    \item 输出\(\hat{\vx} = \hat{\vx}_{0}\)。
+\end{itemize}
+这概念上就是\textit{扩散模型}的全部内容，它们根据第一个期望将噪声转换为数据样本。然而，在实际资源约束下，我们还需要几步才能获得能够真正从真实数据分布（如图像）中采样的模型。接下来，我们将介绍并推动这些步骤。
+
+\paragraph{步骤1：不同的离散化。}我们采取的第一步由以下观点推动：\textit{我们不需要在较大的\(t\)处花费如此多的去噪迭代}。如果我们查看\Cref{fig:ve_gmm_denoising}，我们观察到采样过程500次迭代中的前200或300次迭代只是将噪声整体收缩到数据分布，然后剩余迭代将样本推向子空间。给定固定迭代次数\(L\)，这表明我们应该在\(t = 0\)附近比\(t = T\)附近花费更多时间步\(t_{\ell}\)。因此，在采样（和训练）期间，我们可以使用\([0, T]\)的另一种离散化\(0 \leq
+t_{0} < t_{1} < \cdots < t_{L} \leq T\)，例如\textit{指数离散化}：
+\begin{equation}\label{eq:denoising_exponential_discretization}
+    t_{\ell} = C_{1}(e^{C_{2}\ell} - 1), \qquad \forall \ell \in \{0,
+    1, \dots, L\}
+\end{equation}
+其中\(C_{1}, C_{2} > 0\)是可以为实践中最佳性能调整的常数；理论分析通常也会指定此类最佳常数。然后去噪/采样迭代变为
+\begin{equation}\label{eq:denoising_iteration}
+    \hat{\vx}_{t_{\ell - 1}} \doteq \frac{t_{\ell -
+    1}}{t_{\ell}}\hat{\vx}_{t_{\ell}} + \bp{1 - \frac{t_{\ell -
+    1}}{t_{\ell}}}\bar{\vx}^{\ast}(t_{\ell}, \hat{\vx}_{t_{\ell}}),
+\end{equation}
+再次，\(\hat{\vx}_{t_{L}} \sim \dNorm(\vzero, t_{L}^{2}\vI)\)。
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/vp_gmm_denoising.png}
+    \caption{\small\textbf{使用VP扩散过程对高斯混合模型进行去噪。}我们使用与\Cref{fig:ve_gmm_denoising}相同的图形设置和数据分布。注意，与\Cref{fig:ve_gmm_denoising}相比，噪声分布更集中在原点附近。}
+    \label{fig:vp_gmm_denoising}
+\end{figure}
+
+\paragraph{步骤2：不同的噪声模型。}第二步是考虑与\eqref{eq:additive_gaussian_noise_model}略有不同的模型。这样做的基本动机如下。在实践中，噪声分布\(\dNorm(\vzero, t_{L}^{2}\vI)\)在高维中越来越成为真实协方差的较差估计，即\eqref{eq:ve_converge_to_large_gaussian}越来越成为一个较差的近似，特别是对于各向异性的高维数据。\(\dNorm(\vzero, t_{L}^{2}\vI)\)与\(\vx_{t_{L}}\)真实分布之间距离的增加可能导致去噪器在此类情况下表现更差。理论上，随着\(t_{L}\)增加，\(\vx_{t_{L}}\)从不收敛到任何分布，因此这种设置端到端分析困难。在这种情况下，我们的补救措施是\textit{同时添加噪声并缩小\(\vx\)的贡献，使得\(\vx_{T}\)在\(T
+\to \infty\)时收敛}。添加噪声的速率记为\(\sigma \colon [0,
+T] \to \R_{\geq 0}\)，缩小的速率记为\(\alpha
+\colon [0, T] \to \R_{\geq 0}\)，使得\(\sigma\)是\textit{递增}的，\(\alpha\)是（非严格）\textit{递减}的，且
+\begin{equation}\label{eq:gen_additive_gaussian_noise_model}
+    \vx_{t} \doteq \alpha_{t}\vx + \sigma_{t}\vg, \qquad \forall t \in [0, T].
+\end{equation}
+之前的设置有\(\alpha_{t} = 1\)和\(\sigma_{t} = t\)，这称为\textit{方差爆炸（VE）过程}。一个流行的选择，如我们最初描述的那样，减小\(\vx\)的贡献，有\(T = 1\)（因此\(t \in [0, 1]\)），\(\alpha_{t} = \sqrt{1 - t^{2}}\)和\(\sigma_{t} = t\)；这是\textit{方差保持（VP）过程}。注意，在VP过程下，\(\vx_{1} \sim \dNorm(\vzero, \vI)\)完全成立，因此我们可以直接从这个标准分布中采样并迭代去噪。因此，VP过程理论上更容易分析，经验上更稳定。\footnote{为什么要使用整个\(\alpha,
+    \sigma\)设置？正如我们将在\Cref{exercise:implement_denoising_processes}中看到的，它封装并统一了许多提出的过程，包括最近流行的所谓\textit{流匹配}过程。尽管如此，VE和VP过程仍然是经验上和理论上最受欢迎的（到目前为止），因此我们将在本节中考虑它们。}
+
+在这种更一般的设置下，Tweedie公式\eqref{eq:tweedie}变为
+\begin{equation}\label{eq:gen_tweedie}
+    \Ex[\vx \mid \vx_{t}] = \frac{1}{\alpha_{t}}\bp{\vx_{t} +
+    \sigma_{t}^{2}\nabla \log p_{t}(\vx_{t})}.
+\end{equation}
+去噪迭代\eqref{eq:denoising_iteration}变为
+\begin{equation}\label{eq:gen_denoising_iteration}
+    \hat{\vx}_{t_{\ell - 1}} = \frac{\sigma_{t_{\ell -
+    1}}}{\sigma_{t_{\ell}}}\hat{\vx}_{t_{\ell}} + \bp{\alpha_{t_{\ell
+        - 1}} - \frac{\sigma_{t_{\ell -
+    1}}}{\sigma_{t_{\ell}}}\alpha_{t_{\ell}}}\bar{\vx}^{\ast}(t_{\ell},
+    \hat{\vx}_{t_{\ell}}).
+\end{equation}
+
+\begin{example}[高斯混合模型]
+    对于高斯混合模型（见\Cref{ex:gaussian_mixture}），
+    其去噪器\eqref{eq:gmm_bayes_optimal_denoiser}变为
+    \begin{align}\label{eq:gen_gmm_bayes_optimal_denoiser}
+        \bar{\vx}^{\ast}(t, \vx_{t})
+        &= \sum_{k = 1}^{K}\Bigg\{\frac{\pi_{k}\phi(\vx_{t}
+                    ; \alpha_{t}\vmu_{k}, \alpha_{t}^{2}\vSigma_{k}
+            + \sigma_{t}^{2}\vI)}{\sum_{i = 1}^{K}\pi_{i}\phi(\vx_{t} ;
+                    \alpha_{t}\vmu_{i}, \alpha_{t}^{2}\vSigma_{i} +
+            \sigma_{t}^{2}\vI)} \\
+            &\qquad \qquad \qquad \cdot\bp{\vmu_{k} +
+                \alpha_{t}\vSigma_{k}(\alpha_{t}^{2}\vSigma_{k} +
+        \sigma_{t}^{2}\vI)^{-1}(\vx_{t} - \alpha_{t}\vmu_{k})}\Bigg\}. \nonumber
+    \end{align}
+    \Cref{fig:vp_gmm_denoising}演示了采样过程的迭代。
+\end{example}
+
+注意，去噪迭代\eqref{eq:gen_denoising_iteration}给出了一个称为DDIM（“去噪扩散隐式模型”）采样器的采样算法\cite{song2020denoising}，并且是当今扩散模型中最流行的采样算法之一。我们在\Cref{alg:iterative_denoising}中总结它。
+
+\begin{algorithm}
+    \caption{使用去噪器采样。}
+    \label{alg:iterative_denoising}
+    \begin{algorithmic}[1]
+        \Require{用于采样的有序时间步列表\(0 \leq t_{0} < \cdots
+        < t_{L} \leq T\)。}
+        \Require{去噪器\(\bar{\vx} \colon \{t_{\ell}\}_{\ell =
+        1}^{L} \times \R^{D} \to \R^{D}\)。}
+        \Require{缩放和噪声水平函数\(\alpha, \sigma
+        \colon \{t_{\ell}\}_{\ell = 0}^{L} \to \R_{\geq 0}\)。}
+        \Ensure{一个样本\(\hat{\vx}\)，近似来自\(\vx\)的分布。}
+        \Function{DDIMSampler}{$\bar{\vx}, (t_{\ell})_{\ell = 0}^{L}$}
+        \State{初始化\(\hat{\vx}_{t_{L}} \sim\)近似\(\vx_{t_{L}}\)的分布} \Comment{VP \(\implies
+        \dNorm(\vzero, \vI)\)，VE \(\implies \dNorm(\vzero, t_{L}^{2}\vI)\)。}
+        \For{\(\ell = L, L - 1, \dots, 1\)}
+        \State{计算
+            \begin{equation*}
+                \hat{\vx}_{t_{\ell - 1}} \doteq \frac{\sigma_{t_{\ell
+                - 1}}}{\sigma_{t_{\ell}}}\hat{\vx}_{t_{\ell}} +
+                \bp{\alpha_{t_{\ell - 1}} - \frac{\sigma_{t_{\ell -
+                1}}}{\sigma_{t_{\ell}}}\alpha_{t_{\ell}}}\bar{\vx}(t_{\ell},
+                \hat{\vx}_{t_{\ell}})
+            \end{equation*}
+        }
+        \EndFor
+        \State{\Return{\(\hat{\vx}_{t_{0}}\)}}
+        \EndFunction
+    \end{algorithmic}
+\end{algorithm}
+
+\paragraph{步骤3：优化训练流程。}如果我们使用\Cref{sub:intro_diffusion_denoising}规定的过程为每个时间\(t\)学习一个单独的去噪器\(\bar{\vx}(t, \cdot)\)以用于采样算法，\textit{我们将不得不学习\(L\)个单独的去噪器！}这是非常低效的——通常情况是我们必须训练\(L\)个单独的神经网络，占用\(L\)倍的训练时间和存储内存，然后永远锁定使用这些时间步进行采样。相反，我们可以\textit{训练一个单一的神经网络}在所有时间\(t\)上去噪，将连续变量\(\vx_{t}\)和\(t\)作为输入（而不是仅\(\vx_{t}\)）。从机制上讲，我们的训练损失对\(t\)取平均，即解决以下问题：
+\begin{equation}\label{eq:training loss}
+    \min_{\theta}\Ex\norm{\bar{\vx}_{\theta}(\tau,
+    \vx_{\tau}) - \vx}_{2}^{2},
+\end{equation}
+其中\(\tau \sim \dUnif([0, T])\)，即从\([0, T]\)中均匀抽取。
+与步骤1类似，我们使用更多靠近\(t = 0\)的时间步以确保更好的采样过程，我们可能希望确保去噪器在\(t = 0\)附近质量更高，从而\textit{加权损失}使得\(t\)接近\(0\)时权重更高。\footnote{在实践中，采样\(t\)的分布也可能是非均匀的，以确保（与加权方案结合）损失的蒙特卡洛估计具有小方差，大大提高训练稳定性。}
+令\(w_{t}\)为时间\(t\)的权重，加权损失将如下所示
+\begin{equation}\label{eq:parametric_denoising_loss}
+    \min_{\theta}\Ex[w_{\tau}\norm{\bar{\vx}_{\theta}(\tau,
+    \vx_{\tau}) - \vx}_{2}^{2}].
+\end{equation}
+实践中一个合理的权重选择是\(w_{t} =
+\alpha_{t}^{2}/\sigma_{t}^{2}\)。确切的原因将在下一段中介绍，但通常它用于增加对应于\(t\)接近\(0\)的损失权重，同时保持合理的数值稳定性。当然，我们无法在实践中计算期望，因此我们使用最直接的蒙特卡洛平均来估计它。这里所做的一系列更改具有几个概念和计算上的好处：我们不需要训练多个去噪器，我们可以在一组时间步上训练并使用子集（或完全不同的）进行采样，等等。完整流程在\Cref{alg:learning_denoiser}中讨论。当然，这个流程在实践中有效；我们在\Cref{sec:auto-encode-img-gen,sec:cond_gen,sec:object-generation,sec:shape-and-pose,sec:egoallo}中讨论一些结果。
+
+\begin{algorithm}
+    \begin{algorithmic}[1]
+        \Require{数据集\(\cD \subseteq \R^{D}\)。}
+        \Require{用于采样的有序时间步列表\(0 \leq t_{0} < \cdots
+        < t_{L} \leq T\)。}
+        \Require{加权函数\(w \colon \{t_{\ell}\}_{\ell =
+        1}^{L} \to \R_{\geq 0}\)。}
+        \Require{缩放和噪声水平函数\(\alpha, \sigma
+        \colon \{t_{\ell}\}_{\ell = 0}^{L} \to \R_{\geq 0}\)。}
+        \Require{参数空间\(\Theta\)和去噪器架构\(\bar{\vx}_{\theta}\)。}
+        \Require{参数的优化算法。}
+        \Require{优化迭代次数\(M\)。}
+        \Require{每次训练步骤的蒙特卡洛抽取次数\(N\)}
+        \Ensure{训练好的去噪器\(\bar{\vx}_{\theta^{\ast}}\)。}
+
+        \Function{TrainDenoiser}{$\cD, \Theta$}
+        \State{初始化\(\theta^{(1)} \in \Theta\)}
+        \For{\(m \in [M]\)}
+        \For{\(i \in [N]\)}
+        \State{\(\vx^{(m, i)} \sim \cD\)} \Comment{从数据集中抽取样本。}
+        \State{\(t^{(m, i)} \simiid \dUnif(\{t_{\ell}\}_{\ell =
+        1}^{L})\)} \Comment{采样时间步。}
+        \State{\(\alpha^{(m, i)} \doteq \alpha_{t^{(m, i)}}\)}
+        \Comment{计算均值缩放。}
+        \State{\(\sigma^{(m, i)} \doteq \sigma_{t^{(m, i)}}\)}
+        \Comment{计算噪声缩放。}
+        \State{\(w^{(m, i)} \doteq w_{t^{(m, i)}}\)} \Comment{计算
+        损失权重。}
+        \State{\(\vg^{(m, i)} \simiid \dNorm(\vzero, \vI)\)}
+        \Comment{采样噪声向量。}
+        \State{\(\vx_{t}^{(m, i)} \doteq \alpha^{(m, i)}\vx^{(m, i)}
+        + \sigma^{(m, i)}\vg^{(m, i)}\)} \Comment{计算噪声样本。}
+        \EndFor
+        \State{\(\hat{\cL}^{(m)} \doteq \displaystyle
+                \frac{1}{N}\sum_{i = 1}^{N}w^{(m, i)}\norm{\vx^{(m, i)} -
+                    \bar{\vx}_{\theta^{(m)}}(t^{(m, i)}, \vx_{t}^{(m,
+        i)})}_{2}^{2}\)} \Comment{计算损失。}
+        \State{\(\theta^{(m + 1)} \doteq
+                \texttt{OptimUpdate}^{(m)}(\theta^{(m)},
+        \nabla_{\theta^{(m)}}\hat{\cL}^{(m)})\)} \Comment{更新参数。}
+        \EndFor
+        \State{\Return{\(\bar{\vx}_{\theta^{(M + 1)}}\)}}
+        \EndFunction
+    \end{algorithmic}
+    \caption{从数据中学习去噪器。}
+    \label{alg:learning_denoiser}
+\end{algorithm}
+
+\paragraph{步骤4：更改估计目标。}注意，通常将整个去噪流程重新定向到围绕\textit{噪声预测器}，即\(\Ex[\vg \mid
+\vx_{t}]\)的估计，是很常见的。在实践中，噪声预测器更容易训练，因为它们的输出（几乎）总是与高斯随机变量大小相当，因此训练在数值上更稳定，但在实践中可能需要更大的模型，因为它们预测的是全维目标，而不是潜在低维数据\citep{li2025back}。注意，根据\eqref{eq:gen_additive_gaussian_noise_model}我们有
+\begin{equation}
+    \vx_{t} = \alpha_{t}\Ex[\vx \mid \vx_{t}] + \sigma_{t}\Ex[\vg
+    \mid \vx_{t}] \implies \Ex[\vg \mid \vx_{t}] =
+    \frac{1}{\sigma_{t}}\bp{\vx_{t} - \alpha_{t}\Ex[\vx \mid \vx_{t}]},
+\end{equation}
+因此任何\(\vx\)的预测器都可以使用上述关系转换为\(\vg\)的预测器，即，
+\begin{equation}
+    \bar{\vg}(t, \vx_{t}) = \frac{1}{\sigma_{t}}\vx_{t} -
+    \frac{\alpha_{t}}{\sigma_{t}}\bar{\vx}(t, \vx_{t}),
+\end{equation}
+反之亦然。因此，估计\(\bar{\vg}\)的好网络与估计\(\bar{\vx}\)的好网络\textit{加上残差连接}（如transformers中所见）相同。它们的损失也与去噪器相同，直到\(\alpha_{t}/\sigma_{t}\)的因子，即，
+\begin{equation}
+    \Ex[w_{\tau}\norm{\vg - \bar{\vg}(\tau,
+    \vx_{\tau})}_{2}^{2}] =
+    \Ex\rs{w_{\tau}\frac{\alpha_{\tau}^{2}}{\sigma_{\tau}^{2}}\norm{\vx
+    - \bar{\vx}(\tau, \vx_{\tau})}_{2}^{2}},
+\end{equation}
+回想\(\tau \sim \dUnif([0, T])\)。其他目标已为不同任务提出，例如\(\Ex[\vv_{t} \mid
+\vx_{t}]\)，其中\(\vv_{t} = \odv*{\vx_{t}}{t}\)（称为\(v\)-预测或速度预测），等等。这被证明等同于去噪和噪声预测，但也对扩散的推广（如流匹配）根本有用，我们将在\Cref{rem:flow_matching}中讨论。
+
+\subsubsection{去噪过程的采样误差率}
+我们对原始理想噪声/去噪过程进行了许多更改。为了确保新过程在实践中仍然有效，我们可以计算数值示例（如\Cref{fig:vp_gmm_denoising}）。为了确保它在理论上是合理的，我们可以证明采样算法的\textit{误差率界限}，表明误差率很小。我们现在将从文献中提供这样一个率，表明采样器的输出分布在所谓的\textit{总变差（TV）距离}中收敛到真实分布。TV距离定义在两个随机变量\(\vx\)和\(\vy\)之间为：\footnote{这里的上确界仅针对\textit{可测}集\(A\)，而不是所有集。与本书中所有其他测度论警告一样，出于实际目的可以忽略它。}
+\begin{equation}
+    \TV(\vx, \vy) \doteq \sup_{A \subseteq \R^{d}}\abs*{\Pr[\vx \in
+    A] - \Pr[\vy \in A]}.
+\end{equation}
+如果\(\vx\)和\(\vy\)非常接近（一致），则上确界将很小。因此，TV距离衡量随机变量的接近程度。（它确实是一个度量，如名称所示；证明是一个练习。）
+
+\begin{theorem}[\citep{li2024d}定理1，
+    简化]\label{thm:diffusion_sampler_convergence}
+    假设\(\Ex\norm{\vx}_{2} < \infty\)。如果\(\vx\)根据VP过程以指数离散化\footnote{精确定义在我们的符号中相当长，并且仅定义到各种绝对常数，因此为简洁起见我们在此省略。它在原始论文\citep{li2024d}中。}如\eqref{eq:denoising_exponential_discretization}去噪，\Cref{alg:iterative_denoising}的输出\(\hat{\vx}\)满足总变差界限
+    \begin{align}\label{eq:diffusion_sampling_error}
+        \TV(\vx, \hat{\vx})
+        &= \tilde{\cO}\Bigg(\underbrace{\frac{D}{L}}_{\textbf{离散化
+            误差}} \\
+            & \qquad \qquad + \underbrace{\sqrt{\frac{1}{L}\sum_{\ell =
+                    1}^{L}\frac{\alpha_{t_{\ell}}^{2}}{\sigma_{t_{\ell}}^{4}}\Ex\norm{\bar{\vx}^{\ast}(t_{\ell},
+                        \vx_{t_{\ell}}) - \bar{\vx}(t_{\ell},
+            \vx_{t_{\ell}})}_{2}^{2}}}_{\textbf{去噪器的平均超额误差}}\Bigg)\nonumber
+    \end{align}
+    其中\(\bar{\vx}^{\ast}\)是\(\vx\)的贝叶斯最优去噪器，\(\tilde{\cO}\)是忽略\(L\)中对数因子的大\(\cO\)符号版本。
+\end{theorem}
+非常高层次的证明技术，如前所述，是在每一步限制误差，区分误差源（离散化和去噪器误差之间），并仔细确保误差不会累积太多（甚至相互抵消）。
+
+注意，如果\(L \to \infty\)并且我们正确学习贝叶斯最优去噪器\(\bar{\vx} = \bar{\vx}^{\ast}\)（使得超额误差为\(0\)），则\Cref{alg:iterative_denoising}中的采样过程产生噪声过程的\textit{完美（分布）逆}，因为\Cref{thm:diffusion_sampler_convergence}中的误差率趋于\(0\)，\footnote{VE过程也有类似结果；由于底层随机过程的结构，证明中使用的理论工具包往往不同。}如前所述。
+
+\begin{remark}
+    如果数据是低维的，比如支持在高维空间\(\R^{D}\)的\textit{低秩子空间}上呢？如果数据分布是紧支撑的——比如如果数据被归一化到单位超立方体，这通常作为真实数据（如
+    图像——其实可以做得更好。具体而言，\cite{li2024d} 的作者还利用所谓覆盖数的渐近行为定义了\textit{近似本征维度} \(\kappa\) 的度量，其直观思想（如果不是实现细节）与下一节介绍的率失真函数极为相似。随后他们证明，只要对 \Cref{alg:iterative_denoising} 中的 DDIM 采样器做极小的修改（即略微扰动更新系数），离散化误差便从 \Cref{thm:diffusion_sampler_convergence} 中的 \(\tilde{O}(D/L)\) 降为 \(\tilde{\cO}(\kappa/L)\)。因此，使用这一修改后的算法，即使 \(D\) 达到数千乃至数百万，也无需让 \(L\) 过大，因为真实数据具有低维结构。然而，实践中我们仍使用 DDIM 采样器，故 \(L\) 应与 \(D\) 有温和的依赖关系，才能保持一致的误差率。\(L\) 的具体取值在采样计算复杂度（如运行时间或内存消耗）与学习低维结构去噪器的统计复杂度之间权衡。训练阶段与采样阶段对 \(L\) 的需求往往不同：训练时更大的 \(L\) 能更好地覆盖区间 \([0, T]\)，帮助网络学习对 \(t\) 泛化的关系；采样时更小的 \(L\) 则意味着更高效的采样。甚至可以在采样阶段自适应地选择时间步，以优化这一权衡 \cite{bao2022analytic}。
+\end{remark}
+
+\begin{remark}
+    若干其他工作将反向过程定义为利用显式差分方程（或在极限 \(L \to \infty\) 时的微分方程）沿时间索引 \(t\) 逆向移动，或利用变换 \(\vy_{t} = \vx_{T - t}\) 正向移动，使得当 \(t\) 增加时 \(\vy_{t}\) 更接近 \(\vx_{0}\)。每篇论文使用各自的记号，有时很难厘清不同论文结果之间的关系。本书力求保持一致：我们沿时间正向加噪，沿时间反向去噪。若阅读其他对时间索引表述不清的文献，或实现同样不清晰的算法，可用以下方法统一消歧：采样过程在每一步对去噪项（或等价地，对分数函数）的系数应始终为\textit{正}。
+\end{remark}
+
+\begin{remark}\label{rem:flow_matching}
+    扩散/去噪过程及其相关模型提供了一种将数据分布往返于高熵（高斯或类高斯）分布的传输方式。另一方面，将数据分布往返于任意目标分布（可以是高斯、高斯混合，甚至另一种数据分布）也可能有用。若有此需求，可使用 \textit{流匹配} 框架实现。设目标随机变量为 \(\vy\)，我们的流为
+    \begin{equation}
+        \vx_{t} = \alpha_{t}\vx + \sigma_{t}\vy, \qquad \forall t \in [0, 1].
+    \end{equation}
+    满足 \(\alpha_{0} = \sigma_{1} = 1\) 且 \(\alpha_{1} = \sigma_{0} = 0\)，从而 \(\vx_{0} = \vx\) 且 \(\vx_{1} = \vy\)。实际上，\textit{我们的策略丝毫未变}：仍可训练去噪器 \(\bar{\vx}_{\theta}\) 将 \(\vx_{t}\) 还原为 \(\vx\)（或等价地训练“噪声”预测器预测 \(\vy\)），然后应用迭代去噪算法，从 \(\vy\) 的采样出发得到 \(\vx\)。唯一缺失的是 Tweedie 公式，它通常在一般情况下不存在，无法将去噪器的分数 \(\nabla \log p_{t}\) 与去噪器本身联系起来。
+
+    实践中，受学习数据对 \((\vx, \vy)\) 之间所谓 \textit{传输映射} 的启发，研究者往往希望训练 \textit{速度预测器} \(\bar{\vv}_{\theta}\) 来预测 \(\vv_{t} = \odv*{\vx_{t}}{t} = \alpha_{t}^{\prime}\vx + \sigma_{t}^{\prime}\vy\)，而非去噪器 \(\bar{\vx}_{\theta}\)，或者说训练 \(\bar{\vv}_{\theta}\) 预测 \(\Ex[\vv_{t} \mid \vx_{t}]\)。此时，最简单的系数选择是 \(\alpha_{t} = 1 - t\) 与 \(\sigma_{t} = t\)（\(t \in [0, 1]\)），于是每个时刻的预测目标为 \(\vv_{t} = \vy - \vx\)。给定估计器 \(\bar{\vv}_{\theta}\)，标准采样算法沿场逆向积分：从 \(\vy\) 的采样出发，迭代更新如下：
+    \begin{equation}
+        \hat{\vx}_{t_{\ell - 1}} = \hat{\vx}_{t_{\ell}} -
+        \bar{\vv}_{\theta}(t_{\ell}, \hat{\vx}_{t_{\ell}}) \Delta t,
+    \end{equation}
+    其中 \(\Delta t = t_{\ell} - t_{\ell - 1}\) 为时间步长。注意，速度预测与去噪在代数上等价（见 \Cref{exercise:velocity_prediction}）。流匹配的实践应用见 \Cref{sec:auto-encode-img-gen,sec:shape-and-pose}。
+\end{remark}
+
+\begin{remark}
+    实践中，扩散通常需要多步、多次调用去噪器。于是自然要问：“能否用更少的步数和函数求值次数加速采样？”答案是肯定的，这类模型常被称为 \textit{一致性模型} 或更形象的 \textit{少步模型}。核心思想是使用一个接收两个时刻的输入 \(\bar{\vx}_{\theta}(s, t, \vx_{t})\) 并估计 \(\Ex[\vx_{s} \mid \vx_{t}]\) 的去噪器，这在某种意义上是更简单的任务；或者使用速度预测器 \(\bar{\vv}_{\theta}(s, t, \vx_{t})\) 估计平均速度 \(\Ex[(\vx_{t} - \vx_{s})/(t - s) \mid \vx_{t}]\)。此类去噪器需满足额外的一致性条件，如 \(\bar{\vx}_{\theta}(u, t, \bar{\vx}_{\theta}(s, u, \vxi)) = \bar{\vx}_{\theta}(s, t, \vxi)\)，从而引入辅助训练损失。一旦学会这样的预测器，采样过程将极为简单高效，只需几步：
+    \begin{equation}
+        \hat{\vx}_{s} = \bar{\vx}_{\theta}(s, t, \hat{\vx}_{t}) =
+        \hat{\vx}_{t} - \bar{\vv}_{\theta}(s, t, \hat{\vx}_{t})\cdot(t - s).
+    \end{equation}
+    相关表述包括流映射 \cite{boffi2025build} 与平均流 \cite{geng2025mean}。
+\end{remark}
+
+\section{记忆、泛化与编码率}
+\label{sec:diffusion_memorization}
+
+\Cref{sub:intro_diffusion_denoising} 末尾的计算似乎（粗略地）表明，实践中使用类 Transformer 网络来学习或逼近去噪器是一个好选择。这很合理，但为何不能随意使用任意神经网络（如多层感知机 MLP）并将其无限放大？为回答此问题，让我们考虑本章迄今忽略或略过的一个约束：我们只有有限数据可用于学习去噪器。具体地，考虑训练问题 \eqref{eq:parametric_denoising_loss}，但此时假设数据 \(\vx\) 来自 \(N\) 个训练样本 \(\vX = [\vx^{(1)}, \dots, \vx^{(N)}]\) 上的经验分布 \(p^{\vX}\)。由于 \(p^{\vX}\) 支撑于环境空间 \(\R^{D}\) 的一个零维子集，我们有 \(h(p^{\vX}) = -\infty\)，因此在某种意义上 \(p^{\vX}\) 是能生成观测 \(\vX\) 的最简单（即最低熵）分布。简言之，这一假设可以说对数据分布\textit{具有最小的归纳偏置}！许多关于深度学习与生成模型的流行评论会告诉你，由于这一特性，解决生成建模问题的最佳方法是将通用去噪器尽可能放大，并收获相应好处。然而，在此设定下，这一建议（可证明！）是错误的。为理解原因，请注意经验分布 \(p^{\vX}\) 实际上是零协方差高斯混合：
+\begin{equation}
+    p^{[\vx^{(1)}, \dots, \vx^{(N)}]} = \frac{1}{N}\sum_{i =
+    1}^{N}\dNorm(\vx^{(i)}, \vzero).
+\end{equation}
+因此，我们知道当 \(\vx\) 来自经验分布时，去噪问题 \eqref{eq:parametric_denoising_loss} 的（全局）最优解，可写为：
+\begin{equation}\label{eq:parametric_denoising_loss_finite_sample}
+    \min_{\theta \in \Theta}\frac{1}{N}\sum_{i =
+    1}^{N}\Ex[w_{\tau}\norm{\vx^{(i)} - \bar{\vx}_{\theta}(\tau,
+    \vx_{\tau}^{(i)})}_{2}^{2}]
+\end{equation}
+其中 \(\vx_{t}^{(i)}\) 是训练样本 \(\vx^{(i)}\) 的加噪版本。该损失在所有（平方可积）去噪器 \(\bar{\vx}\) 上的优化器即为 \Cref{example:denoising_gaussian_mixture} 中的最优高斯去噪器，即
+\begin{equation}\label{eq:memorizing_denoiser}
+    \bar{\vx}^{\star}(t, \vx_{t}) = \sum_{i =
+    1}^{N}\frac{\exp({-\|\vx_{t} -
+    \alpha_{t}\vx^{(i)}\|_{2}^{2}/(2\sigma_{t}^{2})})}{\sum_{j =
+        1}^{N}\exp({-\|\vx_{t} -
+    \alpha_{t}\vx^{(j)}\|_{2}^{2}/(2\sigma_{t}^{2})})}\vx^{(i)}.
+\end{equation}
+这是数据 \(\vx^{(i)}\) 的凸组合，且当 \(t \to 0\) 时系数变得“尖锐”（即接近 \(0\) 或 \(1\)）。特别地，对于小 \(t\)，去噪器几乎完全等于训练集中最近的样本，更新将迭代点移向最近点，使得采样结束时迭代点 \(\hat{\vx}\)（几乎）等于某训练样本 \(\vx^{(i)}\)。再次强调：\textit{若使用去噪器 \eqref{eq:memorizing_denoiser} 与良好采样器，我们的样本将重现训练数据}。采样理论保证 \Cref{thm:diffusion_sampler_convergence} 在此情境下也证实了这一点：若采样步数趋于无穷并使用给定时间步调度，与去噪器 \eqref{eq:memorizing_denoiser} 关联的扩散模型将始终从经验分布采样，从而始终重现训练样本。这一现象是生成建模中\textit{记忆}现象的尤为严格的实例。\footnote{记忆是更广泛的现象，其确切刻画取决于模型训练领域（如文本、图像、视频、音频等）。本节稍后我们将讨论更启发式的记忆度量。}
+
+由于实践中我们只有固定有限数据集可用于训练去噪器，此时我们求解的学习问题是有限样本去噪损失 \eqref{eq:parametric_denoising_loss_finite_sample}（与无限样本去噪损失 \eqref{eq:parametric_denoising_loss} 相对）。因此，\textit{若拥有任意大模型并尽可能优化，它将学会记忆并重现训练集}。换言之，这种极大规模模型并不比简单存储训练数据的数据库更有趣。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/euclidean_memorization_samples.png}
+    \caption{\small\textbf{扩散模型在 \(6,000\) 个样本上训练后生成的样本（左）及其在训练数据集中欧氏距离最近的对应点（右）。}我们观察到，生成样本与最相似训练数据几乎像素级一致。两组图像均来自 \cite{yoon2023diffusion}。}
+    \label{fig:diffusion_memorization_euclidean_samples}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/euclidean_memorization_ratio.png}
+    \caption{\small\textbf{固定模型下，记忆率随数据集规模变化：左图为 4,000 训练轮次，右图为 40,000 训练轮次且数据集更小。}左图显示，足够大的数据集永远不会被记忆（如 10,000 到 50,000 样本），而小数据集（1,000 到 5,000 样本）在足够训练后会被记忆。这意味着，随着数据集相对模型变大，训练结束时的记忆率从接近 0 迅速跃升至接近 1，暗示随着数据集规模增加，可能存在从记忆到泛化的相变。图取自 \cite{gu2023memorization}。}
+\end{figure}
+
+上述论证对能够拟合（真实）记忆去噪器的任意强大模型均成立。当然，实际中是否如此仍值得探讨：相对数据集极大的模型是否学会记忆训练数据？事实证明，这在经验上确实成立。最早的研究之一是 \cite{yoon2023diffusion}。为理解其结果，我们定义记忆率为记忆概率：
+\begin{equation}
+    \mathrm{MemRatio}(\bar{\vx}) = \Pr_{\hat{\vx} \sim
+    \mathrm{DM}(\bar{\vx})}[\hat{\vx}\ \text{被记忆}],
+\end{equation}
+其中 \(\mathrm{DM}(\bar{\vx})\) 为使用去噪器 \(\bar{\vx}\) 的扩散模型所诱导的分布，样本 \(\hat{\vx}\) 是否记忆按以下准则判定：
+\begin{equation}\label{eq:diffusion_euclidean_memorization_criterion}
+    \hat{\vx}\ \text{被记忆}\ \iff \frac{\norm{\hat{\vx} -
+    \vx_{(1)}(\hat{\vx})}_{2}}{\norm{\hat{\vx} -
+    \vx_{(2)}(\hat{\vx})}_{2}} < \frac{1}{3},
+\end{equation}
+其中 \(\vx_{(i)}(\hat{\vx})\) 为训练数据集中与 \(\hat{\vx}\) 欧氏距离第 \(i\) 近的点，常数 \(1/3\) 经验上与人类对记忆的主观感知吻合。注意，此定义与我们早先的直观记忆定义完全一致：采样点与某一训练样本的距离远小于与其他所有训练样本的距离。他们表明，当模型（以参数量计）远大于数据时，这种记忆在实践中发生；\Cref{fig:diffusion_memorization_euclidean_samples} 表明，此时生成样本几乎是训练样本的像素级复制品。稍后，\cite{gu2023memorization} 仔细研究了架构、训练时长等因素如何影响记忆，表明随着数据集相对固定模型增大，记忆率迅速从接近 0 变为接近 1，即模型很快开始始终记忆。这暗示模型相对数据变小时，可能存在记忆与泛化之间的相变。\cite{buchanan2025edge} 在由高斯混合模型生成的合成数据上研究了该相变的存在与理论机制，证明其存在并部分刻画了模型开始或停止记忆时的规模。其他理论工作如 \cite{niedoba2024towards,kamb2024analytic,george2025denoising,zhang2025generalization} 也尝试在不同设定下从模型与数据集规模角度理论刻画该相变。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.475\textwidth]{\toplevelprefix/chapters/chapter3/figs/generalizability.png}
+    \hfill
+    \includegraphics[width=0.45\textwidth]{\toplevelprefix/chapters/chapter3/figs/generalizability_loss.png}
+    \caption{\small\textbf{固定模型、数据递增时的泛化分数（左）与训练损失（右）}，来自 \cite{pmlr-v235-zhang24cn}。泛化分数定义为 \(1 - \) 被记忆样本比例，不同曲线对应不同规模的去噪器模型（UNet-64 小于 UNet-128，后者又小于 UNet-256）。图显示，随着数据集相对模型规模增大，损失显著上升且记忆停止，表明我们的理论与直觉适用于真实模型。}
+    \label{fig:diffusion_generalizability_loss}
+\end{figure}
+
+为在真实数据上经验证明记忆与泛化相变的存在，\cite{pmlr-v235-zhang24cn} 重新思考了记忆的定义，其思路如下。在自然图像的极高维空间中，点之间的欧氏距离变得极为严格 \cite{Wright-Ma-2022}：若两幅图像并非像素级匹配，则其欧氏距离将尖锐地集中于某一固定值（随图像维度缩放）。这无法捕捉某些\textit{概念}（如受版权保护的卡通角色）在新姿态下被生成的情况，使得围绕欧氏距离建立有效且实用的记忆准则非常困难。为此，\cite{pmlr-v235-zhang24cn} 使用特定函数 \(f_{\mathrm{SSCD}}\)（实为名为自监督复制检测器的预训练神经网络 \cite{pizzi2022self}）将图像映射到欧氏空间，再取归一化内积得到（余弦）相似度，从而认为余弦相似度高的图像在记忆所需的意义上概念相似。然后，\cite{pmlr-v235-zhang24cn} 定义样本 \(\hat{\vx}\) 若与任一训练点相似度大于 \(3/5\) 则为记忆，即
+\begin{equation}\label{eq:diffusion_sscd_memorization_criterion}
+    \hat{\vx}\ \text{被记忆} \iff \max_{i \in [N]}
+    \frac{f_{\mathrm{SSCD}}(\hat{\vx})^{\top}f_{\mathrm{SSCD}}(\vx^{(i)})}{\norm{f_{\mathrm{SSCD}}(\hat{\vx})}_{2}\norm{f_{\mathrm{SSCD}}(\vx^{(i)})}_{2}}
+    > \frac{3}{5}
+\end{equation}
+
+\Cref{fig:diffusion_generalizability_loss} 展示了从在不同规模训练集上训练的扩散模型中抽取大量（约 10,000）样本以估计记忆率并计算训练损失的结果。结果与上述讨论一致：当模型相对训练数据过大且训练损失过小时，记忆发生，样本重现训练数据。因此，我们的直觉在实践中成立：\textit{对于生成扩散模型，放大模型\underline{并非}全部所需！}
+
+于是问题变为：我们该使用何种去噪器？关键在于设计一种网络架构，既能良好逼近真实去噪器（如对应于 \eqref{eq:gmm_lowrank_denoiser} 的低秩分布），又不会逼近记忆去噪器 \eqref{eq:memorizing_denoiser}。已有工作探讨了这条细线，并解释了现代扩散模型为何使用基于 Transformer 和卷积的网络架构，从而能在不同机制下记忆与泛化 \citep{kamb2024analytic,niedoba2024towards,zhang2025generalization}。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.4\textwidth]{\toplevelprefix/chapters/chapter3/figs/diffusion_perturbation.png}
+    \caption{\small\textbf{将训练良好的去噪器可视化为对小时间下经验去噪器的扰动}，此时记忆去噪器表现为向训练集中最近点的投影。}
+    \label{fig:diffusion_perturbation}
+\end{figure}
+
+最后，让我们回到本章在 \Cref{sub:min_entropy} 中提出的初始前提，即寻找建模数据的最小熵分布才是学习分布的唯一途径。上述讨论已充分说明这一断言实为谬误。然而，\Cref{sub:min_entropy} 中提出的另一相关断言——寻找具有最小\textit{编码率}的分布才是学习分布的途径——可能仍然成立。暂且假设 \(\vx\) 具有密度 \(p\)，则经验分布 \(p^{\vX}\) 关于 \(p\) 的编码率（即交叉熵）为 \(\CE(p \mmid p^{\vX}) = \infty\)。显然，此编码率在任何意义下都不是最小的；若使用 \Cref{sub:min_entropy} 中讨论的逐次更佳逼近 \(p^{n}\)、\(p^{e}\) 与 \(\hat{q}\)，则有
+\begin{equation}
+    \infty = \CE(p \mmid p^{\vX}) > \CE(p \mmid p^{n}) > \CE(p \mmid
+    p^{e}) > \CE(p \mmid \hat{q}) \approx h(p).
+\end{equation}
+因此，最小化编码率似乎是学习分布的合理途径，可避免上述问题。然而，现在出现了可解性问题：如何设计算法，通过最小化编码率来学习分布，同时避免过度最小化熵带来的缺陷？
+
+一条线索是考察成功训练且不记忆的扩散模型会发生什么。将训练好的去噪器 \(\bar{\vx}_{\theta}\) 写成记忆去噪器 \(\bar{\vx}^{\ast}\) 的扰动，即
+\begin{equation}
+    \bar{\vx}_{\theta}(t, \vx_{t}) = \bar{\vx}^{\ast}(t, \vx_{t}) +
+    \vdelta_{\theta}(t, \vx_{t})
+\end{equation}
+我们可对训练良好的去噪器的作用获得直观图示，如 \Cref{fig:diffusion_perturbation} 所示。概而言之，训练好的去噪器计算记忆去噪器外加某种扰动。在很小的时间 \(t\)（甚至去噪最后一步），记忆去噪器完全指向单一训练样本（当前迭代将重现的训练样本）。所学习或去噪的分布，只是在每个点周围加上 \(\epsilon\) 球的经验分布，\footnote{更正式地说，该扰动分布的支撑位于以每个训练样本为中心、半径为 \(\epsilon\) 的球的（子）并集。此图景得到过往工作支持，如 \cite{song2025selective}。} 其中 \(\epsilon\) 是扰动幅度的上界，在 \Cref{fig:diffusion_perturbation} 中用淡橙色球示意。\footnote{在高维情况下，假设对这些扰动的更佳模型并非被球包含，而是被更具各向异性、几何自适应的形状包含 \cite{farghly2025diffusion}，但直观保持不变。} 对于越来越大的训练良好的扩散模型，扰动半径 \(\epsilon\) 趋于 0，模型学习经验分布。另一方面，若 \(\epsilon\) 足够大，使得不同点对应的球重叠或接近，则可能意味着扩散模型泛化。
+
+因此，我们成功的扩散模型可视为最小化\textit{有损编码率}，即精度为 \(\epsilon\) 的编码率（从而可忽略每个点周围的 \(\epsilon\) 球）。这种有损编码率的概念最终被证明在道义上是正确的最小化对象，并将\textit{极其}有用。我们将在下一章 \Cref{ch:lossy-compression} 及本书其余部分逐步揭示其用途。
+
+% %\yima{Qing and Druv, a new section about memorization and
+% % generalization probably should go here. It should elucidate the
+% % role of quantization error (small noise) introduced by the network
+% % capacity... denoising to death means memorizing individual samples,
+% % hence leads to the topic of next chapter. }
+
+% So far, we have discussed how to learn low-dimensional distributions
+% via denoising by optimizing the population loss \eqref{eq:training
+% loss}. However, in practice, as we only have finite training samples
+% $(\vx^{(i)})_{i=1}^N$, we would minimize an empirical surrogate of
+% \eqref{eq:training loss}, that is
+% \begin{equation}\label{eq:training loss-emp}
+%     \min_{\bm \theta} \frac{1}{N}\Ex_{t, \bm g \sim \mathcal{N}(\bm
+%     0, \bm I)}\norm{\bar{\vx}_{\bm \theta}(t, \vx^{(i)}_t) -
+% \vx^{(i)}}_{2}^{2},
+% \end{equation}
+% where $ \vx^{(i)}_t = \alpha_t \bm x^{(i)} + \sigma_t\bm g$ and $\bm
+% g \sim \mathcal{N}(\bm 0, \bm I)$ as defined in
+% \eqref{eq:gen_additive_gaussian_noise_model}.
+% Ideally, if our model $\bar{\vx}_{\bm \theta}$ has infinite model
+% capacity, then it would merely memorize the training data itself
+% $(\vx^{(i)})_{i=1}^N$ and thus learn the empirical distribution
+% \begin{align*}
+%     p_{\text{emp}}(\vx) = \sum_{i=1}^N \delta(\vx -  \vx^{(i)}).
+% \end{align*}
+% Therefore, it raises a fundamental question regarding memorization
+% vs. generalization. Specifically, \emph{how many training samples are
+%     required to learn the true data distribution $p_{\text{data}}$
+% instead of memorization?}
+
+% %sample complexity for learning the data distribution
+% % $p_{\text{data}}$. In our previous discussion, $p_{\text{data}}$
+% % could be the mixture of low-rank Gaussians.
+
+% %While an overly expressive network can reproduce the empirical
+% % distribution exactly, practical diffusion models often capture the
+% % underlying structure of the data, enabling the generation of
+% novel samples.
+
+% %Building on the discussion of denoisers that simply memorize the
+% training data,
+
+% Based on the above discussion, we now turn to a deeper investigation
+% of when diffusion models transition from memorization to
+% generalization with respect to the number of training samples $N$.
+% Hypothetically, if a deep learning model $\bar{\vx}_{\bm \theta}$ has
+% infinite model capacity, a perfectly learned neural network over
+% \eqref{eq:training loss-emp} would simply learn $p_{\text{emp}}$ and
+% memorize the training data without the ability to generate new
+% samples. On the other hand, if we want $p_{\text{emp}}$ to
+% approximate the true distribution $p_{\text{data}}$ to be
+% $\epsilon$-close, in the worst case, the number of samples needed
+% grows exponentially $O( (\frac{L}{\epsilon})^D )$ with respect to the
+% data dimension $D$,\footnote{Here, $L$ denotes the Lipschitz constant
+% of $p_{\text{data}}$.} implying that learning $p_{\text{data}}$ could
+% potentially suffer from the curse of dimensionality.
+
+% However, in practice, real-world diffusion models, when trained on a
+% finite training dataset $(\vx^{(i)})_{i=1}^N$ of natural images, can
+% creatively generate new, sensible examples that differ significantly
+% from the training data. In this section, we investigate the
+% mechanisms and principles that enable the diffusion model to
+% generalize when trained with finite samples and translate these
+% insights into practical guidance for network design and
+% training strategies.
+
+% % Despite the remarkable empirical success of diffusion models, their
+% % fundamental mechanisms are still poorly understood. In theory, the
+% % training of diffusion models is designed to learn the
+% empirical distribution
+% % \begin{align*}
+% %     p_{\text{emp}}(\vx) = \sum_{i=1}^N \delta(\vx - \vx^{(i)})
+% % \end{align*}
+% % over the training samples $\mathcal S= \{  \vx^{(i)} \}_{i=1}^N$
+% % via neural networks (i.e., a summation of delta functions
+% % $\delta(\cdot)$ of the training data points), implying that a
+% % perfectly learned neural network would simply memorize the training
+% % 数据。但在实践中，扩散模型能够创造性地生成
+% % 与训练数据显著不同的全新、合理样本。这一令人惊讶的差异提出了关于扩散模型泛化能力的重要问题。
+
+% \begin{figure}[t]
+%     \centering
+%     \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/reproducibility.jpg}
+%     \caption{\small \textbf{不同扩散模型间一致的模型可复现性。} 从相同初始噪声出发（即每行每列的噪声相同），三种不同扩散模型生成的视觉内容几乎一致。所有模型均在 CIFAR-10 数据集上训练。2a. 去噪扩散概率模型（DDPM）的结果。2b. 一致性训练（CT）的结果。2c. 基于 Vision Transformer（ViT）的架构 U-ViT 的结果。
+%     }
+%     \label{fig:vp_gmm_denoising}
+% \end{figure}
+
+% \subsubsection{模型可复现性为泛化提供洞察}
+% 近期工作 \cite{pmlr-v235-zhang24cn} 展示了不同扩散模型间一致的模型可复现性，为泛化之谜提供了深刻洞察。在这一引人入胜且普遍存在的现象中，不同扩散模型在相同噪声初始化和相同采样过程下产生惊人相似的输出。这一结果在多种扩散模型框架、架构和训练程序中均成立（见 \Cref{fig:vp_gmm_denoising}）。定量地，我们可使用以下概率度量可复现性（RP）：
+% \begin{align}
+%     \text{RP 分数} := \mathbb P\left[\mathcal
+%     M_{\text{SSCD}}(\vx_1,\vx_2)>\tau\right],
+% \end{align}
+% 其中 $\tau>0$ 为预设阈值，\footnote{在 \cite{pmlr-v235-zhang24cn} 中，作者经验性地设置较大阈值 $\tau =0.6$。} $\mathcal M_{\text{SSCD}}(\vx_1,\vx_2)$ 衡量两个扩散模型从相同初始噪声生成的 $\vx_1$ 与 $\vx_2$ 在自监督复制检测（SSCD）神经网络描述子潜在空间中的余弦相似度。强模型可复现性意味着不同扩散模型学习了相同的评分函数。然而，我们尚未回答关键问题：为何扩散模型能够泛化？为回答此问题，我们引入泛化（GL）分数，量化生成样本 $\vx$ 与训练样本 $(\vx^{(i)})_{i=1}^N$ 的差异：
+% \begin{align}
+%     \text{GL 分数} := 1- \mathbb P( \max_{i \in [N]} \mathcal
+%     M_{\text{SSCD}}(\vx,\vx^{(i)})>\tau).
+% \end{align}
+% 在相同设置下，\Cref{fig:reproducibility-transition} 描绘了不同数据量和模型容量下扩散模型的 RP 与 GL 分数，表明这些模型学习了对应两种训练机制的不同分布：
+% \begin{itemize}
+%     \item \textbf{记忆机制：} 当模型容量远超训练数据量时，所有扩散模型均过拟合至相同经验分布 $p_{\text{emp}}$ 并记忆训练数据，最终导致强模型可复现性但无泛化能力。
+%     \item \textbf{泛化机制：} 相反，当模型容量小于训练数据量时，扩散模型无法记忆并开始生成新样本。此时，可复现性与泛化能力共同涌现，因所有模型学习真实分布 $p_{\text{data}}$ 的评分函数而非记忆训练数据。
+% \end{itemize}
+% 此外，在固定容量下，随着训练样本数增加，扩散模型从记忆过渡到泛化。尽管开创性工作 \cite{pmlr-v235-zhang24cn} 联合使用 RP 与 GL 分数刻画此相变，近期工作 \cite{zhang2025understanding} 通过引入概率流距离（PFD）统一度量，在师生设置中精确刻画相变。
+
+% 经验上，此相变在有限样本下发生（例如 CIFAR-10 数据集的 10,000 个样本），无维度灾难。这与经验分布 $p_{\text{emp}}$ 插值真实数据分布 $p_{\text{data}}$ 的设置根本不同，后者所需样本量可随数据维度 $D$ 指数增长。
+
+% \begin{figure}[t]
+%     \centering
+%     \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter3/figs/reproducibility-transition}
+%     \caption{\small \textbf{可复现性与泛化能力的共同涌现} 在去噪扩散概率模型中，该模型在 CIFAR-10 数据集的不同数量图像上训练。
+%     }
+%     \label{fig:reproducibility-transition}
+% \end{figure}
+
+% \subsubsection{迈向泛化的数学理论}
+
+% 为解释扩散模型为何能在无维度灾难下泛化，Wang 等人 \cite{wang2024diffusion} 的最新工作指出它们通常学习低维分布而非任意分布。尽管真实图像数据集在原始像素数量和体积上高维，大量经验证据表明其具有显著更低的内在维度并位于低维流形的并集 \cite{brown2023verifying,gong2019intrinsic}。具体地，Wang 等人 \cite{wang2024diffusion} 证明泛化所需样本量与此内在维度线性相关，即便在高维环境空间中。
+
+% %扩散模型避免维度灾难因其有效学习低维分布，其中泛化所需样本量随高维空间中的内在维度线性缩放。尽管真实图像数据集在像素数量和数据体积上高维，大量经验证据表明其具有显著更低的内在维度并位于低维流形的并集 \cite{brown2023verifying,gong2019intrinsic}。
+
+% \begin{figure}[t]
+%     \begin{center}
+%         \includegraphics[width =
+%         1\linewidth]{\toplevelprefix/chapters/chapter3/figs/MoLRG_verify1.jpg}\vspace{-0.1in}
+%         \caption{\textbf{对比从高斯分布、低秩高斯混合模型及扩散模型所学分布生成的图像。} 每行展示使用反向时间 ODE 采样器从不同分布生成的图像，包括高斯分布、低秩高斯混合模型及 U-Net 所学分布。列表示从相同初始噪声生成的图像。结果展示于四个数据集：FashionMNIST（左上）、MNIST（右上）、CIFAR-10（左下）和 FFHQ（右下）。
+%         }\label{fig:MoLRG_data_model_verfication}}%\qq{我觉得我们应该移除训练数据中的最近点，第二行}
+%     \end{center}
+% \end{figure}
+
+% 由于真实世界图像分布的复杂性难以在图像数据集上严格验证我们的主张，Wang 等人 \cite{wang2024diffusion} 因此考虑简化的低秩高斯混合设置，如 \eqref{eq:MoG1} 所引入，以数学刻画泛化行为。如 \Cref{fig:MoLRG_data_model_verfication} 所示，低秩高斯混合分布捕捉了图像分布的本质低维结构。
+
+% 为简化，我们首先介绍基于单低秩高斯分布的结果，即
+% \begin{equation}
+%     \vx \sim \dNorm(\vzero, \vU^*\vU^{*\top}),
+% \end{equation}
+% 其中 $\bm U^* \in \O(D, P)$ 表示真实正交基。相应地，训练样本 $( \vx^{(i)})_{i=1}^N$ 根据
+% \begin{align}\label{eq:Ua+e}
+%     \vx^{(i)} = \bm U^* \bm a_i + \bm e_i,
+% \end{align}
+% 生成，其中 $\bm a_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm 0, \bm I)$ 为每个 $i \in [N]$ 的系数，$\bm e_i \in \R^D$ 为每个 $i \in [N]$ 的噪声。注意噪声 $\bm e_i$ 捕捉了来自现实因素的变异性——如测量误差、模型失配或理想低秩结构的偏差。
+
+% %根据 \eqref{eq:training loss}，扩散模型的经验训练损失为
+% %\begin{equation}\label{eq:loss}
+% %    \min_{\theta} \frac{1}{N}\Ex_{t, \bm g \sim \mathcal{N}(\bm 0,
+% % \bm I)}\norm{\bar{\vx}_{\theta}(t, \vx^{(i)}_t) - \vx^{(i)}}_{2}^{2},
+% %\end{equation}
+% %其中 $ \vx^{(i)}_t = \alpha_t \bm x^{(i)} + \sigma_t\bm g$ 且 $\bm
+% % g \sim \mathcal{N}(\bm 0, \bm I)$ 如 \eqref{eq:gen_additive_gaussian_noise_model} 所定义。
+% 使用 \eqref{eq:gen_additive_gaussian_noise_model} 及 \eqref{eq:optimal
+% denoiser}--\eqref{eq:gaussian_lowrank_denoiser_simplified} 的相同计算，我们知最优去噪器为
+% \begin{align}
+%     \bar{\vx}^{\ast}(t, \vx_{t}) = \frac{\alpha_t}{\alpha_t^2 +
+%     \sigma_t^2}\bm U^*\bm U^{*T}\bm x_t.
+% \end{align}
+% 相应地，我们将网络 $\bar{\vx}_{\theta}$ 参数化为
+% \begin{align}\label{eqn:network-Gaussian}
+%     \bar{\vx}_{\theta}(t, \vx^{(i)}_t) = \frac{\alpha_t}{\alpha_t^2 +
+%     \sigma_t^2}\bm U\bm U^T\bm x_t,
+% \end{align}
+% 其中 $\bm U \in \O(D, P)$ 可学习。将 \eqref{eqn:network-Gaussian} 代入 \eqref{eq:training loss-emp} 并使用 \eqref{eq:optimal nn}--\eqref{eq:PCA} 的类似论证，我们可证明问题 \eqref{eq:training loss-emp} 等价于以下形式的经典 PCA 问题：
+% \begin{align}\label{eq:em loss}
+%     \max_{\bm U \in \O(D, P)} \sum_{i=1}^N \|\bm U^T \bm x^{(i)}\|^2.
+% \end{align}
+% 此定理表明训练扩散模型等价于在训练样本上执行 PCA。注意 PCA 是学习低维子空间的经典且被广泛研究的方法，其最优解可通过奇异值分解（SVD）计算。此闭式解允许我们利用现有结果，如 Wedin 定理 \cite{wedin1972perturbation}，以促进分析。利用此等价性并使用集中不等式，我们可精确确定学习单低秩高斯所需的最小样本数如下：
+
+% \begin{figure}[t]
+%     \begin{center}
+%         \begin{subfigure}{0.43\textwidth}
+%             \includegraphics[width=1\textwidth]{\toplevelprefix/chapters/chapter3/figs//PCA.eps}
+%             \caption{\bf\footnotesize PCA}
+%         \end{subfigure}  \hfill
+%         \begin{subfigure}{0.43\textwidth}
+%             \includegraphics[width =
+%             1\linewidth]{\toplevelprefix/chapters/chapter3/figs//PCA_diffusion.eps}
+%             \caption{\bf\footnotesize 扩散模型}
+%         \end{subfigure} \vspace{-0.1in}
+%         \caption{\textbf{学习单低秩高斯分布（$K = 1$）的相变。} $x$ 轴为训练样本数，$y$ 轴为子空间维度。 darker 像素表示更低的经验成功概率。我们应用 SVD 和随机梯度下降求解问题 \eqref{eq:PCA} 和 \eqref{eq:training loss-emp}，结果分别可视于 (a) 和 (b)。}  \label{fig:phase-transition-MoG-k=1}
+%     \end{center}
+% \end{figure}
+
+% \begin{theorem}\label{thm:2}
+%     假设训练样本 $\{\bm x^{(i)}\}_{i=1}^N$ 根据 \eqref{eq:Ua+e} 生成。令 $\hat{\bm U}$ 表示问题 (\ref{eq:training loss-emp}) 的最优解。以下陈述成立：
+%     \begin{itemize}
+%     \item[i)] 若 $N \ge P$，则以至少 $1 -
+%         1/2^{N-P+1} - \exp\left(-c_2N\right) $ 的概率，任何最优解 $\hat{\bm U}$ 满足
+%         \begin{align}\label{rst1:thm 2}
+%             \left\|\hat{\bm U}\hat{\bm U}^T - \bm U^*\bm U^{*
+%             T}\right\|_F \le \frac{c_1\sqrt{\sum_{i=1}^N \|\bm
+%             e_i\|^2}}{\sqrt{N} - \sqrt{P-1}},
+%         \end{align}
+%         其中 $c_1, c_2 > 0$ 为常数。
+% \item[ii)] 若 $N < P$，则存在最优解 $\hat{\bm U}
+%     \in \O(D, P)$ 使得以至少 $1 -
+%     1/2^{P-N+1} - \exp\left(-c_2^\prime P\right)$ 的概率，
+%     \begin{align}\label{rst2:thm 2}
+%         \left\|\hat{\bm U}\hat{\bm U}^T - \bm U^*\bm U^{*
+%         T}\right\|_F \ge \alpha -
+%         \frac{c_1^\prime\sqrt{\sum_{i=1}^N \|\bm e_i\|^2}}{\sqrt{P} -
+%         \sqrt{N-1}},
+%     \end{align}
+%     其中 $\alpha := \sqrt{2\min\{P-N, D-P\}}$ 且 $c_1^\prime,
+%     c_2^\prime > 0$ 为常数。
+% \end{itemize}
+% \end{theorem}
+% 此定理展示了随着训练样本数增加，扩散模型学习底层分布从失败到成功的相变。更精确地，当训练样本数大于子空间内在维度即 $N \geq P$ 时，任何最优解 $\hat{\bm U}$ 以依赖于噪声水平的近似误差恢复底层子空间基。反之，当 $N < P$ 时，优化训练损失无法学习底层分布。正式证明请见 \citep{wang2024diffusion}。
+
+% 此外，此类洞察可推广至学习低秩高斯混合模型 \eqref{eq:MoG1}。具体地，为简化，我们考虑 \eqref{eq:gen_gmm_bayes_optimal_denoiser} 的 hard-max 对应形式来参数化神经网络 $\bar{\vx}_{\bm \theta}$ 为
+% \begin{align}\label{eq:para MoG}
+% \bar{\vx}_{\bm \theta}(\bm x_t, t)  = \dfrac{s_t}{s_t^2 + \gamma_t^2}
+% \sum_{k=1}^K \hat{w}_k(\bm \theta; \bm x_0) \bm U_k\bm U_k^T\bm x_t,
+% \end{align}
+% 其中 $\bm \theta = \{\bm U_k\}_{k=1}^K$，$\bm U = [\bm U_1,\dots,\bm
+% U_K] \in \mathcal{O}^{D \times KP }$，且 $\{ \hat{w}_k(\bm \theta;
+% \bm x_0) \}_{k=1}^K$ 设为以下 hard-max 权重：
+% \begin{align}\label{eq:wk1}
+% \hat{w}_k(\bm \theta; \bm x_0) =
+% \begin{cases}
+% 1,\ & \text{若}\ k=k_0, \\
+% 0,\ & \text{否则},
+% \end{cases}
+% \end{align}
+% 其中 $k_0 \in [K]$ 为满足 $\|\bm U_{k_0}^T\bm x_0\|
+% \ge  \|\bm U_l^T\bm x_0\|$ 对所有 $l \neq k_0 \in [K]$ 的索引。
+
+% \begin{theorem}\label{thm:3}
+% 假设问题 (\ref{eq:training loss-emp}) 中的神经网络 $\bar{\vx}_{\bm \theta}(\cdot,t)$ 对每个 $t \in [0,1]$ 参数化为 \eqref{eq:para MoG}，其中 $\hat{w}_k(\bm
+% \theta, \bm x_0)$ 对每个 $k \in [K]$ 由 \eqref{eq:wk1} 定义。则问题 (\ref{eq:training loss-emp}) 等价于以下子空间聚类问题：
+% \begin{align}\label{eq:SC}
+% \max_{\bm \theta} \frac{1}{N} \sum_{k=1}^K \sum_{ i \in C_k(\bm
+% \theta)} \|\bm U_k^T\bm x^{(i)}\|^2\qquad \mathrm{s.t.}\ \left[
+% \bm U_1, \dots, \bm U_K \right] \in \mathcal{O}^{D \times KP},
+% \end{align}
+% 其中 $C_k(\bm \theta) := \left\{ i\in [N]: \|\bm U_k^T\bm x^{(i)}\|
+% \ge \|\bm U_l^T\bm x^{(i)}\|,\ \forall l \neq k \right\}$ 对每个 $k \in [K]$。
+% \end{theorem}
+% 在此定理中，约束集 $C_k(\bm \theta)$ 确保每个数据点被分配至正确子空间——即其投影范数最大的子空间。问题 (\ref{eq:SC}) 旨在最大化数据点在其各自分配子空间上投影的平方范数之和。借助 \eqref{eq:para MoG} 的网络参数化，\Cref{thm:3} 表明优化扩散模型训练损失等价于求解子空间聚类问题 \citep{vidal2011subspace,wang2022convergence}。值得注意的是，子空间聚类是无监督学习中的基本问题，旨在识别并分组位于高维空间中低维子空间并集的数据点 \citep{vidal2011subspace,lerman2018overview}。通过在 \Cref{thm:3} 中展示训练扩散模型与子空间聚类的等价性，类似 \Cref{thm:2}，我们可证明学习底层高斯混合模型所需最小样本数依赖于每个高斯模型的内在子空间维度线性。类似 $K=1$ 情形，我们可在 \Cref{fig:phase-transition-MoG-k=2} 中展示相变以证明我们的主张。更多结果细节，我们推荐读者参考 \cite{wang2024diffusion}。
+
+% \begin{figure}[t]
+% \begin{center}
+% \begin{subfigure}{0.43\textwidth}
+%     \includegraphics[width=1\textwidth]{\toplevelprefix/chapters/chapter3/figs/SC.eps}
+%     \caption{\bf\footnotesize 子空间聚类}
+% \end{subfigure}
+% \begin{subfigure}{0.43\textwidth}
+%     \includegraphics[width =
+%     1\linewidth]{\toplevelprefix/chapters/chapter3/figs/SC_diffusion.eps}
+%     \caption{\bf\footnotesize 扩散模型}
+% \end{subfigure}
+% \caption{\textbf{学习低秩高斯混合模型（$K = 2$）的相变。} $x$ 轴为训练样本数，$y$ 轴为子空间维度。 darker 像素表示更低的经验成功概率。我们应用子空间聚类方法和随机梯度下降求解问题 \eqref{eq:SC} 和 \eqref{eq:training loss-emp}，结果分别可视于 (a) 和 (b)。}
+% \label{fig:phase-transition-MoG-k=2}
+% \end{center}
+% \end{figure}
+
+% \begin{remark}
+% 最后，我们想提及此处呈现的理论结果基于线性模型。简化的线性模型为刻画学习数据分布 $p_{\text{data}}$ 提供了正确直觉，但它们无法完全刻画记忆。为处理此问题，近期工作 \cite{zhang2025generalization} 考虑了两层 ReLU 去噪自编码器（DAE），为记忆与泛化提供了统一理解。在低秩高斯混合分布下，该工作刻画了两层 ReLU 网络训练的全局最优解，表明（i）记忆对应模型在所学权重中存储原始训练样本以进行编码和解码，而（ii）泛化产生于模型捕捉局部数据统计时。更多结果细节，我们推荐读者参考 \cite{zhang2025generalization}。
+% \end{remark}
+
+% % 根据 \eqref{eq:optimal nn}-\eqref{eq:PCA}，在参数化下寻求最优去噪器
+
+% % 为数学理解泛化行为，让我们
+% % 考虑简化的低秩高斯混合（MoLRG）分布例子：
+% % \begin{align}
+% %     \vx \sim \sum_{k=1}^K \pi_k \mathcal N(\mathbf 0, \bm
+% U_k\bm U_k^\top),
+% % \end{align}
+% % 其中 $\pi_k$ 为每个 $k$ 的混合比例且满足
+% % $\sum_{k=1}^K \pi_k = 1$ 且 $\pi_k \geq 0$，$\bm U_k$ 为第 $k$ 个分量的正交基。注意 MoLRG 数据位于线性子空间的并集，并在局部近似图像数据的低维流形。此外，MoLRG 模型适于数学分析且具有闭式评分函数，同时保留图像分布的低维特性。重要的是，MoLRG 不同于扩散模型中的高斯混合（MoG）分布；MoLRG 通常关注学习协方差矩阵，而先前对一般 MoG 的研究主要强调学习均值。
+
+% % 若我们考虑扩散模型训练的降噪自编码器（DAE）公式，则训练损失可写为
+% % \begin{align*}
+% % \min_{\bm \theta}\ \ell(\bm \theta) := \sum_{i=1}^N \int_0^1
+% % \lambda_t \mathbb E_{\bm \epsilon \sim \mathcal{N}(\bm 0, \bm I_n)}
+% % \left[\left\| \bm x_{\bm \theta}( s_t \bm x^{(i)} + \gamma_t \bm
+% % \epsilon, t) -  \bm x^{(i)} \right\|^2\right] \mathrm{d}t,
+% % \end{align*}
+% % 其中 $s_t$ 和 $\gamma_t$ 为控制添加噪声调度的预定义超参数，$\lambda_t$ 为训练损失的权重函数。若我们根据上述 MoLRG 分布的最优后验估计器形式参数化 DAE——其中子空间可学习——我们则可证明训练损失等价于规范子空间聚类问题 [8]：
+
+\section{总结与注记}
+\paragraph{关键信息。}
+本章我们指出，为追求一般低维分布，一种通用计算方法是始于一个通用分布，并通过（迭代）噪声或熵减少将其压缩至目标分布。如前一章所述，即便对于最简单的单个子空间分布，例如通过幂迭代算法计算 PCA，亦是如此。如后续章节将揭示，现代深度网络的根本作用并非拟合任意（含噪）数据分布或函数，而是实现或近似那些（有损）压缩或去噪算子！我们将在未来章节导出这些算子的精确形式及其相关深度架构。
+
+\paragraph{更多扩展与参考文献。}
+将去噪与扩散用于采样拥有丰富历史。明确关于扩散模型的首项工作可能是 \cite{Sohl-Dickstein2015}，但在此之前已有许多关于去噪作为计算与统计问题的研究。其中最相关的大约是 \cite{hyvarinen05a}，它明确使用评分函数进行去噪（以及独立成分分析）。最受欢迎的后续工作基本同时出现：\cite{ho2020denoising,song2019}。自那以后，数千篇论文基于扩散模型展开；我们将在 \Cref{ch:consistent-representations} 再次讨论此主题。
+
+上述许多工作使用不同于简单线性组合 \eqref{eq:gen_additive_gaussian_noise_model} 的随机过程。实际上，上述所有工作均强调在正向过程每一步开始时添加\textit{独立}高斯噪声的必要性。理论导向的工作实际使用布朗运动或随机微分方程来构建正向过程 \cite{song2020score}。然而，由于高斯线性组合仍为高斯，此类过程的\textit{边际分布}仍取 \eqref{eq:gen_additive_gaussian_noise_model} 的形式。我们的大部分讨论仅要求边际分布如此，因此我们过于简化的模型实际上对几乎所有情况都已足够。事实上，唯一边际分布不足的情形是我们导出 $\Ex[\vx_{s} \mid \vx_{t}]$ 关于 $\Ex[\vx \mid \vx_{t}]$ 的表达式时。不同的（加噪）过程给出不同的此类表达式，可用于采样（当然还有其他导出高效采样器的方法，如广受欢迎的 DDPM 采样器）。\eqref{eq:gen_additive_gaussian_noise_model} 中的过程是名副其实的随机过程，其“自然”去噪迭代即广受欢迎的 DDIM 算法 \cite{song2020denoising}。（即便此等价性也非平凡；我们引用 \cite{de2025distributional} 作为 justification。）
+
+除本章 \Cref{sub:sampling_denoising} 覆盖的理论工作 \citep{li2024d} 及其所构建的研究脉络外，这些研究探讨了数据具有低维结构时扩散模型的\textit{采样}效率，另有一大批工作研究数据具有低维结构时扩散模型的\textit{训练}效率。具体地，\citet{chen2023score} 和 \citep{wang2024diffusion} 刻画了当数据属于低秩高斯混合模型时去噪器的逼近与估计误差，表明准确学习分布所需训练样本量随数据的内在维度而非环境分布缩放。有大量\textit{方法论}工作试图利用数据的低维结构以在扩散模型上完成各种任务。我们在此强调三项：图像编辑 \citep{chen2024exploring}、水印 \citep{li2024shallow} 和遗忘 \citep{chen2025dual}，尽管这永远是不完全列表。
+
+\section{练习与扩展}
+
+\begin{exercise}
+    请证明 \eqref{eq:optimal_denoiser} 是问题 \eqref{eq:denoising_loss} 的最优解。
+\end{exercise}
+
+\begin{exercise}\label{exercise:conditional_gaussian}
+    考虑随机向量 $\vx \in \bR^D$ 和 $\vy \in \bR^d$，
+    使得对 $(\vx, \vy) \in \bR^{D + d}$ 联合高斯分布。这意味着
+    \begin{equation*}
+        \begin{bmatrix}
+            \vx \\
+            \vy
+        \end{bmatrix}
+        \sim
+        \cN \left(
+            \begin{bmatrix}
+                \vmu_{\vx} \\
+                \vmu_{\vy}
+            \end{bmatrix}
+            ,
+            \begin{bmatrix}
+                \vSigma_{\vx} & \vSigma_{\vx\vy} \\
+                \vSigma_{\vx\vy}^\top & \vSigma_{\vy}
+            \end{bmatrix}
+        \right),
+    \end{equation*}
+    其中均值与协方差参数如下给出
+    \begin{equation*}
+        \vmu_{\vx} = \bE[\vx],\quad \vmu_{\vy} = \bE[\vy],\quad
+        \begin{bmatrix}
+            \vSigma_{\vx} & \vSigma_{\vx\vy} \\
+            \vSigma_{\vx\vy}^\top & \vSigma_{\vy}
+        \end{bmatrix}
+        =
+        \bE\left[
+            \begin{bmatrix}
+                \vx - \bE[\vx] \\
+                \vy - \bE[\vy]
+            \end{bmatrix}
+            \begin{bmatrix}
+                \vx - \bE[\vx] \\
+                \vy - \bE[\vy]
+            \end{bmatrix}^\top
+        \right]
+    \end{equation*}
+    假设 $\vSigma_{\vy}$ 正定（因而可逆）；则
+    协方差矩阵的半正定等价于
+    Schur
+    补条件 $\vSigma_{\vx} - \vSigma_{\vx\vy}
+    \vSigma_{\vy}^{-1}
+    \vSigma_{\vx\vy}^\top \succeq \Zero$。
+
+    在本练习中，我们将证明条件分布
+    $p_{\vx \mid
+    \vy}$ 为高斯分布：即，
+    \begin{equation}\label{eq:gaussian-conditional-eqn}
+        p_{\vx \mid \vy} \sim \cN\left(
+            \vmu_{\vx} + \vSigma_{\vx\vy} \vSigma_{\vy}^{-1} (\vy
+            - \vmu_{\vy}),
+            \vSigma_{\vx} - \vSigma_{\vx\vy} \vSigma_{\vy}^{-1}
+            \vSigma_{\vx\vy}^{\top}
+        \right).
+    \end{equation}
+    证明该结果的一条直接路径是操作密度比 $p_{\vx, \vy} / p_{\vy}$。下面我们概述一个代数简洁的论证。
+
+    \begin{enumerate}
+        \item 验证如下协方差矩阵恒等式：
+            \begin{equation}\label{eq:gaussian-conditional-covariance-block}
+                \begin{bmatrix}
+                    \vSigma_{\vx} & \vSigma_{\vx\vy} \\
+                    \vSigma_{\vx\vy}^\top & \vSigma_{\vy}
+                \end{bmatrix}
+                =
+                \begin{bmatrix}
+                    \vI_D & \vSigma_{\vx\vy}\vSigma_{\vy}^{-1} \\
+                    \Zero & \vI_d
+                \end{bmatrix}
+                \begin{bmatrix}
+                    \vSigma_{\vx} - \vSigma_{\vx\vy} \vSigma_{\vy}^{-1}
+                    \vSigma_{\vx\vy}^{\top} & \Zero \\
+                    \Zero & \vSigma_{\vy}
+                \end{bmatrix}
+                \begin{bmatrix}
+                    \vI_D & \Zero\\
+                    \vSigma_{\vy}^{-1}\vSigma_{\vx\vy}^\top & \vI_d
+                \end{bmatrix}.
+            \end{equation}
+            通过对该协方差矩阵进行两轮（分块）高斯
+            消元，即可得到此恒等式。
+        \item 基于上述恒等式，证明
+            \begin{equation}\label{eq:gaussian-conditional-covariance-inverse-block}
+                \begin{bmatrix}
+                    \vSigma_{\vx} & \vSigma_{\vx\vy} \\
+                    \vSigma_{\vx\vy}^\top & \vSigma_{\vy}
+                \end{bmatrix}^{-1}
+                =
+                \vP
+                \begin{bmatrix}
+                    \left(\vSigma_{\vx} - \vSigma_{\vx\vy}
+                        \vSigma_{\vy}^{-1}
+                    \vSigma_{\vx\vy}^{\top}\right)^{-1} & \Zero \\
+                    \Zero & \vSigma_{\vy}^{-1}
+                \end{bmatrix}
+                \vP^\top,
+            \end{equation}
+            其中
+            \begin{equation}
+                \vP =
+                \begin{bmatrix}
+                    \vI_D & \Zero\\
+                    -\vSigma_{\vy}^{-1}\vSigma_{\vx\vy}^\top & \vI_d
+                \end{bmatrix},
+            \end{equation}
+            且只要相关逆矩阵存在即可。\footnote{若
+                Schur 补项不可逆，同样结果仍成立，只需将其
+                逆替换为 Moore-Penrose 伪逆。
+                特别地，条件分布
+                \eqref{eq:gaussian-conditional-eqn} 变为
+            一个退化高斯分布。}
+            并得出
+            \begin{align}
+                &
+                \begin{bmatrix}
+                    \vx-\vmu_{\vx} \\
+                    \vy-\vmu_{\vy}
+                \end{bmatrix}^{\top}
+                \begin{bmatrix}
+                    \vSigma_{\vx} & \vSigma_{\vx\vy} \\
+                    \vSigma_{\vx\vy}^\top & \vSigma_{\vy}
+                \end{bmatrix}^{-1}
+                \begin{bmatrix}
+                    \vx-\vmu_{\vx} \\
+                    \vy-\vmu_{\vy}
+                \end{bmatrix}
+                \\
+                &\qquad=
+                \begin{bmatrix}
+                    \vx - \vm \\
+                    \vy - \vmu_{\vy}
+                \end{bmatrix}^\top
+                \begin{bmatrix}
+                    \left(\vSigma_{\vx} - \vSigma_{\vx\vy}
+                        \vSigma_{\vy}^{-1}
+                    \vSigma_{\vx\vy}^{\top}\right)^{-1} & \Zero \\
+                    \Zero & \vSigma_{\vy}^{-1}
+                \end{bmatrix}
+                \begin{bmatrix}
+                    \vx - \vm \\
+                    \vy - \vmu_{\vy}
+                \end{bmatrix},
+            \end{align}
+            其中 $\vm = (\vmu_{\vx} +
+                \vSigma_{\vx\vy}\vSigma_{\vy}^{-1}(\vy
+                - \vmu_{\vy})$。
+                %(\textit{提示：为节省代数运算，注意
+                % 右侧第一
+                %个与最后一个矩阵互为
+                %转置。})
+            \item 通过计算 $p_{\vx, \vy} / p_{\vy}$，证明
+                \Cref{eq:gaussian-conditional-eqn}。（\textit{提示：
+                        利用上述
+                        恒等式，仅需极少代数即可。
+                        对于归一化
+                        常数，使用
+                        \Cref{eq:gaussian-conditional-covariance-inverse-block}
+                        类似地分解行列式。})
+
+        \end{enumerate}
+
+    \end{exercise}
+
+    \begin{exercise}\label{exercise:sherman_morrison_woodbury_identity}
+        证明 Sherman-Morrison-Woodbury 恒等式，即对于矩阵
+        \(\vA\)、\(\vC\)、\(\vU\)、\(\vV\)，若 \(\vA\)、\(\vC\) 与
+        \(\vA + \vU\vC\vV\) 均可逆，则
+        \begin{equation}
+            (\vA + \vU\vC\vV)^{-1} = \vA^{-1} - \vA^{-1}\vU(\vC^{-1} +
+            \vV\vA^{-1}\vU)^{-1}\vV\vA^{-1}
+        \end{equation}
+    \end{exercise}
+
+    \begin{exercise}\label{exercise:generalizing_results_to_different_noise_models}
+        假设 \(\vx_{t}\) 服从广义
+        噪声模型 \eqref{eq:gen_additive_gaussian_noise_model}，请重新推导以下结果：
+        \begin{itemize}
+            \item Tweedie 公式：\eqref{eq:gen_tweedie}。
+            \item DDIM 迭代：\eqref{eq:gen_denoising_iteration}。
+            \item 高斯混合模型的贝叶斯最优去噪器：
+                \eqref{eq:gen_gmm_bayes_optimal_denoiser}。
+        \end{itemize}
+    \end{exercise}
+
+    \begin{exercise}\label{exercise:implement_denoising_processes}
+        \phantom{}
+        \begin{enumerate}
+            \item 实现
+                \Cref{exercise:generalizing_results_to_different_noise_models}
+                中推导的公式，构建高斯混合的采样器。
+            \item 复现 \Cref{fig:ve_forward_denoising} 与
+                \Cref{fig:vp_gmm_denoising}。
+            \item 现在我们引入 \textit{Flow
+                Matching (FM)}（见 \Cref{rem:flow_matching}），如下：
+                \begin{equation}
+                    \alpha_{t} = 1 - t, \qquad \sigma_{t} = t。
+                \end{equation}
+                使用同一框架实现该过程，并在高维测试采样。哪种过程似乎给出更好或更稳定的结果？
+        \end{enumerate}
+    \end{exercise}
+
+    \begin{exercise}\label{exercise:velocity_prediction}
+        考虑熟悉的插值
+        \begin{equation}
+            \vx_{t} = \alpha_{t}\vx + \sigma_{t}\vy, \qquad \forall t
+            \in [0, T]。
+        \end{equation}
+        其中 \(\vy\) 是一个（未必高斯的）随机
+        变量。我们定义 \textit{速度} 为
+        \begin{equation}
+            \vv_{t} = \odv*{\vx_{t}}{t} = \alpha_{t}^{\prime}\vx +
+            \sigma_{t}^{\prime}\vy, \qquad \forall t \in [0, T]。
+        \end{equation}
+        计算一个代数关系，将 \(\Ex[\vv_{t} \mid
+        \vx_{t}]\) 用 \(\Ex[\vx \mid \vx_{t}]\) 表示，反之亦然，并证明速度预测在代数上等价于去噪，从而也等价于噪声预测
+        （见 \Cref{rem:flow_matching}）。
+    \end{exercise}
+
+    \end{document}
