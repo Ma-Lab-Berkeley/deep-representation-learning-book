@@ -1,0 +1,1117 @@
+\providecommand{\toplevelprefix}{../..}  %
+\documentclass[../../book-main_zh.tex]{subfiles}
+
+\begin{document}
+
+\chapter{基于有损压缩的表征学习}
+\label{ch:lossy-compression}
+
+\begin{quote}
+    \hfill ``\textit{我们为了学习而压缩，为了压缩而学习}。''
+    
+    $~$\hfill —— \textit{高维数据分析}, Wright and Ma, 2022
+\end{quote}
+\vspace{5mm}
+
+让我们回顾一下到目前为止所涵盖的内容。我们已经表明，通过\textit{迭代去噪}将纯噪声（高熵）的分布逐渐转化为要学习的分布，可以识别并访问具有任意低维支撑的分布，如\Cref{fig:representation-learning}（左）所示。我们已经证明，每次迭代中的去噪器通过Tweedie公式 \eqref{eq:tweedie} 与分布的对数密度梯度直接相关。我们展示了在实践中，这样的\textit{去噪器} \(\bar{\vx}_{\theta}\) 可以使用有限样本进行估计。因此，我们开发了一种学习或追求数据分布的通用方法。
+
+然而，在这种方法中，分布的编码隐含在去噪器的函数形式和参数（如果有的话）中。事实上，敏锐的读者可能已经注意到，对于一般分布，我们从未明确指定去噪器的函数形式应该是什么。在实践中，人们通常使用具有经验设计架构的深度神经网络对其进行建模。此外，虽然我们知道上述去噪过程会降低熵，但我们不知道降低了多少，也不知道中间分布和最终分布的熵。因此，了解去噪操作的（最优）形式以及如何测量熵的变化将非常有用。最后，我们在上一章末尾表明，如果去噪过程将熵降低得\textit{太多}，则会导致仅学习训练数据，而无法进行任何插值或外推。解决所有这些问题的方法论创新将在本章中展开。
+
+\paragraph{信息度量。}
+回顾一下，我们的总体目标是对来自具有低维支撑的连续分布的数据进行建模。如果我们想找出生成数据的最简单模型，我们可能会考虑三种典型的简约性度量：维度、体积或微分熵。如果我们使用维度，那么显然给定数据集的最佳模型是经验分布本身，它是零维的。\footnote{在引言\Cref{ch:intro}中，我们提出智能的一个重要目标是追求观测数据中的低维结构。然而在技术层面上，我们不应从字面上理解“低维”一词。本章的目的正是要准确阐明我们应该追求什么样的低维结构以及如何追求。}如果我们改用数据的熵，那么对于所有具有低维支撑的分布，微分熵总是负无穷大。或者如果我们使用数据所张成空间的体积，任何低维模型支撑的体积总是零。那么，在所有可能生成相同数据样本的具有低维支撑的分布中，我们如何基于这些根本无法相互区分的简约性度量来决定哪一个更好呢？
+
+在本章中，我们将讨论一个框架，该框架通过将学习到的分布与显式可计算的编码和解码方案相关联，来缓解上述技术困难，这遵循并进一步明确了\Cref{sub:min_entropy}末尾建议的第二种方法。正如我们将看到的，这种方法本质上允许我们根据与编码方案相关的\textit{有损编码率}来准确近似学习分布的熵，正如在\Cref{sec:diffusion_memorization}末尾所描述和启发（但未形式化）的那样。粗略地说，这种度量可以被视为经验数据分布体积的广义概念。有了这样的度量，我们就可以准确地量化通过分布的变换（例如通过去噪器）降低了多少熵。此外，有了这样的度量，我们至少在原则上可以推导出最快降低熵的最优去噪算子。
+
+\paragraph{表征学习。}
+尽管上一章介绍的扩散和去噪过程在原则上允许我们学习任意的低维分布，但它并没有给出分布的显式表征。正如我们将看到的，学习到的分布将被反复访问并用于后续任务（例如用作\Cref{ch:conditional-inference}中贝叶斯推断的先验）。因此，我们希望能够通过映射 $f(\vx,\theta)$ 将数据分布转换为某种便于高效访问的标准结构化形式，例如（非相干）线性子空间或低秩高斯分布的混合，如\Cref{fig:representation-learning}右侧所示。我们将在本章中将此过程形式化为“表征学习”。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{chapters/chapter4/figs/manifold-linearization.pdf}
+    \caption{为数据分布（左）学习结构化表征（右）。请注意，除了像在上一章\Cref{ch:denoising}中那样学习（和采样）原始数据的分布之外，我们在这里还希望学习数据分布的变换 $f(\vx, \theta)$，从而产生具有所需更好几何或统计特性（例如线性和非相干性）的表征。}\label{fig:representation-learning}
+\end{figure}
+
+正如我们还将看到的，对于任意分布，上述信息度量（编码率）并不（容易）计算。但对于子空间或低秩高斯分布的混合，我们可以推导出该度量的精确闭式解。通过优化该度量，我们将能够找到最优表征。正如我们将在下一章\Cref{ch:deep-networks}中看到的，优化该度量还允许我们推导出以最有效方式执行变换 $f(\vx,\theta)$ 的算子的显式形式。这将为深度网络的架构提供原则性的解释，并带来更高效的深度架构设计。
+
+\section{通过有损编码进行压缩} \label{sec:lossy_compression}
+
+\subsection{有损编码的必要性}
+
+我们之前曾多次讨论过一个困难：如果我们最终从有限样本中学习分布，并且我们的去噪器函数类包含足够多的函数，我们如何确保我们从\textit{真实}分布（具有低维支撑）中采样，而不是从可能以高概率产生这些有限样本的任何其他分布中采样？让我们通过一些具体的例子来揭示一些概念和技术上的困难。
+
+\begin{example}[体积、维度与熵]\label{eg:measures-of-complexity}
+    对于\Cref{fig:1d-line}顶部所示的例子，假设我们从一条直线（例如在二维平面中）上的均匀分布中提取了一些样本。直线或样本集的体积为零。在几何上，生成的有限样本集上的经验分布是能够产生该有限样本集的{\em 最小维度}分布。\footnote{一组离散样本都是零维的，而支撑直线是一维的。}但这似乎与另一种复杂性度量——熵——形成了对比。直线的（微分）熵是负无穷大，但这个样本集的（离散）熵是有限且为正的。因此，根据这些常见的简约性或复杂性度量，我们似乎面临一种自相矛盾的情况：它们根本无法正确区分具有低维支撑的分布（的模型），有些甚至似乎以完全相反的方式区分它们。\footnote{当然，严格来说，微分熵和离散熵是不能直接比较的。}
+\end{example}
+
+\begin{example}[密度]\label{eg:density} 考虑\Cref{fig:1d-line}中所示的两组采样数据点。在几何上，它们本质上是相同的：每组由八个点组成，每个点以相等的频率 $1/8$ 出现。唯一的区别是，对于第二个数据集，一些点足够“接近”，可以被视为在它们各自的“簇”周围具有更高的密度。哪一个与可能生成这些样本的真实分布更相关？我们如何调和在解释这种（经验）分布时的这种歧义？
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=0.7\linewidth]{\toplevelprefix/chapters/chapter4/figs/one-dim-distribution.png}
+        \caption{在直线上观察到的具有不同几何构型的八个点；均匀分布（上）或紧密聚集（下）。}
+        \label{fig:1d-line}
+    \end{figure}
+\end{example}
+
+构建数据集的显式编码和解码方案还存在另一个技术困难。给定采样数据集 $\vX = [\vx_1, \ldots, \vx_N]$，如何设计一种可在具有有限内存和计算资源的机器上实现的编码方案？请注意，即使表示一个一般的实数也需要无限数量的数字或比特。因此，人们可能会想，分布的熵是否是其（最优）编码方案复杂性的直接度量。我们用另一个简单的例子来检验这个问题。
+\begin{example}[精度] \label{eg:two-inrational}
+    考虑一个离散分布 $\vX = [e, \pi]$，以 $1/2$ 的等概率取欧拉数 $e \approx 2.71828$ 或数字 $\pi \approx 3.14159$ 的值。该分布的熵为 $H =1$，这表明人们可以分别用一位数字 $0$ 或 $1$ 来编码这两个数字。但是你能在有限状态机上实现该代码的解码方案吗？答案实际上是否定的，因为精确描述这两个数字中的任何一个都需要无限多的比特。
+\end{example}
+
+因此，通常不可能有一种编码和解码方案能够精确地重现来自任意实值分布的样本。\footnote{也就是说，如果想要精确地编码这些样本，唯一的方法就是记住每一个样本。}但是，如果对分布进行编码却无法对从同一分布中抽取的样本进行解码，那么其实际价值微乎其微。
+
+因此，为了确保任何编码/解码方案都是可计算的，并且可以在有限的内存和计算资源下实现，我们需要对样本 $\vx$ 进行量化，并仅在一定精度（例如 $\epsilon > 0$）内对其进行编码。{\em 通过这样做，本质上，如果任意两个数据点之间的距离小于 $\epsilon$，我们就认为它们是等价的。}更准确地说，我们希望考虑编码方案
+\begin{equation}
+    \vx \mapsto \hat \vx
+\end{equation}
+使得由量化引起的预期误差以 $\epsilon$ 为界。在数学上更方便且在概念上几乎相同的是，将预期的\textit{平方}误差限制在 \(\epsilon^{2}\) 内，即
+\begin{equation}
+    \Ex[d(\vx, \hat \vx)^{2}] \le \epsilon^{2}.
+\end{equation}
+通常，距离 \(d\) 被选择为欧几里得距离，或2-范数。\footnote{更一般地，我们可以用任何所谓的\textit{散度}（divergence）来代替 \(d^{2}\)。}我们在下文中将采用这一选择。
+
+\subsection{率失真与数据几何}
+当然，在所有满足上述约束的编码方案中，我们希望选择使产生的编码率最小化的方案。对于给定的随机变量 $\vx$ 和精度 $\epsilon$，该速率被称为\textit{率失真}（rate distortion），记为 $\cR_{\epsilon}(\vx)$。
+
+为了更好地理解这种率失真，我们求助于信息论中的一个深刻定理，该定理最初由 \textcite{shannon1959coding} 证明，它将这种率失真与其他信息论量联系起来。为了理解这个定理，我们首先需要定义两个分布之间\textit{差异}的度量，称为\textit{Kullback-Leibler} (KL) 散度，或\textit{相对熵}，记为 \(\KL(\cdot \mmid \cdot)\)，并结合熵和交叉熵（见\Cref{sub:min_entropy}）定义为
+\begin{align}
+    \KL(p \mmid q) &= \CE(p \mmid q) - h(p) = \Ex_{\vx \sim p}[-\log
+    q(\vx)] - \Ex_{\vx \sim p}[-\log p(\vx)] \\
+    &= \Ex_{\vx \sim p}[\log (p(\vx)/q(\vx))].
+\end{align}
+KL散度总是非负的，当且仅当 \(p = q\) 时等于零；\footnote{从技术上讲，这个等式应该被理解为“几乎处处”，即除了可能在一个零测度（体积）的集合上，因为这个集合不会影响任何积分的值。}在 \(p\) 和 \(q\) 具有相同支撑且都是概率密度的情况下，这可以通过以下基于Jensen不等式和函数 \(\log(\cdot)\) 严格凹的事实的计算来证明：
+\begin{align}
+    - \KL(p\mmid q)
+    &= -\Ex_{\vx \sim p}[\log(p(\vx)/q(\vx))] = \Ex_{\vx \sim
+    p}[\log(q(\vx)/p(\vx))] \\
+    &\leq \log \Ex_{\vx \sim p}[q(\vx)/p(\vx)] =  \log \int_{\R^{D}}
+    \frac{q(\vxi)}{p(\vxi)}p(\vxi)\odif{\vxi} \\
+    &= \log \int_{\R^{D}}q(\vxi)\odif{\vxi} = \log \Ex_{\vx \sim
+    q}[1] = \log 1 = 0.
+\end{align}
+然后，我们定义\textit{互信息} \(I(\cdot; \cdot)\)，它是两个随机变量之间\textit{依赖性}的度量，如下所示：
+\begin{equation}\label{eq:mutual-information}
+    I(\vx; \hat{\vx})
+    = \KL(p(\vx, \hat{\vx}) \mmid p(\vx) p(\hat{\vx})),
+\end{equation}
+有了前面的定义，我们可以用纯概率术语将率失真 \(\cR_{\epsilon}\) 写为
+\begin{equation}
+    \cR_{\epsilon}(\vx)
+    = \min_{p(\hat \vx \mid \vx): \Ex[\norm{\vx -\hat \vx}_2^{2}] \le
+    \epsilon^{2}}
+    I(\vx; \hat{\vx}).
+    \label{eqn:rate-distortion-general}
+\end{equation}
+
+请注意，\eqref{eqn:rate-distortion-general} 中的最小化是在所有满足失真约束 $\Ex[\norm{\vx- \hat \vx}_2^{2}] \le \epsilon^{2}$ 的条件分布 $p(\hat \vx \mid \vx)$ 上进行的。每个这样的条件分布都会诱导一个联合分布 $p(\vx, \hat{\vx}) = p(\hat\vx \mid \vx) p(\vx)$，它决定了互信息 \eqref{eq:mutual-information}。互信息（以及因此的率失真）的许多便利性质都隐含在KL散度的相应性质中。从定义中我们知道，$\cR_{\epsilon}(\vx)$ 是关于 $\epsilon$ 的{\em 非增}函数。
+
+\begin{example}[高斯信源的率失真（定理 13.3.3, \cite{Cover-Thomas}）]\label{ex:gaussian_rate_distortion}
+    考虑一个高斯随机变量 \(\vx \sim \dNorm(0, \sigma^{2})\)。对于这种情况，众所周知，率失真函数可以以闭式解计算为：
+    \begin{equation}
+        \cR_{\epsilon}(x) =
+        \casework{\frac{1}{2}\log\left(
+            {\sigma^{2}}/{\epsilon^{2}}\right), & 0 \leq
+        \epsilon \leq \sigma, \\ 0, & \epsilon > \sigma}.
+    \end{equation}
+    这以一种特别有趣的方式扩展到了 \(D\) 维的情况。假设 \(\vx \sim \dNorm(\vzero, \vSigma)\)，其中 \(\vSigma \in \PSD(D)\) 具有特征值 \(\lambda_{1} \geq \cdots \geq \lambda_{D} \geq 0\)。那么率失真可以通过“注水算法”（water filling）获得，如下所示：
+    \begin{equation}
+        \cR_{\epsilon}(\vx) = \frac{1}{2} \sum_{i =
+        1}^{D}\log\rp{\frac{\lambda_{i}}{\min\{\kappa, \lambda_{i}\}}},
+    \end{equation}
+    其中“水位” \(\kappa\) 满足 \(\sum_{i = 1}^{D}\min\{\kappa, \lambda_{i}\} = \epsilon^{2}\)。直观地说，方差 \(\lambda_{i}\) 大于 \(\kappa\) 的方向被有效编码，而方差较小的方向被丢弃，从而确保以最小的互信息满足失真约束。有关此闭式解的详细推导，请参阅\Cref{exer:KKT}。
+\end{example}
+
+\begin{remark}
+    事实证明，在以下意义上，率失真是 $\vx$ 熵的一种可实现的近似。假设 $\vx$ 和 $\hat{\vx}$ 是连续随机向量。那么互信息可以写成
+    \begin{equation}\label{eq:information-entropy}
+        I(\vx; \hat\vx) = h(\vx) - h(\vx \mid \hat \vx),
+    \end{equation}
+    其中 $h(\vx \mid \hat \vx) = \bE[\log_2 p(\vx \mid \hat\vx)]$ 是给定 $\hat \vx$ 时 $\vx$ 的\textit{条件熵}。因此，当在所有满足约束 $\mathbb{E} [\norm{\vx- \hat \vx}_2^2] \le \epsilon^2$ 的分布中，$\vx$ 的熵与给定 $\hat \vx$ 时 $\vx$ 的条件熵之差最小化时，即可实现最小编码率。
+
+    事实上，不需要假设 $\vx$ 和 $\hat \vx$ 是连续的也能得出上述类型的结论。例如，如果两个随机向量都是离散的，在对离散值随机向量的KL散度进行适当解释后，我们有
+    \begin{equation}\label{eq:mutual}
+        I(\vx; \hat\vx) = H(\vx) - H(\vx \mid \hat \vx),
+    \end{equation}
+    其中 $H(\vx)$ 在\Cref{sub:min_entropy}的 \eqref{eqn:entropy-discrete} 中定义。更一般地，可以使用测度论中的高级数学概念来定义任意随机变量 $\vx$ 和 $\hat \vx$ 的互信息（以及因此的率失真），包括那些具有相当奇特的低维分布的随机变量；参见 \textcite[\S 8.5]{Cover-Thomas}。
+\end{remark}
+
+\begin{remark}
+    给定 $\vX = [\vx_1,\ldots, \vx_N]$ 中的一组数据点，人们总是可以将它们解释为来自这 $N$ 个向量上等概率为 $1/N$ 的均匀离散分布的样本。这种分布的熵为 $H(\vX) = \frac{1}{N}\log_2 N$。\footnote{再次注意，即使我们可以用这个编码率对这些向量进行编码，我们也无法以任意精度对它们进行解码。}然而，即使 $\vX$ 是其样本上的均匀分布，如果这些样本分布得不是那么均匀，并且许多样本紧密地聚集在一起，那么通过有损编码方案可实现的编码率 $\cR_{\epsilon}(\vX)$ 可能会显著低于 $H(\vX)$。因此，对于\Cref{fig:1d-line}中所示的第二个分布，对于适当选择的量化误差 $\epsilon$，可实现的有损编码率可能显著低于将其编码为均匀分布的编码率。\footnote{尽管如此，对于这种离散均匀分布，当 $\epsilon$ 足够小时，我们总是有 $H(\vX) \approx \cR_{\epsilon}(\vX)$。}还要注意的是，有了率失真的概念，例 \ref{eg:two-inrational} 中讨论的困难也消失了：我们可以选择两个分别足够接近这两个无理数的有理数。由此产生的编码方案将具有有限的复杂性。
+\end{remark}
+
+\begin{example}\label{example:sphere-covering-rate-distortion}
+    有时，我们可能会面临相反的情况，即我们想先固定编码率，然后尝试找到使失真最小化的编码方案。例如，假设我们只想对从分布中采样的点使用固定数量的代码，并且我们想知道如何设计代码，以便在编码/解码方案中使平均或最大失真最小化。例如，给定单位正方形上的均匀分布，我们想知道我们能以多高的精度对从该分布中抽取的点进行编码，比如使用 $n$ 个比特。这个问题等价于问：最小半径（即失真）是多少，使得我们可以用 $2^n$ 个该半径的圆盘覆盖单位正方形。图 \ref{fig:seven-circles-packing} 显示了正方形的近似最优覆盖，其中 \(n = 4, 6, 8\)，因此分别有 \(2^{n} = 16, 64, 256\) 个圆盘。请注意，圆盘的最优半径随着圆盘数量 \(2^{n}\) 的增加而减小。
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.3\textwidth]{\toplevelprefix/chapters/chapter4/figs/16.png}
+        \hfill
+        \includegraphics[width=0.3\textwidth]{\toplevelprefix/chapters/chapter4/figs/64.png}
+        \hfill
+        \includegraphics[width=0.3\textwidth]{\toplevelprefix/chapters/chapter4/figs/256.png}
+
+        \caption{使用启发式优化算法计算的覆盖正方形的 \(2^{4}\)、\(2^{6}\) 和 \(2^{8}\) 个圆盘的近似最优解，以及相应的半径。}
+        \label{fig:seven-circles-packing}
+    \end{figure}
+\end{example}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.6\textwidth]{\toplevelprefix/chapters/chapter4/figs/continuation.png}
+    \caption{\small\textbf{用 \(\epsilon\)-球近似低维分布。} 我们可以看到，随着 \(\epsilon\) 参数的缩小，\(\epsilon\)-球的并集越来越好地近似了真实分布（黑色）的支撑。此外，通过用高斯混合（每个高斯分布的协方差为 \((\epsilon^{2}/D)\vI\)）近似真实分布而获得的关联去噪器（其输入-输出映射由提供的箭头给出），越来越好地近似了真实的去噪器。在较大的 \(\epsilon\) 下，此类去噪器根本不指向真实分布附近，而在较小的 \(\epsilon\) 下，它们紧密近似真实的去噪器。\Cref{thm:covering-number-rate-distortion} 确立了这种近似表征了小失真 $\epsilon$ 下的率失真函数，统一了编码率最小化和去噪的并行方法，用于学习没有病态的低维分布。}
+    \label{fig:continuation}
+\end{figure}
+
+事实证明，对于一般分布 $p(\vx)$，获得率失真函数 \eqref{eqn:rate-distortion-general} 的闭式表达式是一个出了名的难题。然而，正如\Cref{example:sphere-covering-rate-distortion}所表明的，在一些重要的特殊情况下，分布 $p(\vx)$ 支撑的\textit{几何形状}可以与率失真函数联系起来，从而与失真水平 $\epsilon$ 下的最优编码率联系起来。事实上，这个例子可以推广到任何 $p(\vx)$ 的支撑是一个足够规则的紧集（包括低维分布）并且 $p(\vx)$ 在其支撑上均匀分布的设置。这涵盖了大量具有实际意义的情况。我们在以下结果中将这一概念形式化，该结果为一个特例确立了这一性质。
+
+\begin{theorem}\label{thm:covering-number-rate-distortion}
+    假设 \(\vx\) 是一个随机变量，使得其支撑 \(K \doteq \Supp(\vx)\) 是一个紧集。将\textit{覆盖数} \(\cN_{\epsilon}(K)\) 定义为能够覆盖 \(K\) 的半径为 \(\epsilon\) 的球的最小数量，即，
+    \begin{equation}
+        \cN_{\epsilon}(K) \doteq \min\left\{n \in \bN \colon \exists
+            \vp_{1}, \dots, \vp_{n} \in K\ \text{s.t.}\ K \subseteq
+        \bigcup_{i = 1}^{n}B_{\epsilon}(\vp_{i})\right\},
+    \end{equation}
+    其中 \(B_{\epsilon}(\vp) = \set{\vxi\in \R^D \given \norm{\vxi -
+            \vp}_2 \leq
+    \epsilon}\) 是以 \(\vp\) 为中心、半径为 \(\epsilon\) 的欧几里得球。那么有
+    \begin{equation}
+        \cR_{\epsilon}(\vx)
+        \leq \log_{2} \cN_{\epsilon}(K).
+    \end{equation}
+    如果此外，$\vx$ 在 $K$ 上均匀分布，并且 $K$ 是相互正交的低秩子空间的混合，\footnote{事实上，有可能用类似的结果来处理高度不规则的 $K$，例如分形，但其陈述变得更加技术化：参见 Riegler 等人 \cite{Riegler2018-jh,Riegler2023-rr}。我们在\Cref{app:rate-distortion-covering}中给出了一个简单的证明，展示了子空间混合的结果。}那么存在一个匹配的下界：
+    \begin{equation}
+        \cR_{\epsilon}(\vx)
+        \geq
+        \log_{2} \cN_{\epsilon}(K) - O(D).
+    \end{equation}
+\end{theorem}
+\begin{proof}
+    该定理的证明超出了本书的范围，我们将其推迟到\Cref{app:rate-distortion-covering}。
+\end{proof}
+
+\Cref{thm:covering-number-rate-distortion} 的含义可以总结如下：对于 $\vx$ 分布的足够精确的编码，最小率失真编码框架完全由 $\vx$ 支撑上的球堆积问题来表征。\Cref{thm:covering-number-rate-distortion} 证明的核心确实可以推广到更复杂的分布，例如足够非相干的流形混合，但我们将其留待未来的研究。因此，率失真可以被认为是一种“概率感知”的方式，通过许多小球的混合来近似 \(\vx\) 分布的支撑。我们现在讨论这与我们在本章前面讨论的去噪-扩散-熵复杂性层次结构之间的另一个联系。
+
+\begin{remark}\label{rem:slb}
+    \Cref{thm:covering-number-rate-distortion} 中下界证明的关键成分是信息论中的一个重要结果，称为率失真的\textit{香农下界}（Shannon lower bound），以克劳德·香农（Claude Shannon）的名字命名，他首先在一个特例中推导出了它 \cite{shannon1959coding}。它断言了对于任何具有密度 $p(\vx)$ 和有限期望平方范数的随机变量 $\vx$，率失真函数的以下估计 \cite{Linder1994-ej}：
+    \begin{equation}\label{eq:slb}
+        \cR_{\epsilon}(\vx)
+        \geq
+        h(\vx)
+        - \log_2 \volume(B_{\epsilon})
+        -
+        C_D,
+    \end{equation}
+    其中 $C_D > 0$ 是仅依赖于 $D$ 的常数。此外，当 $\epsilon \to 0$ 时，这个下界实际上是紧的：即，
+    \begin{equation}
+        \lim_{\epsilon \to 0} \cR_{\epsilon}(\vx) - \left[ h(\vx) - \log_2
+        \volume(B_{\epsilon}) - C_D\right] = 0.
+    \end{equation}
+    因此，当失真 $\epsilon$ 很小时，我们可以完全从香农下界的角度来思考，而不是定义率失真的（通常难以处理的）优化问题 \eqref{eqn:rate-distortion-general}。
+
+    香农下界是连接编码率、熵最小化/去噪以及用于学习低维分布的几何球堆积方法的桥梁。请注意，在均匀密度 $p(\vx)$ 的特殊情况下，\eqref{eq:slb} 变为
+    \begin{align}
+        \cR_{\epsilon}(\vx) &\geq -\int_K \frac{1}{\volume(K)} \log_2
+        \frac{1}{\volume(K)} \odif \vxi
+        - \log_2 \volume(B_{\epsilon}) - C_d
+        \\
+        &=
+        \log_2 \volume(K) / \volume(B_{\epsilon})
+        - C_d. \label{eq:shannon-lower-bound-uniform}
+    \end{align}
+    比率 $\volume(K) / \volume(B_{\epsilon})$ 通过最坏情况的论证近似了覆盖 $K$ 所需的 $\epsilon$-球的数量，当 $\epsilon$ 很小时，这对于足够规则的集合 $K$ 是准确的（详见\Cref{app:rate-distortion-covering}）。同时，回想一下本章前面的高斯去噪模型 $\vx_{\epsilon} = \vx + \epsilon \vg$，其中 $\vg \sim \cN(\vzero, \vI)$ 独立于 $\vx$。有趣的是，联合分布 $(\vx, \vg)$ 的微分熵可以计算为
+    \begin{align}
+        h(\vx, \vg)
+        &=
+        -\int
+        p(\vxi) p(\vgamma) \log_2 p(\vxi) p(\vgamma) \odif \vxi \odif \vgamma
+        \\
+        &=
+        h(\vx) + h(\epsilon \vg).
+    \end{align}
+    我们已经看到了在\Cref{eqn:entropy-Gaussian-multi}中计算的高斯熵：当 $\epsilon$ 很小时，它等于（在相差一个加性常数的意义下）我们在香农下界中看到的体积量 $-\log_2 \volume(B_{\epsilon})$。在某些特殊情况下（例如，支撑在非相干低秩子空间上的数据），当 $\epsilon$ 很小且 $\vx$ 的支撑足够规则时，$\vx_{\epsilon}$ 的分布甚至可以在局部被分布 $p(\vx)$ 和 $p(\vg)$ 的乘积很好地近似，从而证明了上述计算的合理性。因此，高斯去噪过程产生了对香农下界的另一种解释，即它源于 $\vx$ 的噪声版本的熵，其噪声水平与失真水平 $\epsilon$ 成正比。
+
+    因此，这种通过球覆盖的有限率失真方法重新启用或推广了以前所有分布复杂性的度量，使我们能够以统一的方式区分和排列不同的分布。这些相互关联的观点在\Cref{fig:continuation}中可视化。
+\end{remark}
+
+对于有限失真水平下的一般分布，通常不可能找到其解析形式的率失真函数。人们通常必须求助于数值计算\footnote{感兴趣的读者可以参考 \cite{Blahut-1972}，了解一种对离散分布的率失真函数进行数值计算的经典算法。}。尽管如此，正如我们将看到的，在我们的背景下，我们通常需要知道率失真作为一组数据点或其表征的显式函数。这是因为我们想使用编码率作为表征优劣的度量。显式的解析形式使得确定如何转换数据分布以改善表征变得容易。因此，我们应该处理那些率失真函数具有显式解析形式的分布。为此，我们从最简单也是最重要的分布族开始。
+
+\subsection{低维高斯分布的有损编码率}\label{subsec:lossy DR}
+现在假设我们给定了一组来自任意分布的数据样本 $\vX = [\vx_1, \ldots, \vx_N]$。\footnote{或者这些数据点本身可以被视为一种（经验）分布。}我们希望提出一种建设性的方案，能够以一定的精度对数据进行编码，例如
+\begin{equation}
+    \vx_i \mapsto \hat \vx_i, \quad \mbox{subject to} \quad \|\vx_i -
+    \hat \vx_i\|_2 \le \epsilon.
+\end{equation}
+请注意，这是一个充分、明确且可解释的条件，它确保数据被编码为使得 \(\frac{1}{N}\sum_{i = 1}^{N} \norm{\vx_i- \hat \vx_i}_2^{2} \le \epsilon^{2}\)。后一个不等式正是所提供的经验分布及其编码的率失真约束。例如，在\Cref{example:sphere-covering-rate-distortion}中，我们使用这个简化的标准来显式地找到给定编码率的最小失真和显式编码方案。
+
+不失一般性，让我们假设 $\vX$ 的均值为零，即 $\frac{1}{N} \sum_{i = 1}^{N} \vx_i = \boldsymbol{0}$。在没有任何关于 $\vX$ 背后分布性质的先验知识的情况下，我们可以将 $\vX$ 视为从具有以下协方差的高斯分布 $\mathcal{N}(\boldsymbol{0}, {\boldsymbol{\Sigma}})$ 中采样的\footnote{众所周知，在给定固定方差的情况下，高斯分布达到最大熵。也就是说，它给出了可能编码率的最坏情况的上限。}
+\begin{equation}
+    {\boldsymbol{\Sigma}} = \frac{1}{N} \vX\vX^\top.
+\end{equation}
+请注意，在几何上 ${\boldsymbol{\Sigma}}$ 表征了大多数样本 $\vx_i$ 所在的椭球区域。
+
+我们可以将 $\hat \vX = [\hat \vx_1,\ldots, \hat \vx_N]$ 视为 $\vX = [\vx_1, \ldots, \vx_N]$ 的噪声版本：
+\begin{equation}
+    \hat \vx_i = \vx_i + \vw_i,
+\end{equation}
+其中 $\vw_i  \sim
+\mathcal{N}(\boldsymbol{0} , {\epsilon^2}  \boldsymbol{I}/{D})$ 是独立于 $\vx_i$ 的高斯噪声。那么 $\hat \vx_i$ 的协方差由下式给出
+\begin{equation}
+    \hat{\boldsymbol{\Sigma}} = \mathbb{E}\left[\hat \vx_i \hat
+    \vx_i^\top\right] = \frac{\epsilon^2}{D} \boldsymbol{I} +
+    \frac{1}{N} \vX\vX^\top.
+\end{equation}
+请注意，由向量 $\vx_i$ 张成的区域的体积与协方差矩阵行列式的平方根成正比
+\begin{equation}
+    \mbox{volume}(\hat \vx_i) \propto \sqrt{\det
+    \big(\hat{\boldsymbol{\Sigma}}\big)} =
+    \sqrt{\det\left(\frac{\epsilon^2}{D} \boldsymbol{I} + \frac{1}{N}
+    \vX\vX^\top \right)}.
+\end{equation}
+每个随机向量 $\boldsymbol{w}_i$ 张成的体积与以下成正比
+\begin{equation}
+    \mbox{volume}(\boldsymbol{w}_i) \propto
+    \sqrt{\det\left(\frac{\epsilon^2}{D} \boldsymbol{I} \right)}.
+\end{equation}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{\toplevelprefix/chapters/chapter4/figs/Gaussian-compression.png}
+    \caption{使用 $\epsilon$-球覆盖数据向量张成的区域。空间的体积越大，需要的球就越多，因此需要更多的比特来编码和枚举这些球。每个实值向量 $\vx$ 都可以编码为它落入的球的编号。}
+    \label{fig:ball-packing}
+\end{figure}
+
+为了对落入 $\hat \vx_i$ 张成区域的向量进行编码，我们可以用半径为 $\epsilon$ 的非重叠球覆盖该区域，如\Cref{fig:ball-packing}所示。当 $\hat \vx_i$ 张成区域的体积明显大于 $\epsilon$-球的体积时，我们覆盖该区域所需的球的总数大约等于这两个体积的比值：
+\begin{equation}
+    \# \,\epsilon\mbox{-balls} \approx \frac{\mbox{volume}(\hat
+    \vx_i)}{\mbox{volume}(\vw_i)} = \sqrt{\det\left(\boldsymbol{I} +
+    \frac{D}{N\epsilon^2} \vX\vX^\top  \right)}.
+\end{equation}
+如果我们使用二进制数来标记感兴趣区域中的所有 $\epsilon$-球，那么所需的二进制比特总数因此为 %
+\begin{equation}
+    \cR_{\epsilon}(\vX) \approx %
+    \log_2 (\# \,\epsilon\mbox{-balls}) \approx R_{\epsilon}(\vX)
+    \doteq \frac{1}{2} \log \det \left(\boldsymbol{I} +
+    \frac{D}{N\epsilon^2} \vX\vX^\top \right).
+    \label{eqn:rate-Gaussian}
+\end{equation}
+请注意，从\Cref{ex:gaussian_rate_distortion}中可以证明，该公式的右侧与具有协方差矩阵 \(\frac{1}{N} \vX\vX^\top + (\epsilon^{2}/D) \vI\)（例如，数据的经验协方差矩阵加上噪声项）的高斯信源的率失真（在精度 \(\epsilon\) 内）相同。这样，关于封闭向量体积和球堆积的几何论证就转化为关于受扰动高斯信源率失真的信息论论证。
+
+\begin{example}
+    \Cref{fig:ball-packing} 显示了一个具有椭圆支撑的二维分布示例——近似于二维高斯分布的支撑。该区域被大小为 $\epsilon$ 的小球覆盖。所有的球从 $1$ 编号到比如 $n$。那么给定该区域中的任何向量 $\vx$，我们只需要确定它最接近哪个 $\epsilon$-球的中心，记为 $\operatorname{ball}_{\epsilon}(\vx)$。为了记住 $\vx$，我们只需要记住这个球的编号，这需要 $\log(n)$ 个比特来存储。如果我们需要从这个编号中解码 $\vx$，我们只需将 $\hat \vx$ 作为球的中心。这导致了一个显式的编码和解码方案：
+    \begin{equation}
+        \vx \longrightarrow \operatorname{ball}_{\epsilon}(\vx)
+        \longrightarrow \hat \vx = \mbox{center of}
+        \operatorname{ball}_{\epsilon}(\vx).
+    \end{equation}
+    人们可以将这些球心称为编码方案的码本或字典的“代码”。很容易看出，这种（有损）编码-解码方案的精度大约是球的半径 $\epsilon$。显然 $\cR_{\epsilon}(\vZ)$ 是使用这种编码方案对每个向量 $\vz$ 的球编号进行编码所需的平均比特数，因此可以称为与该方案相关的{\em 编码率}。
+\end{example}
+
+从上面的推导中，我们知道编码率 $\cR_{\epsilon}(\vX)$ 是可以通过显式编码（和解码）方案（近似）实现的。它有两个有趣的性质：
+\begin{itemize}
+    \item 首先，人们可能会注意到 $R_{\epsilon}(\vX)$ 非常类似于高斯信源的率失真函数 \cite{Cover-Thomas}（见\Cref{ex:gaussian_rate_distortion}）。事实上，当 $\epsilon$ 很小时，上述表达式是高斯信源率失真的近似，正如 \cite{MaY2007-PAMI} 所指出的那样。
+    \item 其次，如果假设数据 $\vX$ 来自线性子空间，则可以推导出相同的闭式编码率 $R_{\epsilon}(\vX)$ 作为 \(\cR_{\epsilon}(\vX)\) 的近似。这可以通过适当地量化 $\vX = \boldsymbol{U} \boldsymbol{\Sigma}\boldsymbol{V}^\top$ 的奇异值分解（SVD）并为 $\boldsymbol{U}$ 张成的子空间中的向量构建有损编码方案来证明 \cite{MaY2007-PAMI}。
+\end{itemize}
+在我们的背景下，闭式表达式 $R_{\epsilon}(\vX)$ 是相当基础的：它是与从高斯分布或线性子空间中提取的数据的显式且自然的有损编码方案相关的编码率。正如我们将在下一章中看到的，这个公式在理解深度神经网络的架构中起着重要作用。
+
+\subsection{低维高斯混合的聚类}
+\label{sec:clustering-Gaussians}
+正如我们之前讨论过的，给定的数据集 $\vX$ 通常具有低维内在结构。因此，将其编码为一般的高斯分布将是非常冗余的。如果我们能识别出 $\vX$ 中的这些内在结构，我们就可以设计出更好的编码方案，从而获得低得多的编码率。或者等效地，用于编码这种 $\vX$ 的代码可以被压缩。我们将看到，压缩提供了一种统一的可计算方法来识别此类结构。在本节中，我们将用最基本的低维结构族来演示这个重要的想法：（低维）高斯分布或子空间的混合。
+
+\begin{example}
+    \Cref{fig:two-subspaces} 显示了一个示例，其中数据 $\vX$ 分布在两个子空间（或低维高斯分布）周围。如果将它们视为一个单一的高斯分布并一起编码，由所有蓝球表示的关联离散（有损）码本显然是非常冗余的。我们可以尝试识别这两个子空间的位置（记为 $S_1$ 和 $S_2$），并设计一个仅覆盖这两个子空间的码本，即绿球。如果我们能正确地将数据 $\vX$ 中的样本划分到这两个子空间中：$\vX = [\vX_1, \vX_2]\bm \Pi$，其中 $\vX_1 \in S_1$ 且 $\vX_2 \in S_2$，其中 $\bm \Pi$ 表示置换矩阵，那么由此产生的数据编码率将低得多。这提供了一种更简约、因此更理想的数据表征。
+\end{example}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{\toplevelprefix/chapters/chapter4/figs/Two-subspaces.png}
+    \caption{分布在两个子空间周围的数据的两种有损编码方案的比较。一种是为两个子空间张成的整个空间堆积（蓝色）$\epsilon$-球；另一种是仅在两个子空间周围的管状邻域内堆积球。后者显然具有小得多的码本，并导致子空间上样本的编码率低得多。}
+    \label{fig:two-subspaces}
+\end{figure}
+
+因此，更一般地说，如果数据是从子空间或低维高斯分布的任何混合中提取的，那么识别这些分量并根据这些分量的内在维度对数据进行编码将是理想的。事实证明，假设数据是从低维高斯混合中提取的，我们并没有失去太多的普遍性。这是因为高斯混合可以紧密近似大多数一般分布 \cite{borkar2016gaussian}。
+
+\paragraph{聚类问题。}
+现在对于这个特定的分布族，我们如何从一组样本中有效且高效地识别出这些低维分量
+\begin{equation}
+    \vX = \left[\vx_1, \vx_2, \ldots, \vx_N\right],
+\end{equation}
+？换句话说，给定整个数据集 $\vX$，我们希望将其划分或聚类为多个（例如 $K$ 个）子集：
+\begin{equation}
+    \vX\bm \Pi = [\vX_1, \vX_2, \dots, \vX_K],
+\end{equation}
+其中每个子集由仅从一个低维高斯分布或子空间中提取的样本组成，$\bm \Pi$ 是一个置换矩阵，用于指示划分的成员归属。请注意，根据情况，划分可以是确定性的，也可以是概率性的。正如 \cite{ma2007segmentation} 所示，对于高斯混合，概率性划分不会导致更低的编码率。因此，为简单起见，我们这里仅考虑确定性划分。
+
+\paragraph{通过有损压缩进行聚类。}
+解决上述聚类问题的主要困难在于，我们通常不知道簇的数量 $K$，也不知道每个分量的维度。对这个聚类问题的研究有着悠久的历史。教科书 \cite{GPCA} 对解决该问题的不同方法进行了系统而全面的介绍。为了找到解决这个问题的有效方法，我们首先需要理解并澄清我们为什么要聚类。换句话说，与不聚类相比，我们从数据聚类中到底能得到什么？我们如何衡量这种收益？从数据压缩的角度来看，正确的聚类应该导致更高效的编码（和解码）方案。
+
+对于任何给定的数据集 $\vX$，已经有两个明显的编码方案作为基线。它们代表了两种极端的编码数据的方式：
+\begin{itemize}
+    \item 简单地将所有样本视为从一个单一的高斯分布中提取的。如前所述，相关的编码率由下式给出：
+        \begin{equation}
+            \cR_{\epsilon}(\vX) \approx R_{\epsilon}(\vX) =
+            \frac{1}{2} \log \det \left(\boldsymbol{I} +
+            \frac{D}{N\epsilon^2} \vX\vX^\top \right).
+        \end{equation}
+    \item 简单地通过为每个样本分配不同的编号来分别记住所有样本。编码率将是：
+        \begin{equation}
+            \cR_0(\vX) = \log(N).
+        \end{equation}
+\end{itemize}
+
+请注意，对于量化误差 $\epsilon$ 的某些（极端）选择，这两种编码方案都可以成为“最优”解：
+\begin{enumerate}
+    \item {\em 懒惰机制}：如果我们选择极大的 $\epsilon$，$\vX$ 中的所有样本都可以被一个球覆盖。速率为  $\lim_{\epsilon \rightarrow \infty} \cR_\epsilon
+        \rightarrow \frac{1}{2}\log\det (\boldsymbol{I}) = 0$。
+    \item {\em 记忆机制}：如果 $\epsilon$ 极小，$\vX$ 中的每个样本都被不同的 $\epsilon$-球覆盖，因此总数为 $N$。速率为
+        $\lim_{\epsilon \rightarrow 0} \cR_\epsilon \rightarrow \log(N)$。
+\end{enumerate}
+请注意，第一种方案对应于人们根本不关心分布的任何有趣特征的场景。人们不想为任何有信息量的内容腾出任何比特。我们称之为“懒惰机制”。第二种方案对应于人们想要以极高精度解码每个样本的场景。所以人们最好“记住”每一个样本。我们称之为“记忆机制”。
+
+请注意，这些关于 \(\epsilon\) 的渐近性正是我们在\Cref{sec:diffusion_memorization}末尾引入有损编码率作为实际训练的扩散模型所近似的量时所讨论的。在当前情况下，我们\textit{显式地}将分布编码到精度 \(\epsilon\)；在扩散模型的情况下，我们\textit{隐式地}编码分布。该方案的某些属性（如记忆和泛化）在两种情况下表现相似，实际上人们可以通过研究一种情况来理解另一种情况。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.9\linewidth]{\toplevelprefix/chapters/chapter4/figs/circle-packing.png}
+    \caption{二维平面上的若干随机样本。考虑为每个样本分配一个以该样本为中心的 $\epsilon$-圆盘。样本的密度从左到右增加。}
+    \label{fig:circle-packing}
+\end{figure}
+\begin{example}
+    为了了解何时倾向于使用记忆机制，让我们考虑在二维平面的单位面积内随机分布的若干（例如 $N$ 个）样本。\footnote{假设这些点是由密度为每单位面积 $N$ 个点的泊松过程提取的。}想象一下，我们试图设计一个具有固定量化误差 $\epsilon$ 的有损编码方案。这相当于在每个样本周围放置一个 $\epsilon$-圆盘，如\Cref{fig:circle-packing}所示。当 $N$ 很小时，所有圆盘相互重叠的几率为零。在这种情况下，大小为 $N$ 的码本是必要且最优的。当 $N$ 或密度达到某个临界值 $N_c$ 时，所有圆盘很有可能开始重叠并连接成一个覆盖整个平面的簇——这种现象被称为连续“渗流”（percolation） \cite{Gilbert-1961,Mertens-Moore-2012}。当 $N$ 变得大于这个值时，圆盘会严重重叠。圆盘的数量 $N$ 变得非常冗余，因为我们只想在给定精度 $\epsilon$ 内对平面上的点进行编码。覆盖所有样本所需的圆盘数量远小于 $N$。\footnote{事实上，有高效的算法可以找到这样的覆盖 \cite{Booth-2001}。}
+\end{example}
+
+懒惰机制和记忆机制都在某种程度上是微不足道的，也许没有什么理论或实际意义。当用于编码从具有{\em 紧致且低维支撑}的分布中提取的大量样本时，这两种方案都远非最优。有趣的机制存在于这两者之间。
+\begin{example}
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=0.4\linewidth]{\toplevelprefix/chapters/chapter4/figs/Two-lines-and-plane.png}
+        \includegraphics[width=0.9\linewidth]{\toplevelprefix/chapters/chapter4/figs/Coding-Rate.jpg}
+        \caption{上：从 $\R^3$ 中的两条直线和一个平面中提取的 358 个噪声样本。下：改变 $\epsilon$ 对聚类结果和编码率的影响。红线标记了添加到样本中的高斯噪声的方差 $\epsilon_0$。}
+        \label{fig:two-lines-and-plane}
+        \label{fig:two-lines-and-plane-epsilon}
+    \end{figure}
+    \Cref{fig:two-lines-and-plane} 显示了一个示例，其中的噪声样本是从 $\R^3$ 中的两条直线和一个平面中提取的。正如我们从右侧的图 (c) 中注意到的那样，最优编码率随着我们增加 $\epsilon$ 而单调递减，这与率失真函数的性质预期一致。图 (a) 和 (b) 显示了当 $\epsilon$ 从极小（接近零）变化到极大（趋向无穷大）时，编码率最小时的最优簇数。我们可以清楚地看到图两端的懒惰机制和记忆机制。但人们也可以在图 (b) 中注意到，当量化误差 $\epsilon$ 被选择在真实噪声方差 $\epsilon_0$ 的水平附近时，最优簇数是代表两个平面和一个子空间的“正确”数字 3。我们非正式地将这个中间机制称为“泛化机制”。请注意，在这些机制之间发生了急剧的相变。\footnote{到目前为止，据我们所知，这些相变行为还没有严格的理论证明。}
+\end{example}
+
+从上述讨论和例子中，我们看到，当量化误差相对于样本密度\footnote{或样本密度相对于量化误差}处于适当的范围内时，最小化有损编码率将使我们能够揭示采样数据的潜在（低维）分布。{\em 因此，量化最初作为一种实用性的选择，现在似乎正在成为从具有有限样本的经验分布中学习连续分布的必要条件。}尽管解释这种现象的严格理论仍然难以捉摸，但在这里，出于学习的目的，我们关心的是如何利用这种现象来设计能够找到正确分布的算法。
+
+让我们使用\Cref{fig:two-subspaces}中所示的简单示例来说明基本思想。如果能将 $\vX$ 中的所有样本划分为 $\vX_1$ 和 $\vX_2$ 两个簇，分别有 $N_1$ 和 $N_2$ 个样本，那么相关的编码率将是\footnote{我们在这里忽略了编码每个样本的成员归属所需的一些开销比特，例如通过霍夫曼编码。}
+\begin{equation}
+    R_{\epsilon}^c(\vX\mid \boldsymbol{\Pi}) =
+    \frac{N_1}{N}R_{\epsilon}(\vX_1) + \frac{N_2}{N}R_{\epsilon}(\vX_2),
+\end{equation}
+其中我们使用 $\boldsymbol{\Pi}$ 来指示划分的成员归属。如果划分尊重分布的低维结构，在这种情况下 $\vX_1$ 和 $\vX_2$ 分别属于两个子空间，那么由此产生的编码率应该显著小于上述两个基本方案：
+\begin{equation}
+    R_{\epsilon}^c(\vX \mid \boldsymbol{\Pi}) \ll R_{\epsilon}(\vX),
+    \quad     R_{\epsilon}^c(\vX \mid \boldsymbol{\Pi}) \ll R_0(\vX).
+\end{equation}
+一般来说，我们可以将聚类问题转化为最小化编码率的优化问题：
+\begin{equation}
+    \min_{\boldsymbol{\Pi}}  \bc{ R_{\epsilon}^c(\vX \mid \boldsymbol{\Pi})
+    \doteq \sum_{k=1}^K \frac{N_k}{N}R_{\epsilon}(\vX_k)}.
+\end{equation}
+
+\paragraph{聚类的优化策略。}
+剩下的问题是我们如何优化上述编码率目标以找到最优簇。实现这一目标有三种自然的方法：
+\begin{enumerate}
+    \item 我们可以从将整个集合 $\vX$ 作为一个单一聚类开始（即懒惰机制），然后（例如随机地）搜索对其进行划分，以使其导致更小的编码率。
+    \item 反过来，我们可以从将每个样本 $\vx_i$ 作为其自身的聚类开始（即记忆机制），并搜索合并聚类，以导致更小的编码率。
+    \item 或者，如果我们能够将隶属度 $\boldsymbol{\Pi}$ 表示（或近似）为某些连续参数，我们可以使用诸如梯度下降（GD）等优化方法。
+\end{enumerate}
+第一种方法在计算上并不那么吸引人，因为需要尝试的可能划分数量随样本数量呈指数增长。例如，将 $\vX$ 划分为两个大小相等的子集的划分数量为 $N \choose N/2$，当 $N$ 变大时，这个数字会爆炸式增长。我们将在下一章 \Cref{ch:deep-networks} 中探讨第三种方法。在那里，我们将看到深度神经网络（特别是 Transformer）的作用是如何与编码率目标联系起来的。
+
+第二种方法最初在 \cite{ma2007segmentation} 的工作中被提出。它展示了能够高效评估编码率（例如使用解析形式）的好处。借助于此，可以通过最小化编码长度（MCL）原理相当高效且有效地找到数据的（低维）聚类。请注意，对于具有 $N_k$ 个样本的聚类 $\vX_k$，编码 $\vX_k$ 中所有样本所需的二进制比特长度由下式给出：\footnote{事实上，对编码长度更准确的估计是 $L(\vX_k) = (N_k+D) R_\epsilon(\vX_k)$，其中额外的比特用于编码子空间的基 \cite{ma2007segmentation}。为了简单起见，我们在这里省略了这一开销。}
+\begin{equation}
+    L(\vX_k) = N_k R_\epsilon(\vX_k).
+\end{equation}
+如果我们有两个聚类 $\vX_k$ 和 $\vX_l$，如果我们想将样本编码为两个独立的聚类，所需的二进制比特长度为
+\begin{equation*}
+    L^c(\vX_k, \vX_l) = N_k R_\epsilon(\vX_k) + N_l R_\epsilon(\vX_l) -
+    N_k \log\frac{N_k}{N_k + N_l} - N_l \log\frac{N_l}{N_k + N_l}.
+\end{equation*}
+最后两项是根据哈夫曼编码（Huffman code）对样本的隶属度进行编码所需的比特数。
+
+然后，给定任意两个独立的聚类 $\vX_1$ 和 $\vX_2$，我们可以根据两个编码长度之间的差值来决定是否合并它们：
+\begin{equation}
+    L(\vX_k \cup \vX_l) - L^c(\vX_k, \vX_l)
+\end{equation}
+是正还是负，其中 $\vX_k \cup \vX_l$ 表示 $\bm X_k$ 和 $\bm X_l$ 中样本集合的并集。如果它是负的，这意味着如果我们将这两个聚类合并为一个，编码长度将会变小。这个简单的事实引出了 \cite{ma2007segmentation} 提出的以下聚类算法：
+\begin{algorithm}[!htbp]
+    \caption{编码长度的成对最速下降法}\label{alg:steepest_descent_coding_length}
+    \begin{algorithmic}[1]
+        \Require{\(N\) 个数据点 \(\{\vx_{i}\}_{i = 1}^{N}\)}
+        \Ensure{聚类集合 \(\cC\)}
+
+        \Procedure{PairwiseSteepestDescentOfCodingLength}{$\{\vx_{i}\}_{i
+        = 1}^{N}$}
+        \State{\(\cC \gets \{\{\bm x_{i}\}\}_{i = 1}^{N}\)}
+        \Comment{初始化 \(N\) 个各包含一个元素的聚类 \(\vX_{k}\)}
+        \While{\(\abs{\cC} > 1\)}
+        \If{\(\displaystyle \min_{\vX_{k}, \vX_{l} \in \cC}[L(\vX_{k}
+        \cup \vX_{l}) -L^{c}(\vX_{k}, \vX_{l})] \geq 0\)} \Comment{如果任何合并都无法节省比特}
+        \State{\Return{\(\cC\)}} \Comment{提前返回 \(\cC\) 并退出}
+        \Else
+        \State{\(\displaystyle \vX_{k^{\ast}}, \vX_{l^{\ast}} \gets
+                \argmin_{\vX_{k}, \vX_{l} \in \cC}[L(\vX_{k} \cup \vX_{l}) -
+        L^{c}(\vX_{k}, \vX_{l})]\)} \Comment{合并能节省最多比特的聚类}
+        \State{\(\displaystyle \cC \gets [\cC \setminus
+                \{\vX_{k^{\ast}}, \vX_{l^{\ast}}\}] \cup \{\vX_{k^{\ast}}
+        \cup \vX_{l^{\ast}}\}\)} \Comment{移除未合并的聚类并加回合并后的聚类}
+        \EndIf
+        \EndWhile
+        \State{\Return{\(\cC\)}}  \Comment{如果所有合并都能带来节省，则返回一个聚类}
+        \EndProcedure
+    \end{algorithmic}
+\end{algorithm}
+
+请注意，该算法是易于处理的，因为（成对）比较和合并的总数约为 $O(N^2\log N)$。然而，由于其贪婪的性质，没有理论保证该过程会收敛到全局最优的聚类解。尽管如此，正如 \cite{ma2007segmentation} 中所报告的，在实践中，这个看似简单的算法效果极好。\Cref{fig:two-lines-and-plane} 中绘制的聚类结果实际上就是由该算法计算得出的。
+
+\begin{example}[图像分割]\label{eg:image-segmentation} 上述编码长度的度量及相关的聚类算法假设数据分布是（低维）高斯混合分布。尽管这看起来有些理想化，但在模型（近似）有效的场景中，该度量和算法已经可以非常有用甚至强大。
+
+    例如，自然图像通常由多个具有几乎均匀纹理的区域组成。如果我们从每个区域中提取许多小窗口，它们应该类似于从（低维）高斯分布中提取的样本，如 \Cref{fig:image-patch} 所示。\Cref{fig:image-segmentation} 展示了将上述聚类算法直接应用于图像块的图像分割结果。关于针对图像分割问题定制该算法的更多技术细节，可以在 \cite{Mobahi-IJCV2011} 中找到。
+\end{example}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.4\linewidth]{\toplevelprefix/chapters/chapter4/figs/image-segmentation-tiles.png}
+    \caption{大小为 $w\times w$ 像素的图像块。}
+    \label{fig:image-patch}
+\end{figure}
+
+\begin{figure}[th]
+    \centering
+    \includegraphics[width=0.8\linewidth]{\toplevelprefix/chapters/chapter4/figs/image-segmentation.png}
+    \caption{基于应用于图像块的聚类算法的分割结果。}
+    \label{fig:image-segmentation}
+\end{figure}
+
+\section{通过最大化信息增益进行变换}
+\label{sec:chap4-representation-learning-problem}
+
+到目前为止，在本章中，我们已经讨论了如何通过压缩原理来识别具有低维结构的分布。正如我们在前两节中所看到的，计算压缩可以通过去噪操作或聚类来实现。\Cref{fig:Gaussian-Subspaces} 用我们最喜欢的例子说明了这个概念。
+
+当然，识别数据分布的最终目标是利用它来促进某些后续任务，如（图像的）分割、分类或生成。因此，所得到的分布如何被“表示”，对于如何高效且有效地检索和利用与这些后续任务相关的信息至关重要。这自然引发了一个基本问题：{\em 是什么让一个表示对于下游使用来说真正“好”？} 在下文中，我们将探讨一个有意义且有用的表示应具备的基本属性，以及如何通过最大化信息增益来明确表征和追求这些属性。
+
+\paragraph{如何衡量表示的好坏。}
+人们可以将给定的数据集视为高维空间（例如 $\R^D$）中具有某种分布的随机向量 $\vx$ 的样本。通常，$\vx$ 的分布的内在维度远低于环境空间的维度。一般来说，{\em 学习表示}（learning a representation）指的是学习一个连续映射，例如 $f(\cdot)$，将 $\vx$ 转换为另一个（通常是低维的）空间（例如 $\R^d$，其中 $d < D$）中的所谓 {\em 特征向量}（feature vector）$\vz$。人们希望通过这样的映射
+\begin{equation}
+    \vx \in \R^D \xrightarrow{\hspace{2mm} f(\vx)\hspace{2mm}}
+    \vz  \in \R^d,
+    \label{eqn:chap4-1-encoding}
+\end{equation}
+$\vx$ 的低维内在结构能够被识别出来，并由 $\vz$ 以一种更紧凑、更有结构的方式表示，从而促进分类或生成等后续任务。特征 $\vz$ 可以被视为原始数据 $\vx$ 的（学习到的）紧凑编码，因此映射 $f$ 也被称为 \textit{编码器}（encoder）。表征学习的基本问题是
+\begin{center}
+    \noindent{\em 衡量表示好坏的原则性且有效的标准是什么？}
+\end{center}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.8\linewidth]{\toplevelprefix/chapters/chapter4/figs/Gaussian-Subspaces.png}
+    \caption{从一般的随机高斯分布（右）开始，通过去噪或聚类识别具有两个子空间的低维分布（左）。}
+    \label{fig:Gaussian-Subspaces}
+\end{figure}
+
+从概念上讲，表示 $\vz$ 的质量取决于它能在多大程度上识别出 $\vx$ 中对后续任务最相关和最充分的信息，以及它表示这些信息的效率如何。长期以来，人们认为并主张，学习到的特征表示的“充分性”或“好坏”应该根据特定任务来定义。例如，在分类问题中，$\vz$ 只需要足以预测类别标签 $\y$ 即可。下面，让我们从经典的图像分类问题开始，并论证为什么这种特定于任务的“表示”概念是局限的，需要加以推广。
+
+\subsection{从分类数据中学习表示}
+
+假设 $\bm{x} \in \R^D$ 是从 $K$ 个（分量）分布的混合 $\mathcal{D} = \{\mathcal{D}_k\}_{k=1}^K$ 中抽取的随机向量。给定随机向量 $\bm x$ 的有限独立同分布（i.i.d.）样本集 $\vX = [\vx_1, \vx_2, \ldots, \vx_N] \in \Re^{D\times N}$，我们通过一个连续映射 $f(\vx): \R^D \rightarrow \R^d$ {\em 寻求一个好的表示}，该映射能够捕捉 $\vx$ 的内在结构，并最好地促进后续的分类任务。\footnote{分类是深度学习最初取得成功的领域，引发了人们对深度网络的爆炸性兴趣。尽管我们的研究侧重于分类，但我们相信这些思想和原则可以自然地推广到其他设置，例如回归。} 为了简化学习分布 $\mathcal{D}$ 的任务，在流行的监督分类设置中，为每个样本 $\vx_i$ 提供了一个真实的类别标签（或每个类别的码字），通常由一个独热（one-hot）向量 $\y_i \in \R^K$ 表示。
+
+\paragraph{通过交叉熵编码类别信息。} 广泛的研究表明，对于许多实际数据集（例如图像、音频和自然语言），从数据 $\bm{x}$ 到其类别标签 $\bm{y}$ 的（编码）映射可以通过训练深度网络来有效建模，\footnote{在这里，我们先不考虑应该使用哪种网络以及为什么。这里的目的是考虑任何经过经验测试的深度网络。我们将把网络架构的合理性论证留到下一章。} 这里记为 $$f(\vx, \theta):\vx \mapsto \y$$，其中网络参数 $\theta \in \Theta$，$\Theta$ 表示参数空间。为了使输出 $f(\vx, \theta)$ 与标签 $\y$ 良好匹配，我们希望在训练集 $\{(\vx_i, \y_i)\}_{i=1}^N$ 上最小化 {\em 交叉熵损失}（cross-entropy loss）：
+\begin{equation}
+    \min_{\theta \in \Theta} \; - \mathbb{E}[\langle \y, \log(f(\vx,
+    \theta)) \rangle] \, \approx - \frac{1}{N}\sum_{i=1}^N \langle
+    \y_i, \log\left(f(\vx_i, \theta)\right) \rangle.
+    \label{chap4-eqn:cross-entropy}
+\end{equation}
+最优网络参数 $\theta$ 通常通过高效的梯度下降方案优化上述目标来找到，其中梯度通过反向传播计算，如 \Cref{app:optimization} 的 \Cref{app:BP-section} 中所述。
+
+尽管这种方法有效且极受欢迎，但它存在两个严重的局限性：（1）它仅旨在预测标签 $\y$，即使它们可能被错误标记。实证研究表明，作为“黑盒”使用的深度网络甚至可以拟合随机标签~\cite{zhang2017understanding}。（2）通过这种端到端的数据拟合，尽管在尝试解释如此学习到的特征方面付出了大量的实证努力，%
+但尚不清楚网络学习到的中间特征在多大程度上捕捉了数据的内在结构，而正是这些结构使得有意义的分类成为可能。学习到的特征的精确几何和统计属性也往往被掩盖，这导致深度学习缺乏可解释性以及随后的性能保证（例如，泛化性、可迁移性和鲁棒性等）。因此，{\em 本节的目标之一是通过将目标重新表述为学习数据 $\vx$ 的明确有意义且有用的表示（不限于分类），来解决这些局限性。}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.95\linewidth]{\toplevelprefix/chapters/chapter4/figs/neural_collapse.pdf}
+    \caption{在包含 3 个随机选择类别的 CIFAR10 数据集上训练时，VGG13 神经网络倒数第二层输出的演变。图片来自 \cite{papyan2020prevalence}。}
+    \label{chap4-fig:neural-collapse}
+\end{figure}
+
+\paragraph{通过信息瓶颈获取最小判别特征。}
+解释深度网络作用的一种流行方法是将网络中间层的输出视为选择数据的某些潜在特征 $\vz = f(\vx, \theta) \in \Re^d$，这些特征在多个类别之间具有判别性。然后，学习到的表示 $\vz$ 通过优化分类器 $g(\vz)$ 来促进预测类别标签 $\y$ 的后续分类任务：
+\begin{equation}
+    \vx   \xrightarrow{\hspace{2mm} f(\vx, \theta)\hspace{2mm}} \vz
+    \xrightarrow{\hspace{2mm} g(\vz) \hspace{2mm}} \y.
+\end{equation}
+我们从 \eqref{eq:mutual} 中知道，两个随机变量（例如 $\vx,\vz$）之间的 {\em 互信息}（mutual information）定义为
+\begin{equation}
+    I(\vx; \vz) = H(\vx) - H(\vx\mid \vz),
+\end{equation}
+其中 $H(\vx \vert \vz)$ 是给定 $\vz$ 时 $\vx$ 的条件熵。互信息也称为 {\em 信息增益}（information gain）：它衡量了一旦给定 $\vz$，随机变量 $\vx$ 的熵可以减少多少。或者等价地，它衡量了 $\vz$ 包含多少关于 $\vx$ 的信息。{\em 信息瓶颈}（information bottleneck, IB）公式 \cite{Tishby-ITW2015} 进一步假设网络的作用是学习 $\vz$ 作为预测 $\y$ 的最小充分统计量。形式上，它寻求最大化 $\vz$ 和 $\y$ 之间的互信息 $I(\vz, \y)$，同时最小化 $\vx$ 和 $\vz$ 之间的互信息 $I(\vx, \vz)$：
+\begin{equation}
+    \max_{\theta\in \Theta}\; \mbox{IB}(\vx, \y, \vz) \doteq I(\vz; \y) -
+    \beta I(\vx; \vz) \quad\ \mathrm{s.t.}\ \vz = f(\vx, \theta),
+    \label{chap4-eqn:information-bottleneck}
+\end{equation}
+其中 $\beta >0$。
+
+假设人们能够克服与该框架相关的一些注意事项 \cite{kolchinsky2018caveats-ICLR2018}，例如如何用退化分布的有限样本准确评估互信息，该框架可能有助于解释深度网络的某些行为。例如，最近的工作 \cite{papyan2020prevalence} 确实表明，通过交叉熵损失 \eqref{chap4-eqn:cross-entropy} 学习到的表示表现出一种 \emph{神经坍缩}（neural collapse）现象。也就是说，每个类别的特征被映射到一个一维向量，而该类别的所有其他信息都被抑制了，如 \Cref{chap4-fig:neural-collapse} 所示。\footnote{我们稍后将在第 \ref{eg:Rate-Reduction-CIFAR10} 节的真实图像数据实验中观察到这种现象。}
+\begin{remark}[神经坍缩]
+    神经坍缩（Neural collapse）是指在为分类而训练的深度神经网络中观察到的一种现象，其中学习到的特征表示和分类器权重在训练的末期表现出高度对称和结构化的行为 \cite{papyan2020prevalence,zhu2021geometric,yaras2022neural}。具体而言，在每个类别内部，特征坍缩到它们的类别均值；而在类别之间，这些均值变得最大程度地分离，形成一个单纯形等角配置（simplex equiangular configuration）。线性分类器在重新缩放的意义下与类别均值对齐。此外，最后一层分类器收敛于选择具有最近训练类别均值的类别。神经坍缩揭示了监督学习中出现的优化动力学、泛化和几何结构之间的深刻联系。
+    \label{remark:neural-collapse}
+\end{remark}
+
+从上述分类的例子中，我们看到如此学习到的 $\vx$ 的表示 $\vz$ 提供了一个非常简单的编码器，它本质上将每个类别的数据仅映射到一个码字：代表每个类别的独热向量。从有损压缩的角度来看，这样的编码器损失太大，无法保留数据分布中的信息。其他信息，例如对图像分割、补全或生成等任务有用的信息，在这种监督学习过程中严重丢失。
+
+为了弥补这种情况，我们希望学习一种不同的编码方案，使得生成的特征表示 $\vz$ 能够尽可能多地捕捉关于数据分布的信息，而不仅限于对分类有用的信息。更准确地说，我们希望表示 $\vz = f(\vx, \theta)$ 使得存在一个解码器 $g(\vz,\eta)$ 满足：
+\begin{equation}
+    \|\vx - \hat \vx\|_2 \le \epsilon \quad \mbox{s.t.} \quad \hat{\vx}
+    = g(f(\vx)).
+\end{equation}
+我们将在第 \ref{ch:consistent-representations} 章中正式将这种编码-解码方案介绍为“自编码器”（autoencoder），并将这种表示 $\vz$ 介绍为“一致的”（consistent）表示。目前，读者可以简单地将其视为对上一节中为率失真（在原始数据 $\vx$ 域中）引入的量化码 $\hat \vx$ 的推广。
+
+在信息瓶颈 \eqref{chap4-eqn:information-bottleneck} 的公式中，它并不要求学习到的特征表示 $\vz$ 是一致的。因此，至少应该用一个（一致的）表征学习（RL）目标来修正它：
+\begin{eqnarray}
+    \max_{\theta,\eta}\; \mbox{RL}(\vx, \y, \vz) \doteq I(\vz; \y) - \beta
+    I(\vx; \vz) \nonumber \\ \mathrm{s.t.}\quad  \vz = f(\vx,\theta),\quad
+    \|\vx - g(\vz, \eta) \|_2 \le \epsilon.
+    \label{chap4-eqn:representation-learning}
+\end{eqnarray}
+在最一般的设置下解决上述问题是一项非常艰巨的任务。通常，我们甚至不知道哪些类别的编码器或解码器可以确保一致性\footnote{在实践中，人们倾向于通过试错法独立于上述目标来学习它们，正如我们将在第 \ref{ch:consistent-representations} 章中进一步讨论的那样。}。此外，由于我们不知道表示 $\vz$ 的分布，计算互信息 $I(\vz;\y)$ 即使不是不可能，也是非常具有挑战性的。
+
+在我们研究如何在一般设置下处理这个问题（在后面的章节中）之前，在本章的其余部分，我们将演示在数据分布由清晰的（低维）类别组成的特殊设置下，如何在某种有限的程度上解决它。
+
+\subsection{线性判别表示}\label{subsec:LDR}
+
+混合分布 $\mathcal{D}$ 的给定数据 $\vX$ 能否被有效地分类或聚类，取决于分量分布 $\mathcal{D}_k$ 的可分离性（或判别性）有多强（或能被变得多强）。一个流行的工作假设是，每个类别的分布都具有相对 {\em 低维} 的内在结构。因此，我们可以假设每个类别的分布 $\mathcal{D}_k$ 的支撑集位于一个低维子流形上，例如维度为 $d_k \ll D$ 的 $\mathcal{M}_k$，并且 $\vx$ 的分布 $\mathcal D$ 的支撑集位于高维环境空间 $\Re^D$ 中这些子流形的混合 $\mathcal M = \cup_{k=1}^K \mathcal{M}_k$ 上，如前面图 \ref{fig:representation-learning} 所示。
+
+我们不仅需要识别低维分布，还希望以最有利于后续任务（如分类、聚类和条件生成，正如我们将来会看到的）的形式来表示该分布。为此，我们要求学习到的特征表示具有以下属性：
+\begin{enumerate}
+    \item {\em 类内可压缩（Within-Class Compressible）：} 来自同一类别的样本特征应该具有强 {\em 相关性}，即它们属于一个低维线性子空间。
+    \item {\em 类间具判别性（Between-Class Discriminative）：} 来自不同类别的样本特征应该高度 {\em 不相关}，并且属于不同的不相干低维线性子空间。
+    \item {\em 最大化多样性表示（Maximally Diverse Representation）：} 只要每个类别的特征与其他类别不相干，其维度（或方差）应该 {\em 尽可能大}。
+\end{enumerate}
+我们将这种表示称为 {\em 线性判别表示}（linear discriminative representation, LDR）。
+
+请注意，第一个属性与我们在 \Cref{sub:pca} 中讨论的经典 {\em 主成分分析}（PCA）的目标非常吻合。它本质上是说，属于同一类别的样本\footnote{包括相同样本的增强实例}的特征应该变得或被变得高度相关。换句话说，特征表示对于相似的样本应该是 {\em 收缩的}（contractive）。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{\toplevelprefix/chapters/chapter4/figs/mcr_diagram.png}
+    \caption{高维数据 $\vx\in \Re^D$ 的分布 $\mathcal D$ 支撑在流形 $\mathcal{M}$ 上，其类别支撑在低维子流形 $\mathcal{M}_k$ 上。我们的目标是学习一个由 $\theta$ 参数化的映射 $f(\vx, \theta)$，使得 $\vz_i = f(\vx_i, \theta)$ 位于最大程度不相关的子空间 $\{\mathcal{S}_k\}$ 的并集上。}
+    \label{chap4-fig:mcr-diagram}
+\end{figure}
+
+第二个属性要求，对于属于不同类别或被认为不相似的样本，它们的特征应该被变得（几何上）不相干或（统计上）独立，如前面图 \ref{fig:representation-learning} 所示。\Cref{chap4-fig:mcr-diagram} 说明了当数据分布实际上是低维子流形的混合时的情况。通过压缩（去噪或聚类），我们首先识别出真实的数据分布（左）。然后我们希望对分布进行变换，使得子流形最终成为相互不相干/独立的线性子空间（右）。
+
+\begin{remark}[线性判别分析]
+    人们可能会注意到，第二个标准类似于经典的 {\em 线性判别分析}（LDA）~\cite{HastieTiFr09}。线性判别分析（LDA）~\cite{HastieTiFr09} 是一种监督降维技术，旨在找到最大化类别可分性的数据线性投影。具体而言，给定标记数据，LDA 寻求一种线性变换，将高维输入投影到较低维空间，在该空间中类别被最大程度地分离。请注意，PCA 是一种无监督方法，它将数据投影到最大方差的方向上，而不考虑类别标签。虽然 PCA 纯粹专注于保留全局方差结构，但 LDA 明确利用标签信息来增强判别能力；参见 \Cref{fig:LDA} 中的比较。
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.75\linewidth]{\toplevelprefix/chapters/chapter4/figs/LDA.png}\vspace{-0.1in}
+        \caption{PCA 和 LDA 之间的比较。图片采用自 \url{https://sebastianraschka.com/Articles/2014_python_lda.html}。}
+        \label{fig:LDA}
+    \end{figure}
+    但是 LDA 仅对原始数据执行线性投影。正如我们将看到的，LDR 可以更一般化：它寻求一种（可能是非线性的）变换，以使生成的表示是线性的且不相干的。
+\end{remark}
+
+\begin{remark}[对比学习]
+    人们可能会注意到，传统的 {\em 对比学习}（contrastive learning）\citep{hadsell2006dimensionality,Van_den_Oord2018-qf,he2019momentum} 旨在实现与前两个属性所规定的特征表示相似的目标。对于属于 $k$ 个不同类别的数据，如果 $k$ 很大，随机选择的一对 $(\vx_i, \vx_j)$ 属于不同类别的概率很高。\footnote{例如，当 $k \ge 100$ 时，随机一对属于不同类别的概率为 99\%。} 因此，理想情况下，样本 $\vx_i$ 的表示 $\vz_i = f(\vx_i, \bm \theta)$ 应该与其他样本 $\vx_j$ 的表示 $\vz_j$ 高度不相干，而与其变换版本 $\tau(\vx_i)$ 的特征（记为 $\vz(\tau(\vx_i))$，其中 $\tau$ 属于所考虑的某个增强集 $\mathcal T$）相干。因此，启发式地提出，为了提升学习到的表示的判别性，人们可以寻求最小化所谓的 {\em 对比损失}（contrastive loss）：
+    \begin{equation}
+        \min_{\bm \theta} - \log \frac{\exp(\langle \vz_i,
+        \vz(\tau(\vx_i))\rangle)}{\sum_{j\not= i} \exp(\langle \vz_i,
+        \vz_j\rangle)},
+        \label{eqn:contrastive-loss}
+    \end{equation}
+    只要内积 $\langle \vz_i, \vz(\tau(\vx_i))\rangle$ 很大且对于 $i \not= j$ 的 $\langle \vz_i, \vz_j\rangle$ 很小，该损失就很小。这种对比损失及其许多变体已广泛用于流行的（自监督）特征学习方法中，例如用于视觉数据的 DINO 类型特征 \cite{caron2021unsupervisedlearningvisualfeatures,DINOv2}。正如我们将看到的，基于上一节研究的有损编码框架，我们将能够得出一个原则性的目标函数，该函数不仅促进了这两个属性，同时还显著简化了诸如学习 DINO 类型特征的实践（正如我们将在第 \ref{ch:applications} 章中详细介绍的那样）。
+\end{remark}
+
+第三个属性也很重要，因为我们希望学习到的特征能够揭示一个类别不同于所有其他类别的所有可能原因。例如，为了区分“苹果”和“橘子”，我们不仅关心颜色，还关心形状和叶子。理想情况下，每个子空间 $\{\mathcal{S}_k\}$ 的维度应该等于相应子流形 $\mathcal{M}_k$ 的维度。如果我们希望映射 $f(\vx,\theta)$ 对于图像生成等任务是 {\em 可逆的}，那么这个属性将非常重要。例如，如果我们从“苹果”的特征子空间中抽取不同的样本点，我们应该能够通过逆映射 $g(\vz, \eta)$ 对它们进行解码，以生成各种各样的苹果图像。这样一对互逆映射 $f$ 和 $g$ 构成了一个自编码（autoencoding），我们将在第 \ref{ch:consistent-representations} 章中详细研究。请注意，通过最小化交叉熵 \eqref{chap4-eqn:cross-entropy} 学习到的特征表示通常不具备此属性，因为它们会遭受前面讨论的所谓 {\em 神经坍缩} 现象（见注 \ref{remark:neural-collapse}）。
+
+一般来说，尽管每个类别/聚类的内在结构可能是低维的，但它们在其原始表示 $\vx$ 中绝不是简单的线性（或高斯）的，它们需要首先通过某种非线性变换被变得线性。\footnote{我们将在 \Cref{ch:consistent-representations} 中明确讨论如何做到这一点。} 因此，总的来说，我们使用非线性变换 $f(\vx,\theta)$ 来寻求数据的表示，使得代表所有类别的子空间是最大程度不相干的线性子空间。更准确地说，我们希望学习一个映射 {$\vz = f(\vx,\theta)$}，将每个子流形 $\mathcal{M}_k \subset \Re^D$（\Cref{chap4-fig:mcr-diagram} 左）映射到一个 {\em 线性} 子空间 $\mathcal{S}_k \subset \Re^d$（\Cref{chap4-fig:mcr-diagram} 右）。在某种程度上，生成的多个子空间 $\{\mathcal{S}_k\}$ 可以被视为原始数据 $\bm x$ 的生成特征 $\vz$ 的具判别性的 {\em 广义主成分}（generalized principal components）\cite{GPCA}，或者如果它们是正交的，则可视为 {\em 独立成分}（independent components）\cite{hyvarinen2000independent}。正如我们将在下一章 \Cref{ch:deep-networks} 中看到的，深度网络恰好扮演了建模并实现这种从数据分布到线性判别表示的非线性变换的角色。
+
+\subsection{最大编码率降低原理}\label{subsec:MCR2}
+
+尽管线性判别表示（LDR）的三个属性——{\em 类间具判别性}、{\em 类内可压缩} 和 {\em 最大化多样性表示}——都是学习到的表示 $\vz$ 极度渴望的属性，但它们绝不容易获得：这些属性是否兼容，以至于我们可以期望一次性实现它们？如果是这样，是否存在一个 {\em 简单但有原则的} 目标，可以根据所有这些属性来衡量生成的表示的好坏？这些问题的关键 {在于找到} 一个针对随机变量 $\vz$ 的分布或其有限样本 $\{\bm z_i\}_{i=1}^N$ 的原则性“紧凑性度量”或“信息增益”。这种度量应该根据其内在维度或 {体积}，直接且准确地表征分布的内在几何或统计属性。与交叉熵 \eqref{chap4-eqn:cross-entropy} 或信息瓶颈 \eqref{chap4-eqn:information-bottleneck} 不同，这种度量不应完全依赖于类别标签，以便它可以在更一般的设置中工作，例如监督、自监督、半监督和无监督设置（正如我们将在后面的小节中看到的）。
+
+不失一般性，假设随机向量 $\vx$ 的分布 $\mathcal D$ 支撑在分布的混合上，即 $\mathcal D = \cup_{k=1}^K \mathcal{D}_k$，其中每个 $\mathcal{D}_k \subset \Re^D$ 在高维环境空间 $\Re^D$ 中具有较低的内在维度。令 $\bm X_k \in \Re^{D\times N_k}$ 表示数据矩阵，其列是从分布 $\mathcal{D}_k$ 中抽取的样本，其中 $N_k$ 表示每个 $k=1,\dots,K$ 的样本数量。然后，我们使用 $\bm X=[\bm X_1,\dots,\bm X_K] \in \Re^{D\times N}$ 来表示所有样本，其中 $N=\sum_{k=1}^K N_k$。回想一下，我们也使用 $\vx_i$ 来表示 $\vX$ 的第 $i$ 个样本，即 $\vX=[\vx_1,\dots,\vx_N]$。在编码映射下：
+\begin{equation}
+    \vx  \xrightarrow{\hspace{2mm} f(\vx)\hspace{2mm}} \vz,
+\end{equation}
+对于每个 $i=1,\dots,N$，输入样本被映射为 $\vz_i = f(\vx_i)$。滥用一下符号，我们也写成 $\vZ_k = f(\vX_k)$ 和 $\vZ = f(\vX)$。因此，我们有 $\vZ = [\bm Z_1,\dots,\bm Z_K]$ 和 $\vZ = [\vz_1,\dots\vz_N]$。
+
+一方面，为了使学习到的特征具有判别性，不同类别/聚类的特征最好彼此 {\em 最大程度不相干}。因此，它们一起应该张成一个具有最大可能体积（或维度）的空间，并且整个集合 $\vZ$ 的编码率应该尽可能大。另一方面，同一类别/聚类的学习特征应该高度相关且相干。因此，每个类别/聚类应该只张成一个体积非常小的空间（或子空间），并且编码率应该尽可能小。现在，我们将介绍如何衡量学习特征的编码率。
+
+\paragraph{特征的编码率。} 值得注意的是，评估编码率的一个实际挑战是特征表示 $\vZ$ 的潜在分布通常是未知的。为了解决这个问题，我们可以将特征 $\vZ = [\vz_1, \ldots, \vz_N]$ 近似为从多元高斯分布中抽取的样本。在此假设下，正如在 \Cref{subsec:lossy DR} 中所讨论的，特征 $\vZ$ {\em 作为一个整体} 的紧凑性可以根据每个样本的平均编码长度来衡量，称为 {\em 编码率}（coding rate），受限于精度水平 $\epsilon > 0$（见 \eqref{eqn:rate-Gaussian}），定义如下：
+\begin{equation}
+    R_{\epsilon}(\vZ) = \frac{1}{2}\log\det\left(\I +
+    \frac{d}{N\epsilon^{2}}\vZ\vZ^{\top}\right).
+    \label{chap4-eqn:coding-length-eval}
+\end{equation}
+
+另一方面，我们希望非线性变换 $f(\vx)$ 将每个特定类别的子流形 $\mathcal{M}_k \subset \R^D$ 映射到最大程度不相干的线性子空间 $\mathcal{S}_k \subset \R^d$，使得学习到的特征 $\vZ$ 位于低维子空间的并集中。这种结构允许通过单独分析每个子空间来更准确地评估编码率。%
+回想一下，$\vZ_k$ 的列表示每个 $k=1,\dots,K$ 的 $\vX_k$ 中样本的特征。$\bm Z_k$ 中特征的编码率可以计算如下：
+\begin{align}
+    R_{\epsilon}(\vZ_k) = \frac{N_k}{2N}\log\det\left(\I +
+    \frac{d}{N_k\epsilon^{2}}\vZ_k\vZ_k^{\top}\right)
+\end{align}
+那么，每个类别中特征的平均编码率之和为
+\begin{equation}
+    R_{\epsilon}^c(\vZ) \doteq \sum_{k=1}^K R_{\epsilon}(\vZ_k),
+    \label{chap4-eqn:compress-loss-eval}
+\end{equation}
+
+因此，$\vX$ 的一个好的表示 $\vZ$ 是能够在整体编码率和所有类别的编码率之间实现巨大差异的表示：
+\begin{equation}
+    \Delta R_{\epsilon}(\vZ) \doteq R_{\epsilon}(\vZ) - R_{\epsilon}^c(\vZ).
+    \label{chap4-eqn:coding-length-reduction}
+\end{equation}
+请注意，根据我们在本章前面的讨论，这种差异可以解释为通过在整个集合 $\vZ$ 中识别出正确的低维聚类 $\vZ_k$ 所获得的“信息增益”量。
+
+如果我们选择特征映射 $f(\cdot)$ 为具有网络参数 $\theta$ 的深度神经网络 $f(\cdot,\theta)$，则特征表示的整个过程以及由此产生的率降低可以通过下图说明：
+\begin{equation}
+    \vX
+    \xrightarrow{\hspace{2mm} f(\vx, \theta)\hspace{2mm}} \vZ
+    \xrightarrow{\hspace{2mm} \epsilon \hspace{2mm}} \Delta
+    R_{\epsilon}(\vZ).
+    \label{chap4-eqn:flow}
+\end{equation}
+请注意，$\Delta R_{\epsilon}$ 在特征 $\vZ$ 的尺度上是 {\em 单调的}。为了确保不同表示之间的公平比较，必须对学习到的特征 {\em 进行尺度归一化}。这可以通过强制每个类别 $\vZ_k$ 的 Frobenius 范数与 $\vZ_k \in \mathbb R^{d \times N_k}$ 中的特征数量成比例来实现，即 $\|\vZ_k\|_F^2 = N_k$，或者通过将每个特征归一化到单位球面上来实现，即 $\vz_i \in \mathbb{S}^{d-1}$，其中 $N_k$ 表示第 $k$ 个类别中的样本数量。这种表述为在训练深度神经网络的实践中需要“批量归一化”（batch normalization）提供了自然的理由 \cite{ioffe2015batch}。%
+
+一旦表示具有可比性，目标就变成了学习一组特征 $\vZ  = f(\vX, \theta)$，使得它们最大化所有特征的编码率与其按类别划分的特征编码率之和之间的降低量：
+\begin{equation}
+    \begin{aligned}
+        \max_{\theta } & \;  \Delta R_{\epsilon}\big(\vZ \big) \doteq
+        R_{\epsilon}(\vZ) - R_{\epsilon}^c(\vZ ), \\
+        \mbox{s.t.} & \ \ \, \vZ = f(\bm X, \theta),\  \|\vZ_k\|_F^2
+        = N_k,\ k=1,\dots,K.
+    \end{aligned}
+    \label{eqn:maximal-rate-reduction}
+\end{equation}
+我们将此称为 {\em 最大编码率降低}（maximal coding rate reduction, MCR$^2$）原理，它是亚里士多德名言的体现：
+\begin{quote}
+    \centering
+    “{\em 整体大于部分之和。}”
+\end{quote}
+为了学习最佳表示，我们要求 {\em 整体最大程度地大于部分之和}。在很大程度上，量 $\Delta R$ 可以被视为目标 \eqref{chap4-eqn:representation-learning} 中引入的互信息项 $I(\vz; \y)$ 的可计算实现。
+
+\begin{example}
+    为了进一步阐明这些想法，让我们检查 \Cref{fig:informative-representation} 中所示的例子。
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=0.99\linewidth]{\toplevelprefix/chapters/chapter4/figs/Expansion2.png}
+        \caption{在识别出低维数据分布之后，我们希望进一步将数据分布转换为更具信息量的结构表示：$R$ 是覆盖整个空间的 $\epsilon$-球的数量，$R^c$ 是所有子空间（绿球）的数量之和。$\Delta R$ 是它们的差值（蓝球的数量）。
+        }\label{fig:sphere-packing}
+        \label{fig:informative-representation}
+    \end{figure}
+    从压缩的角度来看，右侧的表示是 {\em 最紧凑的}，其意义在于，当所有特征被编码为单个高斯分布（蓝色）时的编码率，与特征被正确聚类并编码为两个独立子空间（绿色）时的编码率之间的差异是最大的。\footnote{直观地说，所有特征张成的整个空间的“体积”与特征实际占据的体积之间的比率是最大的。}
+\end{example}
+
+请注意，上述 MCR$^2$ 原理是为监督学习问题设计的，其中组隶属度（或类别标签）是已知的。然而，通过引入一个隶属度矩阵，该原理可以自然地扩展到无监督学习问题，该矩阵编码了每个数据点到潜在组或聚类的（可能是软的）分配。具体而言，令 $\bm \Pi = \{\bm \Pi_k\}_{k=1}^K \subset \R^{N\times N}$ 为一组对角矩阵，其对角线元素编码了 $N$ 个样本到 $K$ 个类别的隶属度。也就是说，$\bm \Pi$ 位于单纯形 $\Omega \doteq \{\bm \Pi: \bm \Pi_k \ge \bm 0: \sum_{k=1}^K \bm \Pi_k = \bm I_N\}$ 中。然后，我们可以定义关于划分 $\bm \Pi$ 的平均编码率为
+\begin{align}\label{eq:MCRc}
+    R_{\epsilon}^c(\vZ \mid \bm \Pi) \doteq \sum_{k=1}^K
+    \frac{\mathrm{tr}(\bm \Pi_k)}{2N}\log\det\left(\bm I +
+        \frac{d}{\mathrm{tr}(\bm \Pi_k)\epsilon^2}\bm Z\bm \Pi_k \bm
+    Z^\top \right).
+\end{align}
+当给定 $\bm Z$ 时，$R_{\epsilon}^c(\vZ \vert \bm \Pi)$ 是关于 $\bm \Pi$ 的凹函数。那么用于无监督学习问题的 MCR$^2$ 原理变为如下形式：
+\begin{align}\label{eq:MCR pi}
+    \max_{\bm \Pi, \theta} & \  \Delta R_{\epsilon}\big(\vZ  \mid \bm \Pi)
+    \doteq R_{\epsilon}(\bm Z) - R_{\epsilon}^c(\vZ \mid \bm \Pi) \notag \\
+    \mathrm{s.t.}  & \ \ \ \bm Z = f(\bm X, \theta),\ \|\bm Z \bm
+    \Pi_k\|_F^2 = N_k,\ k = 1,\dots,K,\ \bm\Pi \in \Omega.
+\end{align}
+与 \eqref{eqn:maximal-rate-reduction} 相比，这里的公式允许联合优化组隶属度和网络参数。特别是，当 $\bm \Pi$ 固定为将 $N$ 个数据点分配到 $K$ 个组的组隶属度矩阵时，问题 \eqref{eq:MCR pi} 可以恢复为问题 \eqref{eqn:maximal-rate-reduction}。
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.9\linewidth]{\toplevelprefix/chapters/chapter4/figs/mcr2-global.png}
+    \caption{{\bf 局部优化景观：} 根据 \Cref{thm:MCR2-properties}，率降低目标的全局最大值对应于具有相互不相干子空间的解。}
+    \label{fig:mcr-global}
+\end{figure}
+
+\vspace{-0.1in}
+
+\subsection{编码率降低的优化属性}
+\label{sec:MCR-landscape}
+
+在本小节中，我们通过分析 MCR$^2$ 函数的最优解及其优化景观的结构来研究其优化属性。为了避开神经网络引入的技术困难，我们考虑问题 \eqref{eqn:maximal-rate-reduction} 的简化版本如下：
+\begin{align}\label{eqn1:maximal-rate-reduction}
+    \max_{\bm Z}\ R_{\epsilon}(\vZ) - R_{\epsilon}^c(\vZ)\qquad
+    \mathrm{s.t.}\quad \|\bm Z_k\|_F^2 = N_k,\ k =1,\dots,K.
+\end{align}
+理论上，MCR$^2$ 原理 \eqref{eqn1:maximal-rate-reduction} 受益于极大的泛化能力，并且可以应用于 {\em 任何} 分布的表示 $\vZ$，只要这些分布的率 $R_\epsilon$ 和 $R^c_\epsilon$ 能够被准确且高效地评估。最优表示 $\vZ^{\ast}$ 应该具有一些有趣的几何和统计属性。我们在这里通过子空间的特例揭示了最优表示的良好属性，子空间在机器学习中有许多重要的用例。当 $\vZ$ 的期望表示是多个子空间时，\eqref{eqn1:maximal-rate-reduction} 中的率 $R_\epsilon$ 和 $R^c_\epsilon$ 分别由 \eqref{chap4-eqn:coding-length-eval} 和 \eqref{chap4-eqn:compress-loss-eval} 给出。在最大率降低时，MCR$^2$ 实现了其最优表示，记为 $\vZ^{\ast} = [\vZ_1^*,\dots,\vZ_K^*]$，其中 $\rank{(\vZ_{k}^*)}\le d_k$。可以证明 $\vZ^{\ast}$ 具有以下期望的属性（正式陈述和详细证明见 \cite{yu2020learning}）。
+
+\begin{theorem}[\bf 全局最优解的表征]
+    假设 $\vZ^{\ast} = [\vZ_1^*,\dots,\vZ_K^*]$ 是问题~\eqref{eqn1:maximal-rate-reduction} 的全局最优解。以下陈述成立：
+    \begin{itemize}
+        \item {\em 类间具判别性}：只要环境空间足够大（$d \ge \sum_{k=1}^{K} d_k$），子空间彼此之间都是正交的，{\em 即}，对于 $k \not= l$，有 $(\vZ_{k}^*)^{\top} \vZ_{l}^* = \bm{0}$。
+        \item {\em 最大化多样性表示}：
+            只要编码精度足够高，即 $\epsilon ^4 < c\cdot \min_{k}\left\{ \frac{N_k}{N}\frac{d^2}{d_k^2}\right\}$，其中 $c>0$ 是一个常数。每个子空间都达到其最大维度，即 $\mathrm{rank}{(\vZ_{k}^*)}= d_k$。此外，$\vZ_{k}^*$ 的最大的 $d_k-1$ 个奇异值相等。
+            \label{thm:MCR2-properties}
+    \end{itemize}
+\end{theorem}
+
+该定理表明，MCR$^2$ 原理促进了将数据嵌入到多个独立的子空间中（如 \Cref{fig:mcr-global} 所示），并且特征在每个子空间中呈 {\em 各向同性} 分布（可能除了一个维度之外）。值得注意的是，该定理还证实了通过 MCR$^2$ 原理学习到的特征表现出 \Cref{subsec:LDR} 中讨论的期望的低维判别属性。此外，在所有此类判别表示中，它偏好在环境空间中具有最高维度的表示。这与信息瓶颈~\eqref{chap4-eqn:information-bottleneck} 的目标有本质的不同。
+
+\paragraph{正则化 MCR$^2$。}
+上述定理表征了率降低目标的全局最优解的属性。那么其他最优解（例如局部最优解）呢？由于 Frobenius 范数的约束，从优化理论的角度分析问题 \eqref{eqn1:maximal-rate-reduction} 是一项困难的任务。因此，我们考虑 \eqref{eqn1:maximal-rate-reduction} 的拉格朗日公式。这可以被视为 \eqref{eqn1:maximal-rate-reduction} 的紧松弛甚至等价问题，在正则化参数的特定设置下，它们的最优解是一致的；参见 \cite[Proposition 3.2]{wang2024global}。具体而言，我们研究的公式（此后称为 \textit{正则化 MCR$^2$ 问题}）如下：
+\begin{align}\label{eq:MCR-reg}
+    \max_{\bm Z}\ R_{\epsilon}(\vZ) - R_{\epsilon}^c(\vZ) -
+    \frac{\lambda}{2}\|\bm Z\|_F^2,
+\end{align}
+其中 $\lambda > 0$ 是正则化参数。尽管规划 \eqref{eq:MCR-reg} 是高度非凹的，并且在其梯度计算中涉及矩阵求逆，我们仍然可以明确地表征其局部和全局最优解如下（详细证明见 \cite[Theorem 3.1]{wang2024global}）。
+
+\begin{theorem}[\bf 局部和全局最优解]\label{thm:mcr-global-opt}
+    令 $N_k$ 表示每个 $k \in \{1,\dots,K\}$ 的第 $k$ 个类别中的训练样本数，$N_{\max} \doteq \max\{N_1,\dots,N_K\}$，$\alpha=d/(N\epsilon^2)$，以及对于每个 $k \in \{1,\dots,K\}$ 的 $\alpha_{k} = d/(N_k\epsilon^2)$。给定编码精度 $\epsilon > 0$，如果正则化参数满足
+    \begin{align}\label{eq:lambda}
+        \lambda \in \left(0,
+            \frac{d(\sqrt{N/N_{\max}}-1)}{N(\sqrt{N/N_{\max}}+1)\epsilon^2}
+        \right],
+    \end{align}
+    则以下陈述成立：\\
+    (i) ({\bf 局部最大值点}) $\bm Z^* = \left[\bm Z_1^*,\dots,\bm Z_K^* \right]$ 是问题 \eqref{eq:MCR-reg} 的局部最大值点，当且仅当第 $k$ 个块允许以下分解
+    \begin{align}\label{eq:Zk opti}
+        \bm Z_k^* = \left(\frac{ \eta_k + \sqrt{\eta_k^2 -
+        4\lambda^2N/N_k}}{2\lambda \alpha_{k}}\right)^{1/2} \bm
+        U_k \bm V_k^\top,
+    \end{align}
+    其中 (a) $r_k = \mathrm{rank}(\bm Z_k^*)$ 满足 $r_k \in [0,\min\{N_k,d\})$ 且 $\sum_{k=1}^K r_k \le \min\{N,d\}$，(b) $\bm U_k \in \mathcal{O}^{d \times r_k}$ 满足对于所有 $k \neq l$ 有 $\bm U_k^{\top}\bm U_l = \bm 0$，$\bm V_k \in \mathcal{O}^{N_k \times r_k}$，以及 (c) 对于每个 $k\in \{1,\dots,K\}$，$\eta_k := (\alpha_k-\alpha) - \lambda(N/N_k+1)$。
+    \\
+    (ii) ({\bf 全局最大值点}) $\bm Z^* = \left[\bm Z_1^*,\dots,\bm Z_K^* \right]$ 是问题 \eqref{eq:MCR-reg} 的全局最大值点，当且仅当 (a) 它满足上述所有条件且 $\sum_{k=1}^K r_k = \min\{m,d\}$，以及 (b) 对于所有满足 $N_k < N_l$ 且 $r_l > 0$ 的 $k \neq l \in [K]$，我们有 $r_k = \min\{N_k,d\}$。
+\end{theorem}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.9\linewidth]{\toplevelprefix/chapters/chapter4/figs/mcr2-global-local.png}
+    \caption{{\bf 全局优化景观：} 根据 \cite{sun2015nonconvex,lee2016gradient}、\Cref{thm:mcr-global-opt,thm:mcr-benign-opt-landscape}，（正则化）率降低目标的全局和局部最大值都对应于具有相互不相干子空间的解。所有其他临界点都是严格鞍点。}
+    \label{fig:mcr-global-local}
+\end{figure}
+
+该定理明确表征了问题 \eqref{eq:MCR-reg} 的局部和全局最优解。直观地说，这表明由问题 \eqref{eq:MCR-reg} 的每个局部最大值点表示的特征是低维且具判别性的。尽管我们在定理~\ref{thm:mcr-global-opt} 中表征了局部和全局最优解，但仍然未知是否可以使用梯度下降（GD）高效地计算这些解来解决问题 \eqref{eq:MCR-reg}，因为 GD 可能会卡在其他临界点（如鞍点）上。幸运的是，\cite{sun2015nonconvex,lee2016gradient} 表明，如果一个函数是二次连续可微的并且满足 {\em 严格鞍点属性}（strict saddle property），即每个临界点要么是局部最小值点，要么是严格鞍点\footnote{如果问题 \eqref{eq:MCR-reg} 的临界点具有严格正曲率的方向~\cite{sun2015nonconvex}，我们称其为严格鞍点。这包括具有严格正曲率的经典鞍点以及局部最小值点。}，那么在随机初始化的情况下，GD 几乎必然收敛到其局部最小值点。我们通过表征问题 \eqref{eq:MCR-reg} 的所有临界点来研究其全局优化景观如下（详细证明见 \cite[Theorem 3.3]{wang2024global}）。
+
+\begin{theorem}[\bf 良性全局优化景观]\label{thm:mcr-benign-opt-landscape}
+    给定编码精度 $\epsilon > 0$，如果正则化参数满足 \eqref{eq:lambda}，则问题 \eqref{eq:MCR-reg} 的任何临界点 $\bm Z$ 要么是局部最大值点，要么是严格鞍点。
+\end{theorem}
+综合起来，上述两个定理表明，与率降低目标的每个局部最大值点（不仅是全局最大值点）相关联的学习特征都被结构化为不相干的低维子空间。此外，（正则化）率降低目标 \eqref{eqn:maximal-rate-reduction} 具有非常良性的景观，仅有局部最大值点和严格鞍点作为临界点，如 \Cref{fig:mcr-global-local} 所示。根据 \cite{sun2015nonconvex,lee2016gradient}，\Cref{thm:mcr-global-opt,thm:mcr-benign-opt-landscape} 意味着通过从随机初始化开始对率降低目标 \eqref{eqn:maximal-rate-reduction} 应用（随机）梯度下降，可以高效地找到低维且具判别性的表示（LDR）。这些结果也间接解释了为什么在 \Cref{eg:Rate-Reduction-CIFAR10} 中，如果选择的网络具有足够的表达能力并且训练良好，生成的表示通常会给出一个不相干的线性表示，这很可能对应于全局最优解。感兴趣的读者可以参考 \cite{wang2024global} 获取证明。
+
+\section{学习图像数据的表示}
+\label{sec:representations-image}
+\subsection{监督表征学习}
+\label{sec:MCR2-classification}
+\label{eg:Rate-Reduction-CIFAR10}
+
+我们在这里展示 MCR$^2$ 目标 \eqref{eqn:maximal-rate-reduction} 如何帮助学习比交叉熵（CE）\eqref{chap4-eqn:cross-entropy} 更好的图像分类表示。在这里，为了简单起见，\footnote{我们将在下一章 \Cref{ch:deep-networks} 中严格研究并论证如何从 MCR$^2$ 目标出发并为其设计或推导合适的深度架构。} 我们采用流行的神经网络架构 ResNet-18~\cite{he2016deep} 来对特征映射 $\vz = f(\vx,\theta)$ 进行建模。我们通过反向传播算法（详见附录 \ref{app:BP-section}）优化神经网络参数 $\theta$，以最大化编码率降低。关于此实验的更多实现细节可以在 \cite{chan2021redunet} 中找到。
+
+\Cref{fig:train-test-loss} 说明了两个率及其差值（对于训练和测试数据）在训练周期中的演变情况：在初始阶段之后，$R_\epsilon$ 逐渐增加而 $R^c_\epsilon$ 减少，这表明特征 $\bm Z$ 作为一个整体正在扩展，而每个类别 $\bm Z_k$ 正在被压缩。
+
+我们首先使用 CIFAR10 图像分类数据集~\cite{krizhevsky2009learning} 评估性能，结果显示在图 \ref{fig:CIFAR10-performance} 的表格中。正如我们所看到的，MCR$^2$ 目标实现了与交叉熵（CE）损失相当的性能。此外，MCR$^2$ 目标对类别标签中的损坏更具鲁棒性，因为它为每个类别学习了一个联合（子空间）表示，而不是试图拟合单个样本的标签。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.6\textwidth]{\toplevelprefix/chapters/chapter4/figs/loss_log.pdf}
+
+    \caption{训练过程中 $R_\epsilon$、$R^c_\epsilon$ 和 $\Delta R_\epsilon$ 的演变。}
+    \label{fig:train-test-loss}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{chapters/chapter4/figs/Table-label-corruption.png}
+    \caption{在不同比例的类别标签被随机破坏的情况下，使用交叉熵（CE）损失或 MCR$^2$ 目标进行训练的分类准确率比较。}
+    \label{fig:CIFAR10-performance}
+\end{figure}
+
+\begin{figure}[t]
+    \begin{subfigure}[t]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter4/figs/mcr_pca_individual.pdf}
+        \caption{MCR$^2$ 学习到的各个类别特征的主成分分析（PCA）。}
+        \label{fig:MCR-pca}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter4/figs/ce_pca_individual.pdf}
+        \caption{交叉熵学习到的各个类别特征的主成分分析（PCA）。}
+        \label{fig:CE-pca}
+    \end{subfigure}
+
+    \caption{\small MCR$^2$ 与交叉熵学习到的特征的主成分比较。}
+    \label{fig:feature-pca}
+\end{figure}
+
+\begin{figure*}[t]
+    \begin{center}
+
+        \includegraphics[width=0.45\textwidth]{\toplevelprefix/chapters/chapter4/figs/heatmap_mcr2.pdf}
+        \hspace{0.25cm}
+        \hfill
+        \includegraphics[width=0.45\textwidth]{\toplevelprefix/chapters/chapter4/figs/heatmap_ce.png}
+        \caption{\small 使用 MCR$^2$ 目标（\textbf{左}）和 CE 损失（\textbf{右}）学习到的特征之间的余弦相似度。}
+        \label{fig:heatmap-plot}
+    \end{center}
+    \vskip -0.1in
+\end{figure*}
+
+\Cref{fig:feature-pca} 展示了每个类别学习到的特征 $\vZ_k$ 的奇异值分布。从 \Cref{fig:MCR-pca} 中显示的奇异值分布可以看出，MCR$^2$ 为每个类别学习到的特征 $\vz$ 分布在维度约为 10-12 的子空间上，而交叉熵 \Cref{fig:CE-pca} 学习到的特征维度要低得多。\footnote{如果继续增加迭代次数进行训练，CE 特征甚至可能坍缩到单一维度，这就是前面在 \Cref{remark:neural-collapse} 中讨论过的神经坍缩（neural collapse）现象。}
+
+\Cref{fig:heatmap-plot} 展示了按类别排序的学习特征之间的余弦相似度。我们还比较了使用交叉熵（CE）\eqref{chap4-eqn:cross-entropy} 和 MCR$^2$ 目标 \eqref{eqn:maximal-rate-reduction} 学习到的特征的相似度。从图中可以清楚地看到，与使用交叉熵损失学习到的特征相比，MCR$^2$ 目标为不同类别学习到的特征更加不相干（或独立）。在每个类别内部，特征的相干性也较低，因此更加多样化，正如 \Cref{fig:MCR-pca} 中其奇异值分布所表明的那样。
+
+我们将每个类别特征子空间中沿不同奇异向量映射的图像进行了可视化，我们称之为“主（principal）”图像。图 \ref{fig:pca-images} 展示了沿前 10 个奇异向量的这些主图像。正如我们所见，沿同一个奇异向量的图像在外观和结构上非常相似，而沿不同奇异向量的图像则彼此截然不同。
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{chapters/chapter4/figs/visual_2class.pdf}
+    \caption{CIFAR10 图像数据集中“鸟（Bird）”和“船（Ship）”类别的前 10 个“主”图像。}
+    \label{fig:pca-images}
+\end{figure}
+
+尽管 MCR$^2$ 目标似乎允许我们学习到更好的表示，但在上述实验中使用的网络架构显然缺乏理论依据。目前尚不清楚为什么这里采用的网络（ResNet-18）适合表示映射 $f(\vx, \theta)$，更不用说解释其内部学习到的层算子和参数 $\theta$ 了。在下一章 \ref{ch:deep-networks} 中，{\em 我们将展示如何完全作为一个“白盒”，从期望的目标（例如编码率降低）中推导出网络架构和组件}。
+
+\subsection{无监督表征学习}
+\label{sec:SimDINO}
+% \yima{Ziyang，也许在这里介绍 SimDINO 的目标？并给出一些实验证明，将实现细节留到第 7 章（或新的第 8 章）。}
+
+正如我们在上一节中所看到的，类别信息使得学习（混合）数据分布的结构化表示变得相对容易。然而，这种信息通常是不可用的，至少在海量规模上是如此。
+
+现在我们介绍如何将 MCR$^2$ 原理扩展到无监督设置。与已知类别标签的监督学习相反，在无监督学习中，数据样本的组别归属是未知的。在这种情况下，我们可以对每个样本应用某类数据增强或变换，例如服从分布 $P_{\tau}$ 的 $\tau$。例如，对于图像，数据增强通常包括对每个图像样本进行平移、旋转或裁剪。我们可以将每个数据点的增强样本视为属于同一个组或簇。
+
+更具体地说，给定一组 $N$ 个数据样本 $\vX =
+[\vx_1,\dots,\vx_N]$，我们为每个数据点 $\vx_k$ 生成 $m$ 个增强视图
+$\{\tau_i\}_{i=1}^m$，记为
+$\tilde{\vX}_{k} = [\tau_1(\vx_k), \tau_2(\vx_k), \dots, \tau_m(\vx_k)]$。
+我们将增强样本 $\tilde{\vX}_{i}$ 视为第 $i$ 个类别，总共有 $K=N$ 个组/簇。现在，我们可以像之前在监督学习情况中那样应用 MCR$^2$ 原理。具体而言，我们通过最大化编码率降低来学习特征映射 $f(\vx,\theta)$，如下所示：
+\begin{equation}
+    \begin{aligned}
+        \max_{\theta } & \;  \Delta R_{\epsilon}\big(\vZ \big) \doteq
+        R_{\epsilon}(\vZ) - R_{\epsilon}^c(\vZ ), \\
+        \mbox{s.t.} & \ \ \, \vZ = f(\tilde{\vX}, \theta),\  \|\vZ_k\|_F^2
+        = m,\ k=1,\dots,N.
+    \end{aligned}
+    \label{eqn:maximal-rate-reduction-unsupervised}
+\end{equation}
+这里，$\tilde{\vX} = [\tilde{\vX}_1,\dots,\tilde{\vX}_N]$，且 $\vZ_k =
+f(\tilde{\vX}_k,\theta)$ 表示每个 $k=1,\dots,N$ 的 $\vx_k$ 的增强样本的特征。
+
+让我们再次采用 ResNet-18 作为特征映射 $f(\vx,\theta)$，并优化网络参数 $\theta$ 以最大化无监督目标 \eqref{eqn:maximal-rate-reduction-unsupervised}。在 CIFAR10 数据集上训练后，我们在 \Cref{fig:train-test-loss-selfsup-mcr} 中可视化了两个编码率及其差值（针对训练和测试数据）随训练轮数（epochs）的演变。与监督学习的情况类似，在初始阶段之后，$R_\epsilon$ 逐渐增加而 $R^c_\epsilon$ 减小，这表明特征 $\bm Z$ 作为一个整体正在扩张，而每个簇 $\bm Z_k$ 正在被压缩。与 \Cref{fig:train-test-loss} 中显示的监督情况相比，我们可以观察到，在无监督情况下，总编码率 $R_\epsilon$ 迅速扩张，整体 MCR$^2$ 目标在局部最优处饱和。为了缓解这个问题，我们可以通过控制 $R_\epsilon$ 和 $R^c_\epsilon$ 的动态来改变优化策略。具体而言，我们可以通过将 \eqref{eqn:maximal-rate-reduction-unsupervised} 中的编码率 $R_\epsilon(\vZ)$ 替换为
+$$\tilde{R}_\epsilon(\vZ) \doteq \frac{1}{2\gamma_1} \log \det
+\left(\I + \frac{\gamma_2 d}{N m \epsilon^{2}}\vZ \vZ ^{\top}\right).$$
+来重新缩放编码率。通过设置 $\gamma_1 = \gamma_2 = N$，我们得到了一个修改后的学习目标，称为 MCR$^2$-{\scriptsize CTRL}，其训练动态如 \Cref{fig:train-test-loss-selfsup-mcr-ctrl} 所示。正如我们所见，使用这个受控的 MCR$^2$ 目标，特征首先被压缩，然后逐渐扩张，从而导致整体目标 $\Delta R_{\epsilon}(\vZ)$ 达到更高的值。
+
+为了评估学习到的表示的质量并验证它们是否具有良好的子空间结构，我们采用了子空间聚类算法 EnSC \cite{you2016oracle}。对于评估指标，我们考虑归一化互信息（NMI）、聚类准确率（ACC）和调整兰德指数（ARI）\footnote{有关它们的具体定义，请参阅 \cite{yu2020learning} 中的附录。}。为了进行比较，我们考虑了包括 JULE \cite{yang2016joint}、RTM \cite{nina2019decoder}、DEC \cite{xie2016unsupervised}、DAC \cite{chang2017deep} 和 DCCM \cite{wu2019deep} 在内的方法。聚类结果总结在表 \ref{fig:unsupervised-clustering-results} 中。正如我们所见，通过最大化 MCR$^2$-{\scriptsize CTRL} 目标学习到的特征比其他算法学习到的特征取得了更好的聚类准确率。
+\begin{figure}[t]
+    \begin{subfigure}[t]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter4/figs/loss_selfsup_mcr.png}
+        \caption{MCR$^2$}
+        \label{fig:train-test-loss-selfsup-mcr}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter4/figs/loss_selfsup_mcr_ctrl.png}
+        \caption{MCR$^2$-ctrl}
+        \label{fig:train-test-loss-selfsup-mcr-ctrl}
+    \end{subfigure}
+    \caption{\small 在 CIFAR-10 上进行无监督学习的训练过程中 MCR$^2$ 编码率的演变。}
+    \label{fig:train-test-loss-selfsup}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{chapters/chapter4/figs/clustering_results.png}
+    \caption{在 CIFAR10、CIFAR100 和 STL10 数据集上，使用 MCR$^2$-{\scriptsize CTRL} 目标与其他无监督学习算法进行训练的聚类性能准确率比较。}
+    \label{fig:unsupervised-clustering-results}
+\end{figure}
+
+然而，这里有一个主要的缺点：基于 MCR$^2$ 的无监督学习方法在计算 $R^c_\epsilon$ 时，\textit{每个样本}都需要进行复杂度为 $\O(d^3)$ 的昂贵 $\log \det$ 运算。当我们试图扩展到更大的数据集时，这很快就会在计算上变得令人望而却步。与其最小化每组增强样本 $\tilde{\vX}_{i}$ 的精确编码率，我们可以通过最大化增强样本特征之间的{\em 余弦相似度}来近似压缩每组特征的效果：\footnote{我们留给读者一个练习，去验证在什么条件下最小化每个类别的编码率 $R^c(\vZ)$ （近似）等价于最大化特征 $\vZ$ 之间的余弦相似度。}
+
+\begin{equation}
+    \begin{aligned}
+        \max_{\theta } & \;  R_{\epsilon}(\vZ) +
+        \frac{\gamma}{N}\sum_{k=1}^N \sum_{i \neq j}
+        \vz_{k,j}^\top \vz_{k,i}, \\
+        \mbox{s.t.} &  \ \ \, \vz_{i,j} = f(\tau_j(\vx_i),\theta),\
+        \|\vz_{i,j}\|_2^2                                          = 1,
+    \end{aligned}
+    \label{eqn:maximal-rate-reduction-unsupervised-simdino}
+\end{equation}
+其中 $\gamma > 0$ 是一个超参数，用于控制余弦相似度项的强度，因为它在数量级上与编码率不同。这个目标避免了昂贵的 $\log \det$ 运算，并且具有更好的可扩展性。事实上，这个目标与流行的（无监督）{\em 对比学习}方法密切相关，例如 SimCLR \cite{chen2020simple} 和 DINO \cite{caron2021emerging}，这些方法经过工程设计，能够从海量图像中学习高质量的表示。
+
+正如我们稍后将在第 \ref{ch:applications} 章的第 \ref{sub:contrastive_learning_objective} 节中展示的那样，这个目标 \eqref{eqn:maximal-rate-reduction-unsupervised-simdino} 可以非常高效地实现，以学习高度线性且具有判别性的高度结构化表示 $\vZ$。
+% \yima{Robin，也许可以提供一些实验结果，定性地说明学习到的特征具有判别性和线性？比如线性探测（linear probing）的一些结果或分割的视觉结果？（可以说将实现细节留到第 8 章。）这将有助于证明后面第 6 章中 RAE 的合理性。}
+学习到的特征表示在大型真实世界数据集上达到了最先进的性能，与 DINO 学习到的特征相当甚至更好，但不需要 DINO 所需的繁重工程工作。因此，我们将此目标称为 {\em 简化版 DINO}（Simplified DINO，简称 SimDINO）。作为预览，\Cref{tab:dino_imagenet_linear_probing_teaser} 显示，在使用 \(k\)-最近邻准确率和线性探测（即在预训练模型上训练线性分类器）进行 ImageNet-1k 分类时，SimDINO 均优于 DINO。这表明该目标能够产生高度结构化和线性化的表示。我们还可以将这些表示用于下游任务，例如无监督分割\footnote{具体而言，我们采用了 MaskCut \cite{wang2023cut}，这是一种从冻结的视觉骨干网络中提取特征以进行目标检测和实例分割的有效无监督方法。}，如 \Cref{fig:maskcut_segmentation} 所示。SimDINO 的更多实现细节和实验结果将在第 \ref{ch:applications} 章中介绍。
+
+\begin{table}
+    \centering
+    \begin{tabular}{@{}lcccc@{}} %
+        \toprule
+        方法 & 模型 & 轮数 & 20-NN & 线性探测
+        \\
+        \midrule
+        DINO & ViT-B & 100 & 72.9 & 76.3 \\
+        SimDINO & ViT-B & 100 & \bf 74.9 & \bf 77.3 \\
+        DINO & ViT-L & 100 & -- & -- \\
+        SimDINO & ViT-L & 100 & \bf 75.6 & \bf 77.4 \\
+
+        \bottomrule
+    \end{tabular}\smallskip
+    \caption{\small DINO 和 SimDINO 在 ImageNet-1k 测试集上的\textbf{分类性能}，使用了 \(k\)-最近邻准确率（\(k = 20\)）和线性探测。SimDINO 在准确率和训练稳定性方面均优于 DINO。DINO 在 ViT-L 上的训练不稳定且很快发散，而 SimDINO 的训练则很稳定。}
+    \label{tab:dino_imagenet_linear_probing_teaser}
+\end{table}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{chapters/chapter4/figs/maskcut_demo.pdf}
+    \caption{\small 来自 DINO ViT-B/16（第 1 行）、SimDINO ViT-B/16（第 2 行）和 SimDINO ViT-L/16（第 3 行）的\textbf{无监督分割结果可视化}。}
+    \label{fig:maskcut_segmentation}
+\end{figure}
+
+\section{总结与注记}
+
+\paragraph{核心信息。}
+在本章中，我们研究了如何从有限样本中学习分布并获得该分布的{\em 可计算}编码和解码方案背后的基本概念和思想。对于连续且可能是低维的分布，我们论证了这种方案必然是{\em 有损的}——因此率失真概念非常重要。由于量化而通过失真引入的噪声，与我们在前一章中研究的噪声起着相关但不同的作用。人们可以认为第 \ref{ch:denoising} 章中考虑的噪声位于分布支撑子流形的“外部”，而本章中考虑的噪声位于支撑的“内部”。通俗地说，我们可以将支撑外部的扩散/去噪过程称为“延拓（continuation）”，将支撑内部的扩散/去噪过程称为“渗透（percolation）”。对它们复合效应的更统一的分析和理解有待未来的研究。
+
+在本章中，我们首次引入了为分布学习{\em 表示}的概念。我们考虑了可以说是最简单的情况，即分类的情况。如果将分类标签 $\y$ 视为数据 $\vx$ 的固定简单（严重有损）编码，我们可以寻求数据 $\vx$ 的一致\footnote{也就是说，我们可以从 $\vz$ 中忠实地恢复 $\vx$，正如我们稍后将在第 \ref{ch:consistent-representations} 章中明确“一致”表示的概念那样。}表示 $\vz = f(\vx)$，使其倾向于最大化该表示与这个简单编码之间的互信息：
+\begin{equation}
+    \max I(\vz, \y) = H(\vz) - H(\vz \mid \y).
+\end{equation}
+此外，我们要求这种表示 $\vz$ 不仅与 $\vx$ 一致，而且比 $\vx$ 的原始数据分布更加{\em 结构化}——类别是线性可分的。这将使得学习到的表示在用于识别、分割和补全等后续任务时，比原始数据分布高效得多。引入的最大化编码率降低目标是这些要求的一种自然且可计算的实现。在后面的第 \ref{ch:conditional-inference} 章中，我们将看到当 $\y$ 可能是更一般的有损编码（例如图像描述）或与 $\vx$ 相关的随机变量时，如何将此目标推广到更广泛的背景中。
+
+\section{练习与扩展}
+
+\begin{exercise}
+    请证明 $\log\det(\cdot)$ 函数的以下性质。
+    \begin{enumerate}
+        \item 证明
+            \begin{align*}
+                f(\vX) = \log\det\left(\vX\right)
+            \end{align*}
+            是一个凹函数。（{\bf 提示：} 函数 $f(\vx)$ 是凸函数当且仅当一维函数 $f(\vx+t\vh)$ 对所有 $\vx$ 和 $\vh$ 都是凸的。）
+
+        \item 证明
+            \begin{align*}
+                \log\det(\vI + \vX^\top\vX) = \log\det(\vI + \vX\vX^\top)
+            \end{align*}
+
+        \item 设 $\vA \in \R^{n\times n}$ 为正定矩阵。请证明：
+            \begin{align}
+                \log\det\left(\vA \right) = \sum_{i=1}^n \log(\lambda_i),
+            \end{align}
+            其中 $\lambda_1,\lambda_2,\dots,\lambda_n$ 是 $\vA$ 的特征值。
+
+        \item  证明对于正定矩阵 $\vA$，$\log\det(\cdot)$ 函数的梯度由下式给出：
+            \begin{align*}
+                \nabla \log\det(\vA) = \vA^{-1},
+            \end{align*}
+
+    \end{enumerate}
+
+\end{exercise}
+
+% \begin{exercise}
+%     设 $\bm Z \in \R^{d\times N}$ 并定义
+%     \begin{equation}
+%     R_{\epsilon}(\vZ) := \frac{1}{2}\log\det\left(\I +
+%     \alpha\vZ\vZ^{\top}\right),
+%     \end{equation}
+%     其中 $\alpha > 0$。
+%     \begin{enumerate}
+%         \item 请计算上述函数的梯度 $\nabla R_{\epsilon}(\bm Z)$。
+
+%         \item 设 $\bm D \in \mathbb{R}^{d \times n}$ 为任意矩阵。请计算上述函数海森矩阵（Hessian）的双线性形式，即：
+%         \begin{align*}
+%             \nabla^2 R_{\epsilon}(\bm Z)[\bm D, \bm D] :=
+% \left\langle \bm D, \lim_{t \to 0} \frac{\nabla R_{\epsilon}(\bm Z
+% + t\bm D) - \nabla R_{\epsilon}(\bm Z)}{t}\right\rangle.
+%         \end{align*}
+%     \end{enumerate}
+% \end{exercise}
+
+\begin{exercise}
+    设 $\bm Z = [\bm Z_1, \dots, \bm Z_K] \in \mathbb{R}^{d \times N}$，其中每个 $\bm Z_k \in \mathbb{R}^{d \times N_k}$ 且 $N = \sum_{k=1}^K N_k$。
+
+    \begin{enumerate}
+        \item 请证明
+            \begin{align*}
+                \log\det\left( \bm I + \alpha \bm Z \bm Z^\top \right)
+                \le
+                \sum_{k=1}^K
+                \log\det\left( \bm I + \alpha \bm Z_k \bm Z_k^\top \right),
+            \end{align*}
+            其中 $\alpha > 0$。
+
+        \item 请推导等号成立的充要条件。
+    \end{enumerate}
+
+\end{exercise}
+
+\begin{exercise}
+    设 $\vz_1$ 和 $\vz_2$ 为两个单位长度的向量。设 $\vZ = [\vz_1, \vz_2]$。证明以下三个目标是等价的：
+    \begin{itemize}
+        \item $\max \vz_1^\top \vz_2$。
+        \item $\min \|\vz_1 - \vz_2\|_2^2$。
+        \item $\max \log \det (\I + \vZ\vZ^\top)$。
+    \end{itemize}
+    然而，当高维空间中有两个以上的向量时，它们可能不再完全等价。$\log\det$ 更为一般，因为它测量了高维空间中所有向量张成的总体积。
+\end{exercise}
+
+% {\color{blue}
+% \begin{exercise}\label{exer:gaussian_rate_distortion}
+%     请证明信源 $X \sim \mathcal{N}(0,\sigma^2)$ 的率失真函数为
+%     \begin{align*}
+%         \mathcal{R}_{\epsilon}(X) =
+%         \begin{cases}
+%             \frac{1}{2}\log\left( \frac{\sigma^2}{\epsilon^2}
+%             \right),\ & 0 \le \epsilon \le \sigma,\\
+%             0,\ & \epsilon > \sigma.
+%         \end{cases}
+%     \end{align*}
+%     {\bf 提示：} 该证明包含两个步骤。首先，我们找到率失真函数的下界，即对于所有 $\mathbb{E}[(X-\hat{X})^2] \le \epsilon^2$，有
+%     \begin{align*}
+%         I(X;\hat{X}) \ge  \frac{1}{2}\log\left(
+%         \frac{\sigma^2}{\epsilon^2} \right).
+%     \end{align*}
+%     其次，我们构造 $p(\hat{X} \mid X)$ 来证明这个下界是可达的。如果 $\epsilon \le \sigma$，我们选择
+%     \begin{align*}
+%         X = \hat{X} + Z,\ \hat{X} \sim \mathcal{N}(0,\sigma^2 -
+%         \epsilon^2),\ Z \sim \mathcal{N}(0,\epsilon^2),
+%     \end{align*}
+%     其中 $\hat{X}$ 和 $Z$ 是独立的。如果 $\epsilon > \sigma$，我们以概率 1 选择 $\hat{X} = 0$。
+% \end{exercise}
+
+\begin{exercise}\label{exer:KKT}
+    请推导 \Cref{ex:gaussian_rate_distortion} 中引入的高斯随机向量的率失真函数。
+    % \textbf{提示：} 证明包含以下步骤：
+    % \begin{enumerate}
+    %     \item 首先，我们找到率失真函数的下界，即对于所有 $\mathbb{E}[\|\bm{x}-\hat{\bm x}\|_2^2] \le \epsilon^2$，有
+    %         \begin{align}
+    %             I(\bm x; \hat{\bm x}) \ge \sum_{i=1}^d
+    %             \max\left\{\frac{1}{2}\log\left(
+    %             \frac{\sigma_i}{\lambda_i} \right), 0\right\},
+    %         \end{align}
+    %         其中 $\lambda_i = \mathbb{E}[(x_i - \hat{x}_i)^2]$。
+
+    %     \item 其次，我们将寻找率失真函数的问题简化为以下问题：
+    %         \begin{align}
+    %             \min_{\lambda_1,\dots,\lambda_d}  \sum_{i=1}^d
+    %             \max\left\{\frac{1}{2}\log\left(
+    %             \frac{\sigma_i}{\lambda_i} \right), 0 \right\}\quad
+    %             \mathrm{s.t.}\ \sum_{i=1}^d \lambda_i = \epsilon^2.
+    %         \end{align}
+
+    %         % \item 考虑建立拉格朗日函数
+    %         % \[
+    %         %     \mathcal{L}(\lambda_1,\dots,\lambda_d,\nu) =
+    %         % \frac12 \sum_{i=1}^d \log \frac{\sigma_i^2}{\lambda_i}
+    %         %     + \nu \left(\sum_{i=1}^d \lambda_i -
+    %         % \epsilon^2\right),
+    %         % \]
+    %         % 其中 \(\lambda_i\) 是沿每个主方向的重建误差的方差。
+
+    %         % \item 计算偏导数 \(\partial \mathcal{L}/\partial \lambda_i = 0\) 以找到 \(\lambda_i\) 和拉格朗日乘子 \(\nu\) 之间的关系。
+
+    %         % \item 应用约束 \(0 \le \lambda_i \le \sigma_i^2\) 来确定哪些方向是饱和的，哪些方向遵循注水（water-filling）分配。
+
+    %         % \item 使用 \(\sum_{i=1}^d \lambda_i = \epsilon^2\) 求解“水位” \(\lambda\)，并验证 \(\lambda_i = \min(\sigma_i^2, \lambda)\)。
+    % \end{enumerate}
+\end{exercise}
+% }
+
+\end{document}
