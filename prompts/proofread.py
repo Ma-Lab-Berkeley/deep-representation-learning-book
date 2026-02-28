@@ -26,6 +26,35 @@ from pathlib import Path
 
 DEFAULT_MODEL = "moonshotai/kimi-k2"
 
+
+def _clean_tex(content: str) -> str:
+    """Strip comment-only lines from TeX content."""
+    return "\n".join(
+        line for line in content.splitlines() if not re.match(r"^\s*%", line)
+    )
+
+
+def resolve_includes(text: str, base_dir: Path) -> str:
+    """Replace <!-- include: path --> directives with file contents."""
+    repo_root = base_dir
+    for parent in [base_dir, *base_dir.parents]:
+        if (parent / ".git").exists():
+            repo_root = parent
+            break
+
+    def _replace(m: re.Match) -> str:
+        path = (repo_root / m.group(1).strip()).resolve()
+        if not path.exists():
+            print(f"  Warning: include file not found: {path}", file=sys.stderr)
+            return m.group(0)
+        content = path.read_text()
+        if path.suffix == ".tex":
+            content = _clean_tex(content)
+        return content
+
+    return re.sub(r"<!--\s*include:\s*(.+?)\s*-->", _replace, text)
+
+
 SUFFIX_INSTRUCTION = (
     "\n\nApply the above instructions to the following LaTeX excerpt. "
     "If the instructions are not relevant to this excerpt (as may often be the case), return it unchanged. "
@@ -448,6 +477,7 @@ def main():
         sys.exit(1)
 
     instructions = instructions_path.read_text().strip()
+    instructions = resolve_includes(instructions, instructions_path.parent)
     system_prompt = instructions + SUFFIX_INSTRUCTION
 
     content = tex_path.read_text()
