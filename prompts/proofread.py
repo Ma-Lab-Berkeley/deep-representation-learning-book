@@ -11,6 +11,7 @@ import argparse
 import difflib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -199,15 +200,29 @@ def strip_code_fences(text: str) -> str:
     return m.group(1).rstrip("\n") if m else text
 
 
+def unwrap_tex(text: str) -> str:
+    """Join hard-wrapped lines into single-line paragraphs for comparison."""
+    paragraphs = re.split(r"\n[ \t]*\n", text)
+    return "\n\n".join(
+        " ".join(line.strip() for line in p.splitlines() if line.strip())
+        for p in paragraphs
+    )
+
+
 def call_llm(
     client,
     model: str,
     system_prompt: str,
     user_text: str,
     max_retries: int = 3,
+    no_thinking: bool = False,
 ) -> str | None:
     """Call the LLM with retries. Returns corrected text or None on error."""
     from openai import APIStatusError, RateLimitError
+
+    extra_body = {}
+    if no_thinking:
+        extra_body["reasoning"] = {"effort": "none"}
 
     for attempt in range(max_retries):
         try:
@@ -218,6 +233,7 @@ def call_llm(
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_text},
                 ],
+                **({"extra_body": extra_body} if extra_body else {}),
             )
             result = response.choices[0].message.content
             return strip_code_fences(result) if result else None
@@ -255,6 +271,13 @@ RESET = "\033[0m"
 STRIKETHROUGH = "\033[9m"
 CYAN = "\033[36m"
 YELLOW = "\033[33m"
+BG_RED = "\033[48;2;50;20;20m"
+BG_GREEN = "\033[48;2;20;50;20m"
+
+
+def _bg(text: str, bg: str) -> str:
+    """Wrap *text* with a background color, re-applying it after any resets."""
+    return bg + text.replace(RESET, RESET + bg) + RESET
 
 
 def compute_char_diff(old_line: str, new_line: str) -> tuple[str, str]:
@@ -308,27 +331,99 @@ def render_diff(old_text: str, new_text: str, context: int = 3) -> str:
                     prev_end = k
         elif op == "delete":
             for k in range(i1, i2):
-                output.append(f"{RED}- {old_lines[k]}{RESET}")
+                output.append(_bg(f"{RED}- {old_lines[k]}", BG_RED))
                 prev_end = k
         elif op == "insert":
             for k in range(j1, j2):
-                output.append(f"{GREEN}+ {new_lines[k]}{RESET}")
+                output.append(_bg(f"{GREEN}+ {new_lines[k]}", BG_GREEN))
         elif op == "replace":
             for oi, ni in zip(range(i1, i2), range(j1, j2)):
                 old_fmt, new_fmt = compute_char_diff(old_lines[oi], new_lines[ni])
-                output.append(f"{RED}- {old_fmt}{RESET}")
-                output.append(f"{GREEN}+ {new_fmt}{RESET}")
+                output.append(_bg(f"{RED}-{RESET} {old_fmt}", BG_RED))
+                output.append(_bg(f"{GREEN}+{RESET} {new_fmt}", BG_GREEN))
                 prev_end = oi
             # Leftover lines on either side
             if i2 - i1 > j2 - j1:
                 for k in range(j2 - j1 + i1, i2):
-                    output.append(f"{RED}- {old_lines[k]}{RESET}")
+                    output.append(_bg(f"{RED}- {old_lines[k]}", BG_RED))
                     prev_end = k
             elif j2 - j1 > i2 - i1:
                 for k in range(i2 - i1 + j1, j2):
-                    output.append(f"{GREEN}+ {new_lines[k]}{RESET}")
+                    output.append(_bg(f"{GREEN}+ {new_lines[k]}", BG_GREEN))
 
     return "\n".join(output)
+
+
+def _wrap_ansi(text: str, width: int = 0, indent: str = "  ") -> str:
+    """Wrap text containing ANSI codes to fit terminal width."""
+    if width <= 0:
+        width = shutil.get_terminal_size().columns - 2
+    ansi_pattern = re.compile(r"\033\[[0-9;]*m")
+    words = text.split(" ")
+    lines: list[str] = []
+    line = indent
+    col = len(indent)
+
+    for word in words:
+        if not word:
+            continue
+        vis_len = len(ansi_pattern.sub("", word))
+        needed = (1 if col > len(indent) else 0) + vis_len
+        if col + needed > width and col > len(indent):
+            lines.append(line)
+            line = indent + word
+            col = len(indent) + vis_len
+        else:
+            if col > len(indent):
+                line += " " + word
+                col += 1 + vis_len
+            else:
+                line += word
+                col += vis_len
+
+    if line.strip():
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
+def render_word_diff(old_text: str, new_text: str) -> str:
+    """Inline word-level diff that ignores line-break differences."""
+    old_norm = unwrap_tex(old_text)
+    new_norm = unwrap_tex(new_text)
+
+    if old_norm == new_norm:
+        return ""
+
+    # Detect leading indent from original text
+    indent = "  "
+    for line in old_text.splitlines():
+        if line.strip():
+            indent = "  " + re.match(r"(\s*)", line).group(1)
+            break
+
+    old_words = old_norm.split()
+    new_words = new_norm.split()
+
+    sm = difflib.SequenceMatcher(None, old_words, new_words)
+    parts: list[str] = []
+
+    for op, i1, i2, j1, j2 in sm.get_opcodes():
+        if op == "equal":
+            parts.extend(old_words[i1:i2])
+        elif op == "delete":
+            for w in old_words[i1:i2]:
+                parts.append(f"{RED}{STRIKETHROUGH}{w}{RESET}")
+        elif op == "insert":
+            for w in new_words[j1:j2]:
+                parts.append(f"{GREEN}{w}{RESET}")
+        elif op == "replace":
+            for w in old_words[i1:i2]:
+                parts.append(f"{RED}{STRIKETHROUGH}{w}{RESET}")
+            for w in new_words[j1:j2]:
+                parts.append(f"{GREEN}{w}{RESET}")
+
+    return _wrap_ansi(" ".join(parts), indent=indent)
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +473,7 @@ def review_change(
             f"lines {chunk.start_line}-{chunk.end_line} ---{RESET}\n"
         )
 
-        diff_output = render_diff(chunk.text, current)
+        diff_output = render_word_diff(chunk.text, current)
         if not diff_output:
             print(f"  {DIM}(no changes){RESET}")
             return "reject", chunk.text
@@ -462,6 +557,11 @@ def main():
     parser.add_argument(
         "--skip-to", type=int, default=1, help="Resume from chunk N (1-based)"
     )
+    parser.add_argument(
+        "--no-thinking",
+        action="store_true",
+        help="Disable reasoning/thinking for models that support it",
+    )
     parser.add_argument("--verbose", action="store_true", help="Show chunk details")
     args = parser.parse_args()
 
@@ -542,19 +642,22 @@ def main():
             continue
 
         # Call LLM
-        corrected = call_llm(client, args.model, system_prompt, chunk.text)
+        corrected = call_llm(
+            client, args.model, system_prompt, chunk.text,
+            no_thinking=args.no_thinking,
+        )
         if corrected is None:
             print(f"  Skipping chunk {display_idx} (LLM error).", file=sys.stderr)
             continue
 
         # No changes — skip
-        if corrected.strip() == chunk.text.strip():
+        if unwrap_tex(corrected) == unwrap_tex(chunk.text):
             if args.verbose:
                 print(f"  {DIM}(no changes){RESET}")
             continue
 
         if accept_all:
-            diff_out = render_diff(chunk.text, corrected)
+            diff_out = render_word_diff(chunk.text, corrected)
             if diff_out:
                 print(
                     f"\n{BOLD}{CYAN}--- Chunk {display_idx}/{total}  "
