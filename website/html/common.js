@@ -382,7 +382,7 @@
       var title =
         (options && options.title) ||
         (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.ui.bookTitle) ||
-        "Learning Deep Representations of Data Distributions";
+        "Principles and Practice of Deep Representation Learning";
       var langLabel =
         (options && options.langLabel) ||
         (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.ui.langLabel) ||
@@ -1717,7 +1717,7 @@
               var systemPrompt =
                 (window.BOOK_COMPONENTS &&
                   window.BOOK_COMPONENTS.chat.systemPrompt) ||
-                "You are an AI assistant helping readers of the book Learning Deep Representations of Data Distributions. Answer clearly and concisely. If relevant, point to sections or headings from the current page.";
+                "You are an AI assistant helping readers of the book Principles and Practice of Deep Representation Learning. Answer clearly and concisely. If relevant, point to sections or headings from the current page.";
               var msgs = [];
               msgs.push({ role: "system", content: systemPrompt });
               if (includeSel)
@@ -1807,7 +1807,7 @@
                 {
                   role: "system",
                   content:
-                    "You are an AI assistant helping readers of the book Learning Deep Representations of Data Distributions. Answer clearly and concisely. If relevant, point to sections or headings from the current page.",
+                    "You are an AI assistant helping readers of the book Principles and Practice of Deep Representation Learning. Answer clearly and concisely. If relevant, point to sections or headings from the current page.",
                 },
                 { role: "user", content: userText },
               ]);

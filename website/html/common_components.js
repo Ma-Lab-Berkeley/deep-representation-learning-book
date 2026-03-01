@@ -12,7 +12,8 @@
 
     // Table of Contents
     toc: {
-      preface: "Preface",
+      preface: "Preface to Version 1",
+      prefaceV2: "Preface to Version 2",
       chapter: "Chapter",
       appendix: "Appendix",
       chapters: {
@@ -24,25 +25,29 @@
         3: {
           title: "Chapter 3",
           subtitle:
-            "Pursuing Low-Dimensional Distributions via Lossy Compression",
+            "Pursuing Low-Dimensional Distributions via Denoising",
         },
         4: {
           title: "Chapter 4",
-          subtitle: "Deep Representations from Unrolled Optimization",
+          subtitle: "Representation Learning via Lossy Compression",
         },
         5: {
           title: "Chapter 5",
-          subtitle: "Consistent and Self-Consistent Representations",
+          subtitle: "Deep Representations as Unrolled Optimization",
         },
         6: {
           title: "Chapter 6",
-          subtitle: "Inference with Low-Dimensional Distributions",
+          subtitle: "Consistent and Self-Consistent Representations",
         },
         7: {
           title: "Chapter 7",
-          subtitle: "Learning Representations for Real-World Data",
+          subtitle: "Inference with Low-Dimensional Distributions",
         },
-        8: { title: "Chapter 8", subtitle: "Future Study of Intelligence" },
+        8: {
+          title: "Chapter 8",
+          subtitle: "Learning Representations for Real-World Data and Tasks",
+        },
+        9: { title: "Chapter 9", subtitle: "Open Problems and Directions" },
       },
       appendices: {
         A: { title: "Appendix A", subtitle: "Optimization Methods" },
@@ -55,7 +60,8 @@
 
     // UI Labels
     ui: {
-      bookTitle: "Learning Deep Representations of Data Distributions",
+      bookTitle: "Principles and Practice of Deep Representation Learning",
+      bookSubtitle: "Or a Mathematical Theory of Memory",
       langLabel: "EN",
       brandHref: "index.html",
       searchPlaceholder: "Search pages…",
@@ -81,7 +87,7 @@
       placeholder:
         'Ask a question about this page…\n\nYou can also ask about specific content by appending:\n@chapter (e.g., "@3"), @chapter.section (e.g., "@3.1"), @chapter.section.subsection (e.g., "@3.1.2")\n@appendix (e.g., "@A"), @appendix.section (e.g., "@A.1"), @appendix.section.subsection (e.g., "@A.1.2")',
       systemPrompt:
-        "You are an AI assistant helping readers of the book Learning Deep Representations of Data Distributions. Answer clearly and concisely. If relevant, point to sections or headings from the current page.",
+        "You are an AI assistant helping readers of the book Principles and Practice of Deep Representation Learning. Answer clearly and concisely. If relevant, point to sections or headings from the current page.",
       askAITitle: "Ask AI about this page",
       modelPicker: {
         title: "Select AI model",
@@ -161,7 +167,8 @@ For broader feedback about the book or this website:
     // Landing page content
     landing: {
       hero: {
-        title: "Learning Deep Representations of Data Distributions",
+        title: "Principles and Practice of Deep Representation Learning",
+        bookSubtitle: "Or a Mathematical Theory of Memory",
         authors: "Sam Buchanan · Druv Pai · Peng Wang · Yi Ma",
         subtitle:
           "A modern fully open-source textbook exploring why and how deep neural networks learn compact and information-dense representations of high-dimensional real-world data.",
@@ -172,9 +179,9 @@ For broader feedback about the book or this website:
           github: "GitHub Repository",
         },
         cover: {
-          alt: "Book cover: Learning Deep Representations of Data Distributions",
+          alt: "Book cover: Principles and Practice of Deep Representation Learning",
           title: "Read the Book",
-          version: "Version 1.0\nReleased August 18, 2025",
+          version: "Version 2\nReleased March 1, 2026",
         },
       },
       sections: {
@@ -183,7 +190,7 @@ For broader feedback about the book or this website:
           content: `
 In the current era of deep learning and especially "generative artificial intelligence", there is significant investment in training very large generative models. Thus far, such models have been "black boxes" that are difficult to understand in the sense that they have opaque internal mechanisms, leading to difficulties in interpretability, reliability, and control. Naturally, this lack of understanding has led to both hype and fear.
 
-This book is an attempt to "open the black box" and understand the mechanisms of large deep networks, through the perspective of representation learning, which is a major factor — arguably the single most important one — in the empirical power of deep learning models. A brief outline of this book is as follows. Chapter 1 will summarize the threads that underlie the whole text. Chapters 2, 3, 4, and 5 will explain the design principles of modern neural network architectures through optimization and information theory, reducing the process of architecture development (long having been described as a sort of "alchemy") to undergraduate-level linear algebra and calculus exercises once the underlying principles are introduced. Chapters 6 and 7 will discuss applications of these principles to solve problems in more paradigmatic ways, obtaining new methods and models which are efficient, interpretable, and controllable by design, and yet no less — sometimes even more — powerful than the black-box models they resemble. Chapter 8 will discuss potential future directions for deep learning, the role of representation learning, as well as some open problems.
+This book is an attempt to "open the black box" and understand the mechanisms of large deep networks, through the perspective of representation learning, which is a major factor — arguably the single most important one — in the empirical power of deep learning models. A brief outline of this book is as follows. Chapter 1 will summarize the threads that underlie the whole text. Chapters 2, 3, 4, 5, and 6 will explain the design principles of modern neural network architectures through optimization and information theory, reducing the process of architecture development (long having been described as a sort of "alchemy") to undergraduate-level linear algebra and calculus exercises once the underlying principles are introduced. Chapters 7 and 8 will discuss applications of these principles to solve problems in more paradigmatic ways, obtaining new methods and models which are efficient, interpretable, and controllable by design, and yet no less — sometimes even more — powerful than the black-box models they resemble. Chapter 9 will discuss potential future directions for deep learning, the role of representation learning, as well as some open problems.
 
 This book is intended for older undergraduate students, or initial graduate students, who have some background in linear algebra, probability, and machine learning. This book should be suitable as a first course in deep learning for mathematically-minded students, but it may help to have some initial surface-level knowledge of deep learning to better appreciate the perspectives and techniques discussed in the book.
 
@@ -210,8 +217,7 @@ This book would have not been possible without the financial support for these r
       sections: {
         authors: "Authors",
         editors: "Editors",
-        contentContributors: "Content Contributors",
-        infraContributors: "Website/Infrastructure Contributors",
+        contributors: "Contributors",
       },
 
       people: {
@@ -229,10 +235,19 @@ This book would have not been possible without the financial support for these r
         "kevin-murphy": {
           desc: "Extensive feedback. Issues: [#3](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/3), [#4](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/4), [#5](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/5), [#8](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/10), [#10](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/10), [#11](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/11), [#12](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/12), [#13](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/13)",
         },
-        "yaodong-yu": { desc: "Provided initial text for Chapter 4." },
-        "tianzhe-chu": { desc: "AI tooling." },
-        "ziyang-wu": { desc: "Website development." },
+        "tianzhe-chu": { desc: "Experiments in Section 8.4. AI tooling." },
+        "shenghua-gao": { desc: "Sections 8.8 and 8.9." },
+        "bingbing-huang": { desc: "Sections 8.8 and 8.9." },
+        "qing-qu": { desc: "Section 3.3." },
+        "shengbang-tong": { desc: "Sections 6.3 and 8.6." },
         "jeroen-van-goey": { desc: "PRs: [#29](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/29)"},
+        "chengyu-wang": { desc: "Sections 8.8 and 8.9." },
+        "ziyang-wu": { desc: "Section 8.3. Website development." },
+        "jingfeng-yang": { desc: "Section 8.3." },
+        "daniel-yeh": { desc: "Sections 8.6 and 8.7." },
+        "brent-yi": { desc: "Section 8.10." },
+        "yaodong-yu": { desc: "Provided initial text for Chapter 5." },
+        "zibo-zhao": { desc: "Section 8.8." },
       },
     },
 
@@ -245,6 +260,7 @@ This book would have not been possible without the financial support for these r
         tutorials: "Tutorials",
         translations: "Community Translations",
         courses: "Courses",
+        previousVersions: "Previous Versions",
       },
       content: {
         courses: `
@@ -268,6 +284,9 @@ The following are some tutorials, or long-form lectures, about content which is 
         translations: `
 The following are (unofficial) community translations of the book.
 - [A Romanian translation](assets/book-main_ro.pdf), contributed by Jan Cavel at the [Piatra Institute](https://piatra.institute/).
+`,
+        previousVersions: `
+- [Version 1 (PDF)](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/book_v1.pdf) — "Learning Deep Representations of Data Distributions", released August 18, 2025.
 `,
       },
     },
@@ -323,6 +342,7 @@ BookQA 7B model with LightRAG is intergrated into the "Ask AI" button in the top
   window.BOOK_COMPONENTS.buildTOC = function () {
     return [
       { label: this.toc.preface, href: "Chx1.html" },
+      { label: this.toc.prefaceV2, href: "Chx2.html" },
       {
         label: this.toc.chapters[1].title,
         subtitle: this.toc.chapters[1].subtitle,
@@ -362,6 +382,11 @@ BookQA 7B model with LightRAG is intergrated into the "Ask AI" button in the top
         label: this.toc.chapters[8].title,
         subtitle: this.toc.chapters[8].subtitle,
         href: "Ch8.html",
+      },
+      {
+        label: this.toc.chapters[9].title,
+        subtitle: this.toc.chapters[9].subtitle,
+        href: "Ch9.html",
       },
       {
         label: this.toc.appendices.A.title,

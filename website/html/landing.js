@@ -52,6 +52,14 @@
               window.get_text_inline("landing.hero.title")) ||
               ""
           ),
+          (window.get_text_inline &&
+            window.get_text_inline("landing.hero.bookSubtitle"))
+            ? React.createElement(
+                "div",
+                { className: "hero-book-subtitle" },
+                window.get_text_inline("landing.hero.bookSubtitle")
+              )
+            : null,
           React.createElement(
             "div",
             { className: "hero-authors" },
@@ -76,8 +84,8 @@
             React.createElement(
               "code",
               { style: { whiteSpace: "pre-wrap" } },
-              String.raw` @book{ldrdd2025,
-  title={Learning Deep Representations of Data Distributions},
+              String.raw` @book{ppdrl2025,
+  title={Principles and Practice of Deep Representation Learning: Or a Mathematical Theory of Memory},
   author={Buchanan, Sam and Pai, Druv and Wang, Peng and Ma, Yi},
   month=aug,
   year={2025},

@@ -33,6 +33,7 @@
           null
         );
       })(),
+      React.createElement(Section, { idKey: "previousVersions" }),
       React.createElement(Section, { idKey: "translations" }),
       React.createElement(Section, { idKey: "courses" }),
       React.createElement(Section, { idKey: "tutorials" })
