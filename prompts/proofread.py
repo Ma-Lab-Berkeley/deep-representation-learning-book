@@ -56,11 +56,14 @@ def resolve_includes(text: str, base_dir: Path) -> str:
     return re.sub(r"<!--\s*include:\s*(.+?)\s*-->", _replace, text)
 
 
-SUFFIX_INSTRUCTION = (
-    "\n\nApply the above instructions to the following LaTeX excerpt. "
-    "If the instructions are not relevant to this excerpt (as may often be the case), return it unchanged. "
-    "Return ONLY the corrected LaTeX. No explanations, no markdown formatting. "
-    "Preserve whitespace and indentation exactly."
+SYSTEM_PROMPT = (
+    "You are a LaTeX proofreading assistant for an academic textbook. "
+    "You will receive a LaTeX excerpt along with specific editing instructions.\n\n"
+    "Rules:\n"
+    "- Apply the given instructions precisely to the LaTeX excerpt.\n"
+    "- If the instructions are not relevant to this excerpt, return it UNCHANGED.\n"
+    "- Return ONLY the corrected LaTeX. No explanations, no markdown code fences or any other delimiters.\n"
+    "- Preserve all whitespace, indentation, and line structure exactly."
 )
 
 
@@ -193,11 +196,23 @@ def get_openai_client():
     return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
 
 
-def strip_code_fences(text: str) -> str:
-    """Remove markdown code fences if the LLM wrapped its response."""
+def strip_llm_wrapping(text: str) -> str:
+    """Remove markdown fences, horizontal rules, and other LLM wrapper artifacts."""
     text = text.strip()
+    # Strip ```latex ... ``` or ```tex ... ``` or ``` ... ```
     m = re.match(r"^```(?:latex|tex)?\s*\n(.*?)```\s*$", text, re.DOTALL)
-    return m.group(1).rstrip("\n") if m else text
+    if m:
+        text = m.group(1).strip()
+    # Strip leading/trailing horizontal rules that LLMs add as delimiters.
+    # Must be on its own line and consist only of repeated separator tokens.
+    # Matches: ---, - - -, -- -- --, ***, * * *, ___, etc.
+    # Anchored to line boundaries to avoid matching em-dashes/en-dashes in content.
+    hr = r"[-*_]+(?:\s+[-*_]+)+"  # e.g. "-- -- --", "- - -", "* * *"
+    hr_solid = r"[-]{3,}|[*]{3,}|[_]{3,}"  # e.g. "---", "***", "___"
+    hr_pat = rf"(?:{hr}|{hr_solid})"
+    text = re.sub(rf"^{hr_pat}\s*\n", "", text)
+    text = re.sub(rf"\n\s*{hr_pat}$", "", text)
+    return text.strip()
 
 
 def unwrap_tex(text: str) -> str:
@@ -212,13 +227,26 @@ def unwrap_tex(text: str) -> str:
 def call_llm(
     client,
     model: str,
-    system_prompt: str,
-    user_text: str,
+    chunk_text: str,
+    instructions: str,
     max_retries: int = 3,
     no_thinking: bool = False,
 ) -> str | None:
-    """Call the LLM with retries. Returns corrected text or None on error."""
+    """Call the LLM with retries. Returns corrected text or None on error.
+
+    Messages are structured for prefix caching: the static system prompt is
+    identical across all calls, and the chunk text sits at the start of the
+    user message so it is shared across multiple prompt passes on the same chunk.
+    """
     from openai import APIStatusError, RateLimitError
+
+    user_message = (
+        "Here is the LaTeX excerpt to proofread:\n\n"
+        f"{chunk_text}\n\n"
+        "---\n\n"
+        "Apply the following editing instructions to the excerpt above:\n\n"
+        f"{instructions}"
+    )
 
     extra_body = {}
     if no_thinking:
@@ -230,13 +258,13 @@ def call_llm(
                 model=model,
                 temperature=0.0,
                 messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_text},
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_message},
                 ],
                 **({"extra_body": extra_body} if extra_body else {}),
             )
             result = response.choices[0].message.content
-            return strip_code_fences(result) if result else None
+            return strip_llm_wrapping(result) if result else None
 
         except RateLimitError:
             wait = 2**attempt * 5
@@ -273,6 +301,30 @@ CYAN = "\033[36m"
 YELLOW = "\033[33m"
 BG_RED = "\033[48;2;50;20;20m"
 BG_GREEN = "\033[48;2;20;50;20m"
+CLEAR_LINE = "\033[2K"
+
+
+def print_progress(current: int, total: int, status: str = ""):
+    """Overwrite the current line with a progress bar."""
+    width = shutil.get_terminal_size().columns
+    bar_width = min(30, width - 50)
+    filled = int(bar_width * current / total) if total > 0 else 0
+    bar = "█" * filled + "░" * (bar_width - filled)
+    pct = current * 100 // total if total > 0 else 0
+    line = f"  [{bar}]  {current}/{total}  ({pct}%)"
+    if status:
+        # Truncate status to fit
+        max_status = width - len(line) - 4
+        if max_status > 0:
+            if len(status) > max_status:
+                status = status[: max_status - 1] + "…"
+            line += f"  {DIM}{status}{RESET}"
+    print(f"\r{CLEAR_LINE}{line}", end="", flush=True)
+
+
+def end_progress():
+    """Move past the progress bar line so subsequent output doesn't overwrite it."""
+    print()
 
 
 def _bg(text: str, bg: str) -> str:
@@ -544,8 +596,16 @@ def main():
     parser = argparse.ArgumentParser(
         description="Proofread a LaTeX file with an LLM and a set of instructions.",
     )
-    parser.add_argument("file", type=Path, help="Path to the .tex file")
-    parser.add_argument("instructions", type=Path, help="Markdown instructions file")
+    parser.add_argument(
+        "--file", type=Path, required=True, help="Path to the .tex file"
+    )
+    parser.add_argument(
+        "--prompts",
+        type=Path,
+        nargs="+",
+        required=True,
+        help="One or more markdown instruction files",
+    )
     parser.add_argument(
         "--model",
         default=DEFAULT_MODEL,
@@ -571,14 +631,16 @@ def main():
         print(f"Error: file not found: {tex_path}", file=sys.stderr)
         sys.exit(1)
 
-    instructions_path = args.instructions.resolve()
-    if not instructions_path.exists():
-        print(f"Error: instructions not found: {instructions_path}", file=sys.stderr)
-        sys.exit(1)
-
-    instructions = instructions_path.read_text().strip()
-    instructions = resolve_includes(instructions, instructions_path.parent)
-    system_prompt = instructions + SUFFIX_INSTRUCTION
+    # Load and resolve each prompt file
+    prompts: list[tuple[str, str]] = []
+    for prompt_path in args.prompts:
+        p = prompt_path.resolve()
+        if not p.exists():
+            print(f"Error: prompt not found: {p}", file=sys.stderr)
+            sys.exit(1)
+        raw = p.read_text().strip()
+        resolved = resolve_includes(raw, p.parent)
+        prompts.append((p.stem, resolved))
 
     content = tex_path.read_text()
     chunks = split_into_chunks(content)
@@ -589,8 +651,9 @@ def main():
     ]
     total = len(processable)
 
+    prompt_names = ", ".join(name for name, _ in prompts)
     print(f"\n{BOLD}Proofreading: {tex_path.name}{RESET}")
-    print(f"  Instructions: {instructions_path.name}")
+    print(f"  Prompts: {prompt_names}")
     print(f"  Model: {args.model}")
     print(f"  {len(chunks)} total chunks, {total} to process\n")
 
@@ -618,57 +681,72 @@ def main():
         display_idx = list_idx + 1
 
         if display_idx < args.skip_to:
+            print_progress(display_idx, total, "skipped")
             continue
+
+        loc = f"L{chunk.start_line}-{chunk.end_line}"
 
         # Token warning
         est_tokens = len(chunk.text) // 4
         if est_tokens > TOKEN_WARN:
+            end_progress()
             print(
                 f"{YELLOW}  Warning: Chunk {display_idx} is ~{est_tokens} tokens.{RESET}",
                 file=sys.stderr,
             )
 
-        if args.verbose:
-            print(
-                f"{DIM}  [{display_idx}/{total}] lines {chunk.start_line}-{chunk.end_line}{RESET}"
-            )
-
         if args.dry_run:
-            print(
-                f"\n{BOLD}{CYAN}--- Chunk {display_idx}/{total}  "
-                f"lines {chunk.start_line}-{chunk.end_line} ---{RESET}"
-            )
-            print(f"  {DIM}(dry run){RESET}")
+            print_progress(display_idx, total, f"{loc}  dry run")
+            if args.verbose:
+                end_progress()
+                print(
+                    f"  {BOLD}{CYAN}--- Chunk {display_idx}/{total}  {loc} ---{RESET}"
+                )
+                print(f"  {DIM}(dry run){RESET}")
             continue
 
-        # Call LLM
-        corrected = call_llm(
-            client, args.model, system_prompt, chunk.text,
-            no_thinking=args.no_thinking,
-        )
-        if corrected is None:
-            print(f"  Skipping chunk {display_idx} (LLM error).", file=sys.stderr)
-            continue
+        # Chain prompts: each transforms the previous output
+        current_text = chunk.text
+        for prompt_name, instructions in prompts:
+            print_progress(display_idx, total, f"{loc}  {prompt_name}")
+            result = call_llm(
+                client,
+                args.model,
+                current_text,
+                instructions,
+                no_thinking=args.no_thinking,
+            )
+            if result is None:
+                end_progress()
+                print(
+                    f"  Skipping prompt '{prompt_name}' for chunk {display_idx} (LLM error).",
+                    file=sys.stderr,
+                )
+            else:
+                current_text = result
+
+        corrected = current_text
 
         # No changes — skip
         if unwrap_tex(corrected) == unwrap_tex(chunk.text):
-            if args.verbose:
-                print(f"  {DIM}(no changes){RESET}")
+            print_progress(display_idx, total, f"{loc}  no changes")
             continue
 
         if accept_all:
             diff_out = render_word_diff(chunk.text, corrected)
             if diff_out:
+                end_progress()
                 print(
-                    f"\n{BOLD}{CYAN}--- Chunk {display_idx}/{total}  "
-                    f"lines {chunk.start_line}-{chunk.end_line} ---{RESET}"
+                    f"\n{BOLD}{CYAN}--- Chunk {display_idx}/{total}  {loc} ---{RESET}"
                 )
                 print(diff_out)
                 print("  -> Auto-accepted")
             chunk.text = corrected
             write_file(tex_path, chunks)
+            print_progress(display_idx, total, f"{loc}  accepted")
             continue
 
+        end_progress()
         decision, final_text = review_change(
             display_idx, total, chunk, corrected, args.dry_run
         )
@@ -682,6 +760,7 @@ def main():
             print(f"\n  Progress saved. Resume with: --skip-to {display_idx}")
             return
 
+    end_progress()
     print(f"\n{BOLD}{GREEN}Done!{RESET} Processed {total} chunks.")
 
 
