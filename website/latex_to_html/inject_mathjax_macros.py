@@ -146,8 +146,12 @@ def _expand_star_variants_once(html: str, star_variants: dict) -> str:
                 j = end + 1
 
             if success:
-                # Substitute #1, #2, etc. in the expansion
-                expanded = expansion
+                # Substitute #1, #2, etc. in the expansion.
+                # First, insert a space between \command and #N placeholders
+                # so that arguments starting with a letter don't concatenate
+                # with the preceding command name. e.g. \Vert#1 with #1=h(...)
+                # would produce \Verth (undefined); adding a space gives \Vert h(...)
+                expanded = re.sub(r"(\\[a-zA-Z]+)(#\d)", r"\1 \2", expansion)
                 for idx, arg in enumerate(args):
                     expanded = expanded.replace(f"#{idx + 1}", arg)
                 result.append(expanded)

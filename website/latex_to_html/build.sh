@@ -54,7 +54,7 @@ cd "$REPO_ROOT"
 
 # Use repo-local texmf.cnf for extra memory (needed for CJK builds).
 # Trailing ":" means "then search default TeX Live locations".
-export TEXMFCNF="$PIPELINE_DIR:"
+export TEXMFCNF="$REPO_ROOT:"
 
 # Run make4ht with XeTeX engine, mathjax passthrough, chapter splitting
 make4ht -x -u -s \
