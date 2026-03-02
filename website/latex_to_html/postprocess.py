@@ -14,6 +14,7 @@ Responsibilities:
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
@@ -152,7 +153,12 @@ def should_include_chapter_styling(filename: str) -> bool:
     )
 
 
-def inject_head_resources(soup: BeautifulSoup, filename: str):
+def _asset_href(prefix: str, filename: str) -> str:
+    """Build an asset path, optionally relative to a parent output dir."""
+    return f"{prefix}/{filename}" if prefix else filename
+
+
+def inject_head_resources(soup: BeautifulSoup, filename: str, shared_asset_prefix: str = ""):
     """Inject viewport meta, CSS, and JS into <head>."""
     head = soup.find("head")
     if not head:
@@ -169,16 +175,23 @@ def inject_head_resources(soup: BeautifulSoup, filename: str):
         head.insert(0, meta)
 
     # Common CSS
-    if not head.find("link", {"href": COMMON_CSS}):
-        head.append(soup.new_tag("link", rel="stylesheet", href=COMMON_CSS))
+    common_css_href = _asset_href(shared_asset_prefix, COMMON_CSS)
+    if not head.find("link", {"href": common_css_href}):
+        head.append(soup.new_tag("link", rel="stylesheet", href=common_css_href))
 
     # Chapter-specific resources
     if should_include_chapter_styling(filename):
-        if not head.find("link", {"href": CHAPTER_CSS}):
-            head.append(soup.new_tag("link", rel="stylesheet", href=CHAPTER_CSS))
+        chapter_css_href = _asset_href(shared_asset_prefix, CHAPTER_CSS)
+        if not head.find("link", {"href": chapter_css_href}):
+            head.append(soup.new_tag("link", rel="stylesheet", href=chapter_css_href))
 
         # JS files (defer)
-        for js_src in [COMMON_COMPONENTS_JS, COMMON_JS, CHAPTER_JS]:
+        js_sources = [
+            COMMON_COMPONENTS_JS,
+            _asset_href(shared_asset_prefix, COMMON_JS),
+            _asset_href(shared_asset_prefix, CHAPTER_JS),
+        ]
+        for js_src in js_sources:
             if not head.find("script", {"src": js_src}):
                 script = soup.new_tag("script", src=js_src, defer=True)
                 head.append(script)
@@ -543,13 +556,13 @@ def generate_search_index(output_dir: Path):
 # Main processing pipeline
 # ---------------------------------------------------------------------------
 
-def process_file(html_path: Path, build_dir: Path):
+def process_file(html_path: Path, build_dir: Path, shared_asset_prefix: str = ""):
     """Process a single HTML file through all post-processing steps."""
     text = html_path.read_text(encoding="utf-8")
     soup = BeautifulSoup(text, "html.parser")
     filename = html_path.name
 
-    inject_head_resources(soup, filename)
+    inject_head_resources(soup, filename, shared_asset_prefix)
     ensure_body_top_anchor(soup)
     remove_make4ht_navigation(soup)
     tag_theorem_environments(soup)
@@ -572,6 +585,10 @@ def main():
 
     build_dir = Path(args.input).resolve()
     output_dir = Path(args.output).resolve()
+    shared_asset_root = Path(__file__).resolve().parent.parent / "html"
+    shared_asset_prefix = os.path.relpath(shared_asset_root, output_dir)
+    if shared_asset_prefix == ".":
+        shared_asset_prefix = ""
 
     if not build_dir.exists():
         print(f"Error: build directory {build_dir} does not exist", file=sys.stderr)
@@ -601,7 +618,7 @@ def main():
     print(f"\nProcessing {len(html_files)} HTML files...")
     for html_file in html_files:
         print(f"  {html_file.name}")
-        process_file(html_file, build_dir)
+        process_file(html_file, build_dir, shared_asset_prefix)
 
     # Step 4: Copy to output directory
     output_dir.mkdir(parents=True, exist_ok=True)
