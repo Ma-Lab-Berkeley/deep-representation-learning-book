@@ -199,7 +199,7 @@
             })(),
             React.createElement(
                 "section",
-                { "aria-label": "Authors", className: "authors-grid" },
+                { "aria-label": "Authors", className: "card-grid" },
                 React.createElement(
                     "h2",
                     { style: { margin: "16px 0 8px", fontSize: "18px" } },
@@ -209,13 +209,13 @@
                 ),
                 AUTHORS.map((p) => React.createElement(Card, { key: p.name, ...p }))
             ),
-            // React.createElement('section', { 'aria-label': 'Editors', className: 'authors-grid' },
+            // React.createElement('section', { 'aria-label': 'Editors', className: 'card-grid' },
             //   React.createElement('h2', { style: { margin: '16px 0 8px', fontSize: '18px' } }, (window.get_text && window.get_text('contributors.sections.editors')) || ''),
             //   EDITORS.map((p) => React.createElement(Card, { key: p.name, ...p }))
             // ),
             React.createElement(
                 "section",
-                { "aria-label": "Contributors", className: "authors-grid" },
+                { "aria-label": "Contributors", className: "card-grid" },
                 React.createElement(
                     "h2",
                     { style: { margin: "16px 0 8px", fontSize: "18px" } },
