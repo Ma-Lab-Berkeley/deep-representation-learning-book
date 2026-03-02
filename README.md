@@ -120,11 +120,11 @@ Note: The [community page](https://ma-lab-berkeley.github.io/deep-representation
 Many thanks!
 
 ```
-@book{ldrdd2025,
-  title={Learning Deep Representations of Data Distributions},
+@book{ppdrl2026,
+  title={Principles and Practice of Deep Representation Learning},
   author={Buchanan, Sam and Pai, Druv and Wang, Peng and Ma, Yi},
-  month=aug,
-  year={2025},
+  month=mar,
+  year={2026},
   publisher={Online},
   note={\url{https://ma-lab-berkeley.github.io/deep-representation-learning-book/}.}
 }

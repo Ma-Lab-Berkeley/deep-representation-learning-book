@@ -12,18 +12,20 @@
 
     // Table of Contents
     toc: {
-      preface: "序言",
+      preface: "第一版序言",
+      prefaceV2: "第二版序言",
       chapter: "第",
       appendix: "附录",
       chapters: {
         1: { title: "第一章", subtitle: "概述" },
         2: { title: "第二章", subtitle: "学习线性和独立结构" },
-        3: { title: "第三章", subtitle: "通过有损压缩追求低维分布" },
-        4: { title: "第四章", subtitle: "通过展开优化实现深度表示" },
-        5: { title: "第五章", subtitle: "一致性和自洽性表示" },
-        6: { title: "第六章", subtitle: "基于低维分布的推断" },
-        7: { title: "第七章", subtitle: "真实世界数据的表示学习" },
-        8: { title: "第八章", subtitle: "智能研究的未来" },
+        3: { title: "第三章", subtitle: "通过去噪追求低维分布" },
+        4: { title: "第四章", subtitle: "通过有损压缩的表示学习" },
+        5: { title: "第五章", subtitle: "作为展开优化的深度表示" },
+        6: { title: "第六章", subtitle: "一致性和自洽性表示" },
+        7: { title: "第七章", subtitle: "基于低维分布的推断" },
+        8: { title: "第八章", subtitle: "真实世界数据与任务的表示学习" },
+        9: { title: "第九章", subtitle: "开放问题与方向" },
       },
       appendices: {
         A: { title: "附录A", subtitle: "优化方法" },
@@ -33,7 +35,8 @@
 
     // UI Labels
     ui: {
-      bookTitle: "数据分布的深度表达学习",
+      bookTitle: "深度表征学习的原理与实践",
+      bookSubtitle: "或 记忆的数学理论",
       langLabel: "ZH",
       brandHref: "index.html",
       searchPlaceholder: "搜索页面…",
@@ -65,7 +68,7 @@
       placeholder:
         '询问关于此页面的问题…\n\n您也可以通过添加以下内容来询问特定内容：\n@章节（例如"@3"）、@章节.小节（例如"@3.1"）、@章节.小节.子小节（例如"@3.1.2"）\n@附录（例如"@A"）、@附录.小节（例如"@A.1"）、@附录.小节.子小节（例如"@A.1.2"）',
       systemPrompt:
-        "您是帮助《学习数据分布的深度表示》一书读者的AI助手。请清晰简洁地回答。如果相关，请指向当前页面的章节或标题。",
+        "您是帮助《深度表征学习的原理与实践》一书读者的AI助手。请清晰简洁地回答。如果相关，请指向当前页面的章节或标题。",
       askAITitle: "询问AI关于此页面",
       modelPicker: {
         title: "选择AI模型",
@@ -139,7 +142,8 @@
     // Landing page content
     landing: {
       hero: {
-        title: "数据分布的深度表达学习",
+        title: "深度表征学习的原理与实践",
+        bookSubtitle: "或 记忆的数学理论",
         authors: "Sam Buchanan · Druv Pai · Peng Wang · Yi Ma",
         subtitle:
           "一本完全开源的现代教科书，探讨深度神经网络为何以及如何从高维真实世界数据中学习紧凑且信息丰富的表示。",
@@ -150,9 +154,9 @@
           github: "GitHub 仓库",
         },
         cover: {
-          alt: "书籍封面：学习数据分布的深度表示",
+          alt: "书籍封面：深度表征学习的原理与实践",
           title: "阅读本书",
-          version: "版本 1.0\n发布于 2025年8月18日",
+          version: "第二版\n发布于 2026年3月1日",
         },
       },
       sections: {
@@ -161,7 +165,7 @@
           content: `
  在当前深度学习，特别是"生成式人工智能"时代，人们在训练超大型生成模型方面投入了大量资源。迄今为止，这些模型一直是难以理解的"黑盒子"，因为它们的内部机制不透明，导致在可解释性、可靠性和可控性方面存在困难。自然而然地，这种缺乏理解的情况既带来了炒作，也带来了恐惧。
 
- 这本书试图"打开黑盒子"，通过表示学习的视角来理解大型深度网络的机制，表示学习是深度学习模型经验能力的一个主要因素——可以说是最重要的一个因素。本书的简要概述如下。第1章将总结贯穿全书的主线。第2、3、4、5章将通过优化和信息论来解释现代神经网络架构的设计原则，将架构开发过程（长期以来被描述为某种"炼金术"）简化为在引入基本原理后的本科水平线性代数和微积分练习。第6章和第7章将讨论这些原理的应用，以更范式化的方式解决问题，获得设计上高效、可解释且可控的新方法和模型，但功能不逊于——有时甚至超过——它们所类似的黑盒模型。第8章将讨论深度学习的潜在未来方向、表示学习的作用以及一些开放问题。
+ 这本书试图"打开黑盒子"，通过表示学习的视角来理解大型深度网络的机制，表示学习是深度学习模型经验能力的一个主要因素——可以说是最重要的一个因素。本书的简要概述如下。第1章将总结贯穿全书的主线。第2、3、4、5、6章将通过优化和信息论来解释现代神经网络架构的设计原则，将架构开发过程（长期以来被描述为某种"炼金术"）简化为在引入基本原理后的本科水平线性代数和微积分练习。第7章和第8章将讨论这些原理的应用，以更范式化的方式解决问题，获得设计上高效、可解释且可控的新方法和模型，但功能不逊于——有时甚至超过——它们所类似的黑盒模型。第9章将讨论深度学习的潜在未来方向、表示学习的作用以及一些开放问题。
 
  本书面向具有线性代数、概率论和机器学习背景的高年级本科生或研究生一年级学生。对于数学思维较强的学生，本书应该适合作为深度学习的第一门课程，但拥有一些深度学习的初步表面知识可能有助于更好地理解书中讨论的观点和技术。
 
@@ -190,8 +194,7 @@
       sections: {
         authors: "作者",
         editors: "编辑",
-        contentContributors: "内容贡献者",
-        infraContributors: "网站 / 基础设施 贡献者",
+        contributors: "贡献者",
       },
 
       people: {
@@ -209,10 +212,19 @@
         "kevin-murphy": {
           desc: "大量反馈。Issues：[#3](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/3)、[#4](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/4)、[#5](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/5)、[#8](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/8)、[#10](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/10)、[#11](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/11)、[#12](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/12)、[#13](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/13)",
         },
-        "yaodong-yu": { desc: "为第四章提供初始文本。" },
-        "tianzhe-chu": { desc: "AI 工具。" },
-        "ziyang-wu": { desc: "网站开发。" },
+        "tianzhe-chu": { desc: "第8.4节实验。AI 工具。" },
+        "shenghua-gao": { desc: "第8.8和8.9节。" },
+        "bingbing-huang": { desc: "第8.8和8.9节。" },
+        "qing-qu": { desc: "第3.3节。" },
+        "shengbang-tong": { desc: "第6.3和8.6节。" },
         "jeroen-van-goey": { desc: "PRs：[#29](https://github.com/Ma-Lab-Berkeley/deep-representation-learning-book/pull/29)"},
+        "chengyu-wang": { desc: "第8.8和8.9节。" },
+        "ziyang-wu": { desc: "第8.3节。网站开发。" },
+        "jingfeng-yang": { desc: "第8.3节。" },
+        "daniel-yeh": { desc: "第8.6和8.7节。" },
+        "brent-yi": { desc: "第8.10节。" },
+        "yaodong-yu": { desc: "为第五章提供初始文本。" },
+        "zibo-zhao": { desc: "第8.8节。" },
       },
     },
 
@@ -225,6 +237,7 @@
         tutorials: "教程",
         translations: "社区翻译",
         courses: "课程",
+        previousVersions: "历史版本",
       },
       content: {
         courses: `
@@ -250,6 +263,9 @@
 以下是（非官方）社区翻译版本：
 - [罗马尼亚语译本](../assets/book-main_ro.pdf)，由 [Piatra Institute](https://piatra.institute/) 的 Jan Cavel 贡献。
         `,
+        previousVersions: `
+- [第一版 (PDF)](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/book_v1.pdf) — "Learning Deep Representations of Data Distributions"，发布于2025年8月18日。
+`,
       },
     },
 
@@ -301,6 +317,7 @@
   window.BOOK_COMPONENTS.buildTOC = function () {
     return [
       { label: this.toc.preface, href: "Chx1.html" },
+      { label: this.toc.prefaceV2, href: "Chx2.html" },
       {
         label: this.toc.chapters[1].title,
         subtitle: this.toc.chapters[1].subtitle,
@@ -340,6 +357,11 @@
         label: this.toc.chapters[8].title,
         subtitle: this.toc.chapters[8].subtitle,
         href: "Ch8.html",
+      },
+      {
+        label: this.toc.chapters[9].title,
+        subtitle: this.toc.chapters[9].subtitle,
+        href: "Ch9.html",
       },
       {
         label: this.toc.appendices.A.title,

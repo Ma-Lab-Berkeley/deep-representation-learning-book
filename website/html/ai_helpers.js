@@ -65,7 +65,7 @@
         ),
         React.createElement(
           "div",
-          { className: "ai-helpers-grid" },
+          { className: "card-grid" },
           AI_ASSISTANTS.map((p) =>
             React.createElement(Card, { key: p.name, ...p })
           )

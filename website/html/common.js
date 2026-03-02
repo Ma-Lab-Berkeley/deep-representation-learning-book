@@ -111,9 +111,10 @@
       return prev[bl];
     }
 
-    function fieldMatchScore(fieldNorm, token) {
+    function fieldMatchScore(fieldNorm, token, skipFuzzy) {
       if (!fieldNorm || !token) return 0;
       if (fieldNorm.indexOf(token) !== -1) return 2;
+      if (skipFuzzy) return 0;
       // fuzzy: any word within edit distance <= threshold
       var words = fieldNorm.split(" ");
       var thresh = token.length >= 5 ? 2 : 1;
@@ -126,6 +127,12 @@
       return 0;
     }
 
+    // Fallback scoring used when Fuse.js CDN fails to load (Pass 3 fallback).
+    // Per-token scoring with field weights: title (8/5) > snippet (3) > page (1).
+    // Title and page use edit-distance fuzzy matching (short strings, affordable).
+    // Snippet uses substring-only matching (fuzzy on ~4000 char strings is too
+    // slow per keystroke). Tokens not found in any field penalize the score (-5)
+    // to push down partial matches.
     function computeEntryScore(entry, tokens) {
       var t = normalizeText(entry.title || "");
       var s = normalizeText(entry.snippet || "");
@@ -134,7 +141,7 @@
       for (var k = 0; k < tokens.length; k++) {
         var tok = tokens[k];
         var hit = false;
-        var r = fieldMatchScore(t, tok);
+        var r = fieldMatchScore(t, tok, false);
         if (r === 2) {
           score += 8;
           hit = true;
@@ -142,15 +149,12 @@
           score += 5;
           hit = true;
         }
-        r = fieldMatchScore(s, tok);
+        r = fieldMatchScore(s, tok, true);
         if (r === 2) {
           score += 3;
           hit = true;
-        } else if (r === 1) {
-          score += 2;
-          hit = true;
         }
-        r = fieldMatchScore(p, tok);
+        r = fieldMatchScore(p, tok, false);
         if (r === 2) {
           score += 1;
           hit = true;
@@ -160,8 +164,6 @@
         }
         if (!hit) score -= 5;
       }
-      // Small boost for top-level entries (chapter/appx title entries have empty snippet)
-      if (!entry.snippet) score += 1;
       return score;
     }
 
@@ -192,50 +194,128 @@
       return out;
     }
 
-    // --- Lunr search integration ---
-    var __SEARCH_DATA = null; // Raw JSON from search-index.json { entries: [...] }
-    var __LUNR_READY = false; // Whether lunr library is loaded
-    var __LUNR_LOADING = false; // Prevent duplicate script injections
-    var __LUNR_INDEX = null; // Built lunr index
-    var __LUNR_REF_TO_ENTRY = null; // Map ref -> entry
-    var __SEARCH_INIT_PROMISE = null; // In-flight promise for ensuring index
+    // Extract a short context window (~2×radius chars) around the best match
+    // in a snippet, for display in search result dropdowns.
+    //
+    // Token selection strategy (why not just pick the first token?):
+    //   Common short words like "of", "the", "a" appear near the start of
+    //   almost every snippet. If we naively pick the earliest individual token,
+    //   a query like "massive amounts of" shows context around the first "of"
+    //   (position ~200) instead of "massive amounts of sensed data" (position
+    //   ~800), making the result look irrelevant even though it matched. So we
+    //   try the full phrase first, then progressively shorter sub-phrases,
+    //   and only fall back to individual tokens as a last resort.
+    function contextSnippet(snippet, tokens, radius) {
+      if (!snippet || !tokens || !tokens.length) return "";
+      radius = radius || 80;
+      var lower = snippet.toLowerCase();
 
-    function ensureLunrLoaded() {
-      if (window.lunr) {
-        __LUNR_READY = true;
+      // 1) Try the full phrase — best context for exact matches
+      var phrase = tokens.join(" ");
+      var best = lower.indexOf(phrase);
+
+      // 2) Try longest consecutive sub-phrase (e.g. for 3 tokens, try all
+      //    2-token pairs). This handles partial phrase matches gracefully.
+      if (best === -1) {
+        for (var n = tokens.length - 1; n >= 1; n--) {
+          for (var s = 0; s + n <= tokens.length; s++) {
+            var sub = tokens.slice(s, s + n).join(" ");
+            var pos = lower.indexOf(sub);
+            if (pos !== -1) { best = pos; break; }
+          }
+          if (best !== -1) break;
+        }
+      }
+
+      // 3) Last resort: earliest individual token occurrence
+      if (best === -1) {
+        for (var i = 0; i < tokens.length; i++) {
+          var pos2 = lower.indexOf(tokens[i]);
+          if (pos2 !== -1 && (best === -1 || pos2 < best)) best = pos2;
+        }
+      }
+
+      if (best === -1) return snippet.slice(0, radius * 2);
+      var start = Math.max(0, best - radius);
+      var end = Math.min(snippet.length, best + radius);
+      // Snap to word boundaries so we don't cut mid-word
+      if (start > 0) {
+        var sp = snippet.indexOf(" ", start);
+        if (sp !== -1 && sp < best) start = sp + 1;
+      }
+      if (end < snippet.length) {
+        var sp2 = snippet.lastIndexOf(" ", end);
+        if (sp2 > best) end = sp2;
+      }
+      return (start > 0 ? "\u2026" : "") +
+        snippet.slice(start, end).trim() +
+        (end < snippet.length ? "\u2026" : "");
+    }
+
+    // =========================================================================
+    // Search engine
+    //
+    // Architecture: three-pass ranked search, combining our own substring
+    // matching with Fuse.js for fuzzy fallback.
+    //
+    // Why not Fuse.js alone?
+    //   Fuse.js is designed for fuzzy matching, not exact substring search.
+    //   Its extended-search include-match operator ('term) checks each token
+    //   independently per key, so "flow matching" finds entries where "flow"
+    //   and "matching" appear anywhere — not necessarily as an adjacent phrase.
+    //   Fuse also applies field-length normalization that penalizes matches in
+    //   long text (our snippets avg ~4000 chars), causing valid matches to
+    //   score below the threshold and silently disappear.
+    //
+    // Our solution:
+    //   Pass 1 — Exact phrase: indexOf() on the full query string.
+    //            Guarantees literal substring matches rank first.
+    //   Pass 2 — AND tokens: all individual words must appear (any order).
+    //            Catches cases where terms are present but not adjacent.
+    //   Pass 3 — Fuse.js fuzzy: handles typos and approximate matches.
+    //            Only appends results not already found by Passes 1–2.
+    //
+    // Performance:
+    //   normalizeText() is expensive on long strings (toLowerCase, NFD
+    //   normalization, regex replacements). We pre-compute normalized fields
+    //   (_nt, _ns, _np, _nc) once when the index loads (in ensureSearchData),
+    //   so per-keystroke work is just indexOf() on cached strings.
+    //   Input handlers are debounced (80ms) to avoid redundant searches
+    //   while the user is still typing.
+    // =========================================================================
+    var __SEARCH_DATA = null;
+    var __FUSE_INDEX = null;
+    var __FUSE_READY = false;
+    var __FUSE_LOADING = false;
+    var __SEARCH_INIT_PROMISE = null;
+
+    function ensureFuseLoaded() {
+      if (window.Fuse) {
+        __FUSE_READY = true;
         return Promise.resolve();
       }
-      if (__LUNR_LOADING) {
+      if (__FUSE_LOADING) {
         return new Promise(function (resolve) {
           var check = function () {
-            if (window.lunr) {
-              __LUNR_READY = true;
-              resolve();
-            } else setTimeout(check, 20);
+            if (window.Fuse) { __FUSE_READY = true; resolve(); }
+            else setTimeout(check, 20);
           };
           check();
         });
       }
-      __LUNR_LOADING = true;
+      __FUSE_LOADING = true;
       return new Promise(function (resolve) {
         try {
           var head = document.head || document.getElementsByTagName("head")[0];
           var s = document.createElement("script");
-          s.id = "lunr-js";
+          s.id = "fuse-js";
           s.async = true;
           s.defer = true;
-          s.src = "https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js";
-          s.onload = function () {
-            __LUNR_READY = true;
-            resolve();
-          };
-          s.onerror = function () {
-            resolve();
-          };
+          s.src = "https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js";
+          s.onload = function () { __FUSE_READY = true; resolve(); };
+          s.onerror = function () { resolve(); };
           head && head.appendChild(s);
-        } catch (_) {
-          resolve();
-        }
+        } catch (_) { resolve(); }
       });
     }
 
@@ -248,6 +328,20 @@
         })
         .then(function (j) {
           __SEARCH_DATA = j || { entries: [] };
+          // Pre-compute normalized fields once at load time.
+          // normalizeText() is expensive on long strings (toLowerCase, NFD,
+          // regex replacements), and snippets avg ~4000 chars across 224
+          // entries. Caching here avoids ~1400 normalize calls per keystroke.
+          //   _nt = normalized title, _ns = normalized snippet,
+          //   _np = normalized page, _nc = combined (for AND matching)
+          var entries = __SEARCH_DATA.entries;
+          for (var i = 0; i < entries.length; i++) {
+            var e = entries[i];
+            e._nt = normalizeText(e.title || "");
+            e._ns = normalizeText(e.snippet || "");
+            e._np = normalizeText(e.page || "");
+            e._nc = e._nt + " " + e._ns + " " + e._np;
+          }
           return __SEARCH_DATA;
         })
         .catch(function () {
@@ -256,112 +350,153 @@
         });
     }
 
-    function buildLunrIndex() {
-      if (!__LUNR_READY || !window.lunr) return null;
+    // Build the Fuse.js index for fuzzy search (Pass 3 only).
+    // Key config choices:
+    //   ignoreLocation: true   — match anywhere in the string, not just near
+    //                            the start (default only checks first 60 chars)
+    //   ignoreFieldNorm: true  — disable field-length normalization; without
+    //                            this, matches in long snippets (~4000 chars)
+    //                            get penalized vs short titles, pushing valid
+    //                            results below the threshold
+    //   threshold: 0.4         — how fuzzy to allow (0 = exact, 1 = anything)
+    function buildFuseIndex() {
+      if (!__FUSE_READY || !window.Fuse) return null;
       if (!__SEARCH_DATA || !__SEARCH_DATA.entries) return null;
       try {
-        var entries = __SEARCH_DATA.entries || [];
-        var refToEntry = Object.create(null);
-        var idx = window.lunr(function () {
-          this.ref("id");
-          this.field("title", { boost: 8 });
-          this.field("snippet", { boost: 3 });
-          this.field("page", { boost: 1 });
-          // Keep metadata for potential future snippet highlighting by position
-          this.metadataWhitelist = ["position"];
-          for (var i = 0; i < entries.length; i++) {
-            var e = entries[i] || {};
-            // Use numeric id for compact ref
-            this.add({
-              id: String(i),
-              title: e.title || "",
-              snippet: e.snippet || "",
-              page: e.page || "",
-            });
-            refToEntry[String(i)] = e;
-          }
+        __FUSE_INDEX = new window.Fuse(__SEARCH_DATA.entries, {
+          keys: [
+            { name: "title", weight: 3 },
+            { name: "page", weight: 1 },
+            { name: "snippet", weight: 2 },
+          ],
+          threshold: 0.4,
+          ignoreLocation: true,
+          ignoreFieldNorm: true,
+          findAllMatches: true,
+          minMatchCharLength: 2,
+          includeScore: true,
+          useExtendedSearch: true,
         });
-        __LUNR_INDEX = idx;
-        __LUNR_REF_TO_ENTRY = refToEntry;
-        return { idx: idx, map: refToEntry };
+        return __FUSE_INDEX;
       } catch (_) {
         return null;
       }
     }
 
-    function ensureLunrIndex() {
-      if (__LUNR_INDEX && __LUNR_REF_TO_ENTRY)
-        return Promise.resolve({ idx: __LUNR_INDEX, map: __LUNR_REF_TO_ENTRY });
+    function ensureSearchReady() {
+      if (__FUSE_INDEX) return Promise.resolve();
       if (__SEARCH_INIT_PROMISE) return __SEARCH_INIT_PROMISE;
       __SEARCH_INIT_PROMISE = Promise.resolve()
-        .then(function () {
-          return ensureLunrLoaded();
-        })
-        .then(function () {
-          return ensureSearchData();
-        })
-        .then(function () {
-          return buildLunrIndex();
-        })
-        .then(function (built) {
-          __SEARCH_INIT_PROMISE = null;
-          return built;
-        })
-        .catch(function () {
-          __SEARCH_INIT_PROMISE = null;
-          return null;
-        });
+        .then(function () { return ensureFuseLoaded(); })
+        .then(function () { return ensureSearchData(); })
+        .then(function () { return buildFuseIndex(); })
+        .then(function () { __SEARCH_INIT_PROMISE = null; })
+        .catch(function () { __SEARCH_INIT_PROMISE = null; });
       return __SEARCH_INIT_PROMISE;
     }
 
-    function lunrSearchEntries(qRaw, limit) {
+    // Three-pass ranked search. Results are appended in strict tier order:
+    // Pass 1 results always appear before Pass 2, which appear before Pass 3.
+    // Within each pass, results are sorted by a field-weighted score.
+    // Deduplication via `seen` ensures no entry appears twice across passes.
+    function searchEntries(qRaw, limit) {
       limit = limit || 30;
-      if (!__LUNR_INDEX || !window.lunr) return [];
+      if (!qRaw || !qRaw.trim()) return [];
+
+      var entries = (__SEARCH_DATA && __SEARCH_DATA.entries) || [];
+      if (!entries.length) return [];
+
       var tokens = tokenizeQuery(qRaw);
       if (!tokens.length) return [];
-      try {
-        var res = __LUNR_INDEX.query(function (q) {
-          for (var i = 0; i < tokens.length; i++) {
-            var t = tokens[i];
-            if (!t) continue;
-            var optsTrailing = {
-              fields: ["title"],
-              boost: 8,
-              wildcard: window.lunr.Query.wildcard.TRAILING,
-            };
-            var optsTrailing2 = {
-              fields: ["snippet"],
-              boost: 3,
-              wildcard: window.lunr.Query.wildcard.TRAILING,
-            };
-            var optsTrailing3 = {
-              fields: ["page"],
-              boost: 1,
-              wildcard: window.lunr.Query.wildcard.TRAILING,
-            };
-            q.term(t, optsTrailing);
-            q.term(t, optsTrailing2);
-            q.term(t, optsTrailing3);
-            if (t.length >= 5) {
-              q.term(t, {
-                fields: ["title", "snippet", "page"],
-                boost: 1,
-                editDistance: 1,
-              });
-            }
-          }
-        });
-        var out = [];
-        for (var j = 0; j < res.length && out.length < limit; j++) {
-          var r = res[j];
-          var e = __LUNR_REF_TO_ENTRY && __LUNR_REF_TO_ENTRY[r.ref];
-          if (!e) continue;
-          out.push(Object.assign({ kind: "content", _score: r.score }, e));
-        }
-        return out;
-      } catch (_) {
-        return [];
+      var phrase = normalizeText(qRaw);
+
+      var seen = Object.create(null);
+      var out = [];
+
+      // --- Pass 1: exact phrase substring ---
+      // Uses indexOf() on pre-computed normalized fields (_nt, _ns, _np).
+      // The full query is matched as a contiguous phrase, so "flow matching"
+      // only matches entries containing those words adjacent to each other.
+      // Scoring: title match (+10) > snippet (+5) > page (+2), additive.
+      var phraseHits = [];
+      for (var i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        var sc = 0;
+        if (e._nt.indexOf(phrase) !== -1) sc += 10;
+        if (e._ns.indexOf(phrase) !== -1) sc += 5;
+        if (e._np.indexOf(phrase) !== -1) sc += 2;
+        if (sc > 0) phraseHits.push({ entry: e, score: sc });
       }
+      phraseHits.sort(function (a, b) { return b.score - a.score; });
+      for (var j = 0; j < phraseHits.length && out.length < limit; j++) {
+        var h = phraseHits[j];
+        if (seen[h.entry.href]) continue;
+        seen[h.entry.href] = true;
+        out.push(Object.assign({ kind: "content", _score: h.score }, h.entry));
+      }
+
+      // --- Pass 2: AND substring (all tokens present, not necessarily adjacent) ---
+      // Catches entries where the words appear in different parts of the text.
+      // Skipped for single-token queries (Pass 1 already covers that case).
+      // Uses _nc (concatenated title+snippet+page) for the AND check, then
+      // scores by how many tokens appear in the title (title hit = 3, else 1).
+      if (tokens.length > 1 && out.length < limit) {
+        var andHits = [];
+        for (var k = 0; k < entries.length; k++) {
+          var e2 = entries[k];
+          if (seen[e2.href]) continue;
+          var allFound = true;
+          for (var m = 0; m < tokens.length; m++) {
+            if (e2._nc.indexOf(tokens[m]) === -1) { allFound = false; break; }
+          }
+          if (allFound) {
+            var sc2 = 0;
+            for (var n = 0; n < tokens.length; n++) {
+              sc2 += e2._nt.indexOf(tokens[n]) !== -1 ? 3 : 1;
+            }
+            andHits.push({ entry: e2, score: sc2 });
+          }
+        }
+        andHits.sort(function (a, b) { return b.score - a.score; });
+        for (var q = 0; q < andHits.length && out.length < limit; q++) {
+          var ah = andHits[q];
+          seen[ah.entry.href] = true;
+          out.push(Object.assign({ kind: "content", _score: ah.score }, ah.entry));
+        }
+      }
+
+      // --- Pass 3: Fuse.js fuzzy ---
+      // Handles typos and approximate matches. Only appends entries not
+      // already found by the exact passes above.
+      if (__FUSE_INDEX && out.length < limit) {
+        try {
+          var fuseResults = __FUSE_INDEX.search(qRaw.trim(), { limit: limit });
+          for (var f = 0; f < fuseResults.length && out.length < limit; f++) {
+            var rf = fuseResults[f];
+            if (seen[rf.item.href]) continue;
+            seen[rf.item.href] = true;
+            out.push(Object.assign({ kind: "content", _score: 1 - rf.score }, rf.item));
+          }
+        } catch (_) {}
+      }
+
+      // --- Fallback: edit-distance scoring if Fuse CDN failed to load ---
+      if (!__FUSE_INDEX && out.length < limit) {
+        var scored = [];
+        for (var r = 0; r < entries.length; r++) {
+          var e3 = entries[r];
+          if (seen[e3.href]) continue;
+          var sc3 = computeEntryScore(e3, tokens);
+          if (sc3 > 0) scored.push({ entry: e3, score: sc3 });
+        }
+        scored.sort(function (a, b) { return b.score - a.score; });
+        for (var u = 0; u < scored.length && out.length < limit; u++) {
+          seen[scored[u].entry.href] = true;
+          out.push(Object.assign({ kind: "content", _score: scored[u].score }, scored[u].entry));
+        }
+      }
+
+      return out;
     }
 
     function renderTopBar(options) {
@@ -382,7 +517,7 @@
       var title =
         (options && options.title) ||
         (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.ui.bookTitle) ||
-        "Learning Deep Representations of Data Distributions";
+        "Principles and Practice of Deep Representation Learning";
       var langLabel =
         (options && options.langLabel) ||
         (window.BOOK_COMPONENTS && window.BOOK_COMPONENTS.ui.langLabel) ||
@@ -769,15 +904,20 @@
               if (it.kind === "content") {
                 var t = document.createElement("span");
                 t.className = "search-item-title";
-                t.innerHTML = highlightText(it.title, lastTokens);
-                var s = document.createElement("span");
-                s.className = "search-secondary";
-                s.innerHTML = highlightText(
-                  (it.page || "") + " — " + (it.snippet || ""),
+                t.innerHTML = highlightText(
+                  (it.page || "") + " — " + (it.title || ""),
                   lastTokens
                 );
-                div.appendChild(t);
-                div.appendChild(s);
+                var ctx = contextSnippet(it.snippet || "", lastTokens);
+                if (ctx) {
+                  var s = document.createElement("span");
+                  s.className = "search-secondary";
+                  s.innerHTML = highlightText(ctx, lastTokens);
+                  div.appendChild(t);
+                  div.appendChild(s);
+                } else {
+                  div.appendChild(t);
+                }
               } else {
                 div.textContent = it.label;
               }
@@ -796,6 +936,7 @@
             box.style.display = "block";
             positionBox();
           }
+          var _searchTimer = 0;
           input.addEventListener("input", function () {
             var qRaw = input.value || "";
             var q = normalizeText(qRaw);
@@ -803,36 +944,18 @@
             open = true;
             lastTokens = tokenizeQuery(qRaw);
             if (!q) {
+              clearTimeout(_searchTimer);
               items = [];
               render();
               return;
             }
-            ensureLunrIndex().then(function (built) {
-              var results = lunrSearchEntries(qRaw, 30);
-              // Fallback to legacy scoring if Lunr unavailable
-              if (
-                (!results || !results.length) &&
-                __SEARCH_DATA &&
-                __SEARCH_DATA.entries
-              ) {
-                var scored = [];
-                for (var i = 0; i < __SEARCH_DATA.entries.length; i++) {
-                  var e = __SEARCH_DATA.entries[i];
-                  var sc = computeEntryScore(e, lastTokens);
-                  if (sc > 0)
-                    scored.push(
-                      Object.assign({ kind: "content", _score: sc }, e)
-                    );
-                }
-                scored.sort(function (a, b) {
-                  return b._score - a._score;
-                });
-                items = scored.slice(0, 30);
-              } else {
-                items = results;
-              }
-              render();
-            });
+            clearTimeout(_searchTimer);
+            _searchTimer = setTimeout(function () {
+              ensureSearchReady().then(function () {
+                items = searchEntries(qRaw, 30);
+                render();
+              });
+            }, 80);
           });
           input.addEventListener("focus", function () {
             open = true;
@@ -1644,7 +1767,7 @@
           try {
             if (!doc) return "";
             var secId = "S" + String(sectionNumber);
-            var el = doc.querySelector("section.ltx_section#" + secId);
+            var el = doc.querySelector("section#" + secId);
             if (!el) return "";
             var text = (el.innerText || el.textContent || "").replace(
               /\u00A0/g,
@@ -1663,7 +1786,7 @@
           try {
             if (!doc) return "";
             var main =
-              doc.querySelector(".ltx_page_main") ||
+              doc.querySelector(".chapter-content") ||
               doc.querySelector("main") ||
               doc.body;
             if (!main) return "";
@@ -1690,7 +1813,7 @@
             if (!doc) return "";
             var subId =
               "S" + String(sectionNumber) + ".SS" + String(subsectionNumber);
-            var el = doc.querySelector("section.ltx_subsection#" + subId);
+            var el = doc.querySelector("section#" + subId);
             if (!el) return "";
             var text = (el.innerText || el.textContent || "").replace(
               /\u00A0/g,
@@ -1717,7 +1840,7 @@
               var systemPrompt =
                 (window.BOOK_COMPONENTS &&
                   window.BOOK_COMPONENTS.chat.systemPrompt) ||
-                "You are an AI assistant helping readers of the book Learning Deep Representations of Data Distributions. Answer clearly and concisely. If relevant, point to sections or headings from the current page.";
+                "You are an AI assistant helping readers of the book Principles and Practice of Deep Representation Learning. Answer clearly and concisely. If relevant, point to sections or headings from the current page.";
               var msgs = [];
               msgs.push({ role: "system", content: systemPrompt });
               if (includeSel)
@@ -1807,7 +1930,7 @@
                 {
                   role: "system",
                   content:
-                    "You are an AI assistant helping readers of the book Learning Deep Representations of Data Distributions. Answer clearly and concisely. If relevant, point to sections or headings from the current page.",
+                    "You are an AI assistant helping readers of the book Principles and Practice of Deep Representation Learning. Answer clearly and concisely. If relevant, point to sections or headings from the current page.",
                 },
                 { role: "user", content: userText },
               ]);
@@ -1917,7 +2040,7 @@
         function attachClearOnMainClick() {
           try {
             var main =
-              document.querySelector(".ltx_page_main") ||
+              document.querySelector(".chapter-content") ||
               document.querySelector(".page");
             if (!main) return;
             if (main.getAttribute("data-chat-clear-listener")) return;
@@ -2071,15 +2194,20 @@
               if (it.kind === "content") {
                 var t = document.createElement("span");
                 t.className = "search-item-title";
-                t.innerHTML = highlightText(it.title, mLastTokens);
-                var s = document.createElement("span");
-                s.className = "search-secondary";
-                s.innerHTML = highlightText(
-                  (it.page || "") + " — " + (it.snippet || ""),
+                t.innerHTML = highlightText(
+                  (it.page || "") + " — " + (it.title || ""),
                   mLastTokens
                 );
-                div.appendChild(t);
-                div.appendChild(s);
+                var ctx = contextSnippet(it.snippet || "", mLastTokens);
+                if (ctx) {
+                  var s = document.createElement("span");
+                  s.className = "search-secondary";
+                  s.innerHTML = highlightText(ctx, mLastTokens);
+                  div.appendChild(t);
+                  div.appendChild(s);
+                } else {
+                  div.appendChild(t);
+                }
               } else {
                 div.textContent = it.label;
               }
@@ -2102,41 +2230,25 @@
               mBox.style.overflowX = "hidden";
             } catch (_) {}
           }
+          var _mSearchTimer = 0;
           mInput.addEventListener("input", function () {
             var q = normalizeText(mInput.value || "");
             mActive = -1;
             mOpen = true;
             mLastTokens = tokenizeQuery(mInput.value || "");
             if (!q) {
+              clearTimeout(_mSearchTimer);
               mItems = [];
               mRender();
               return;
             }
-            ensureLunrIndex().then(function () {
-              var results = lunrSearchEntries(mInput.value || "", 30);
-              if (
-                (!results || !results.length) &&
-                __SEARCH_DATA &&
-                __SEARCH_DATA.entries
-              ) {
-                var scored = [];
-                for (var i = 0; i < __SEARCH_DATA.entries.length; i++) {
-                  var e = __SEARCH_DATA.entries[i];
-                  var sc = computeEntryScore(e, mLastTokens);
-                  if (sc > 0)
-                    scored.push(
-                      Object.assign({ kind: "content", _score: sc }, e)
-                    );
-                }
-                scored.sort(function (a, b) {
-                  return b._score - a._score;
-                });
-                mItems = scored.slice(0, 30);
-              } else {
-                mItems = results;
-              }
-              mRender();
-            });
+            clearTimeout(_mSearchTimer);
+            _mSearchTimer = setTimeout(function () {
+              ensureSearchReady().then(function () {
+                mItems = searchEntries(mInput.value || "", 30);
+                mRender();
+              });
+            }, 80);
           });
           mInput.addEventListener("focus", function () {
             mOpen = true;
@@ -2184,18 +2296,7 @@
 
     function maybeInsertSidebar() {
       var didInsert = false;
-      // Landing layout
-      var shell = document.querySelector(".app-shell");
-      if (shell && !shell.querySelector(".book-sidebar")) {
-        renderSidebarInto(
-          shell,
-          window.NAV_LINKS ||
-            (window.BOOK_COMPONENTS ? getDefaultNavLinks() : DEFAULT_NAV_LINKS),
-          window.TOC || (window.BOOK_COMPONENTS ? getDefaultTOC() : DEFAULT_TOC)
-        );
-        didInsert = true;
-      }
-      // Simple pages with layout-with-sidebar
+      // Pages with layout-with-sidebar (landing, contributors, community, ai_helpers)
       var lw = document.querySelector(".layout-with-sidebar");
       if (lw && !lw.querySelector(".book-sidebar")) {
         renderSidebarInto(
@@ -2206,38 +2307,38 @@
         );
         didInsert = true;
       }
-      // Chapter pages: wrap main content with a sidebar layout if present
-      try {
-        var pageMain = document.querySelector(".ltx_page_main");
-        var alreadyWrapped =
-          pageMain &&
-          pageMain.parentElement &&
-          pageMain.parentElement.classList.contains("layout-with-sidebar");
-        if (
-          !didInsert &&
-          pageMain &&
-          !alreadyWrapped &&
-          !document.querySelector(".book-sidebar")
-        ) {
-          var wrapper = document.createElement("div");
-          wrapper.className = "layout-with-sidebar";
-          wrapper.setAttribute("data-shared-ui", "1");
-          if (pageMain.parentNode) {
-            pageMain.parentNode.insertBefore(wrapper, pageMain);
-            renderSidebarInto(
-              wrapper,
-              window.NAV_LINKS ||
-                (window.BOOK_COMPONENTS
-                  ? getDefaultNavLinks()
-                  : DEFAULT_NAV_LINKS),
-              window.TOC ||
-                (window.BOOK_COMPONENTS ? getDefaultTOC() : DEFAULT_TOC)
-            );
-            wrapper.appendChild(pageMain);
-            didInsert = true;
-          }
+      // Any page without a sidebar yet: wrap body content and insert sidebar
+      // Skip for React pages (#root) — they create their own layout and call insertSidebar
+      if (!didInsert && !document.querySelector(".book-sidebar") && !document.getElementById("root")) {
+        var mk4Wrapper = document.createElement("div");
+        mk4Wrapper.className = "layout-with-sidebar";
+        mk4Wrapper.setAttribute("data-shared-ui", "1");
+
+        var mk4Content = document.createElement("div");
+        mk4Content.className = "chapter-content";
+
+        var bodyChildren = Array.prototype.slice.call(
+          document.body.childNodes
+        );
+        for (var ci = 0; ci < bodyChildren.length; ci++) {
+          var bch = bodyChildren[ci];
+          if (bch.id === "book-topbar") continue;
+          mk4Content.appendChild(bch);
         }
-      } catch (_) {}
+
+        renderSidebarInto(
+          mk4Wrapper,
+          window.NAV_LINKS ||
+            (window.BOOK_COMPONENTS
+              ? getDefaultNavLinks()
+              : DEFAULT_NAV_LINKS),
+          window.TOC ||
+            (window.BOOK_COMPONENTS ? getDefaultTOC() : DEFAULT_TOC)
+        );
+        mk4Wrapper.appendChild(mk4Content);
+        document.body.appendChild(mk4Wrapper);
+        didInsert = true;
+      }
       return didInsert;
     }
 
@@ -2293,20 +2394,12 @@
     function setVars() {
       try {
         var tb = document.getElementById("book-topbar");
-        var nb = document.querySelector("nav.ltx_page_navbar");
-        var ch = document.querySelector("header.ltx_page_header");
         document.documentElement.style.setProperty(
           "--book-topbar-h",
           (tb ? tb.offsetHeight : 64) + "px"
         );
-        document.documentElement.style.setProperty(
-          "--navbar-h",
-          (nb ? nb.offsetHeight : 0) + "px"
-        );
-        document.documentElement.style.setProperty(
-          "--header-h",
-          (ch ? ch.offsetHeight : 56) + "px"
-        );
+        document.documentElement.style.setProperty("--navbar-h", "0px");
+        document.documentElement.style.setProperty("--header-h", "56px");
       } catch (e) {}
     }
     ready(function () {
@@ -2638,7 +2731,7 @@
 
         // Find appropriate insertion point
         var targets = [
-          document.querySelector(".ltx_page_main"),
+          document.querySelector(".chapter-content"),
           document.querySelector(".main"),
           document.querySelector(".page"),
           document.querySelector("main"),
