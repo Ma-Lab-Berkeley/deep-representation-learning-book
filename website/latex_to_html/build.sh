@@ -46,15 +46,40 @@ echo "  Output dir:  $OUTPUT_DIR"
 echo ""
 
 # ---------------------------------------------------------------------------
+# Pre-build: clean stale tex4ht artifacts from repo root
+# ---------------------------------------------------------------------------
+# make4ht writes .xref, .4ct, .4tc, .idv, .lg files to the repo root.
+# Stale versions from a previous (possibly failed) run can poison the
+# next build — e.g. malformed .xref entries cause immediate parse errors.
+echo "[Pre-build] Cleaning stale tex4ht artifacts..."
+rm -f "$REPO_ROOT/${TEX_BASE}".{xref,4ct,4tc,idv,lg}
+# ---------------------------------------------------------------------------
+# Pre-build: ensure XeTeX format has enough main_memory
+# ---------------------------------------------------------------------------
+# The XeTeX format bakes main_memory at build time; the repo texmf.cnf
+# sets a larger value.  Rebuild a user-level xelatex.fmt if needed so
+# make4ht (which uses xelatex) has enough memory for CJK + tex4ht.
+# Uses a temp dir for the probe so parallel builds don't collide.
+export TEXMFCNF="$REPO_ROOT:"
+
+NEEDED_MEM=$(kpsewhich --var-value main_memory 2>/dev/null || echo 0)
+PROBE_DIR=$(mktemp -d)
+ACTUAL_MEM=$(cd "$PROBE_DIR" \
+    && xelatex -interaction=batchmode '\tracingstats=1 \stop' >/dev/null 2>&1 \
+    && grep -o 'out of [0-9]*' texput.log 2>/dev/null | grep -o '[0-9]*' || echo 0)
+rm -rf "$PROBE_DIR"
+
+if [ "$ACTUAL_MEM" -lt "$NEEDED_MEM" ] 2>/dev/null; then
+    echo "[Pre-build] Rebuilding xelatex format (main_memory $ACTUAL_MEM -> $NEEDED_MEM)..."
+    fmtutil-user --byfmt xelatex >/dev/null 2>&1
+fi
+
+# ---------------------------------------------------------------------------
 # Stage 1: make4ht
 # ---------------------------------------------------------------------------
 echo "[Stage 1] Running make4ht..."
 mkdir -p "$BUILD_DIR"
 cd "$REPO_ROOT"
-
-# Use repo-local texmf.cnf for extra memory (needed for CJK builds).
-# Trailing ":" means "then search default TeX Live locations".
-export TEXMFCNF="$REPO_ROOT:"
 
 # Run make4ht with XeTeX engine, mathjax passthrough, chapter splitting
 make4ht -x -u -s \

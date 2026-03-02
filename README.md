@@ -48,22 +48,28 @@ You can do the same with the Chinese translation of the book (though note you ma
 
 ## Building the Website
 
-- A local `pdflatex` distribution ([TexLive](https://www.tug.org/texlive/) is a recommended choice)
+### Prerequisites for Building the Website
+
+- A local TeX distribution with `make4ht` ([TexLive](https://www.tug.org/texlive/) is a recommended choice; `make4ht` is included in TexLive)
 - The Python package manager [`uv`](https://docs.astral.sh/uv/)
-- A `latexml` installation which can be obtained in [several ways](https://math.nist.gov/~BMiller/LaTeXML/get.html)
 - An installation of [`ImageMagick`](https://imagemagick.org/)
 
 ### How to Build the Website
 
 - Navigate to the repository and run `uv sync`, which creates a Python virtual environment restricted to the repository.
-- Go to the `website/latex_to_html` directory and run `uv run latex_to_html_converter.py ../../book-main.tex ../html`. This should take a long time (around 10-30 minutes).
-- Navigate one level up and into the newly created `html` directory. 
-- Start an HTTP server using `uv run python3 -m http.server <PORT>`. (The constant `<PORT>` represents a free port and is otherwise completely arbitrary; one possibility is `13579`.)
-- Navigate to `http://localhost:<PORT>/index.html`. 
+- Build the book first so that `book-main.bbl` is up to date (see [Building the Book](#building-the-book-or-a-chapter)).
+- Run the build pipeline:
+```
+bash website/latex_to_html/build.sh book-main.tex
+```
+This runs `make4ht`, generates MathJax macros, injects them into each HTML file, and post-processes the output into `website/html/`. It may take a while (around 10-30 minutes).
+- Start a local HTTP server to preview the site:
+```
+python -m http.server -d website/html
+```
+- Navigate to `http://localhost:8000/index.html`.
 
 Note: The AI helper calls a variety of different models by making queries to a [Cloudflare Worker](https://workers.cloudflare.com/) proxy. We use this proxy because we do not want to expose API keys to everyone. As such, the worker will unfortunately not be open-sourced. If you really need access, talk to [Druv](https://druvpai.github.io/).
-
-Note: To build the website using `latex_to_html_converter.py` with a working bibliography, you need to make sure the `book-main.bbl` file is up to date, which may mean that you have to [build the book](#building-the-book-or-a-chapter) first.
 
 ## Raising an Issue
 
