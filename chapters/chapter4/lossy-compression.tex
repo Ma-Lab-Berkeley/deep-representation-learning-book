@@ -120,7 +120,23 @@ networks, as well as to more efficient deep-architecture designs.
 
 \section{Compression via Lossy Coding} \label{sec:lossy_compression}
 
-\subsection{Necessity of Lossy Coding}
+In this section, we develop the \textit{lossy coding rate}
+as a computable measure of complexity for distributions with
+low-dimensional support---a setting where classical measures such as
+entropy, dimension, and volume all fail to distinguish among candidate
+models. We first motivate the necessity of lossy coding with respect to these
+pathologies
+(\Cref{sub:rate-dist}), then show that the rate distortion function
+connects this coding-theoretic measure to the geometry of the data
+support via sphere covering (\Cref{thm:covering-number-rate-distortion}).
+This connection is the bridge between information-theoretic and geometric
+approaches to learning low-dimensional distributions. Finally, we develop
+a tight closed-form approximation to the lossy coding rate for Gaussians
+(\Cref{subsec:lossy DR}) and an effective algorithm for clustering mixtures of
+low-dimensional Gaussians (\Cref{sec:clustering-Gaussians}), which will be
+generalized to nonlinear distributions in the following section.
+
+\subsection{Necessity of Lossy Coding}\label{sub:rate-dist}
 
 We have previously, multiple times, discussed a difficulty: if we
 learn the distribution from finite samples in the end, and our
@@ -463,15 +479,18 @@ property for a special case.
         \leq \log_{2} \cN_{\epsilon}(K).
     \end{equation}
     If, in addition, $\vx$ is uniformly distributed on $K$ and $K$ is
-    a mixture of mutually orthogonal low-rank subspaces,\footnote{In fact, it is
-        possible to treat highly irregular $K$, such as fractals,
-        with a parallel
-        result, but its statement
-        becomes far more technical: c.f.\ Riegler et al.\
-        \cite{Riegler2018-jh,Riegler2023-rr}. We give a simple proof in
-        \Cref{app:rate-distortion-covering} which shows the result
-        for mixtures of
-    subspaces.}
+    a union of mutually orthogonal low-dimensional hyperspheres,\footnote{In fact, it is
+    possible to treat highly irregular $K$, such as compact manifolds or even fractals,
+    with a parallel
+    result, but its statement
+    becomes far more technical: c.f.\ Riegler et al.\
+    \cite{Riegler2018-jh,Riegler2023-rr}. We give a simple proof in
+    \Cref{app:rate-distortion-covering} which shows the result
+    for unions of orthogonal hyperspheres, an assumption that is equivalent to
+    a mixture of low-rank Gaussians with orthogonal supports when the dimension
+    of each subspace is sufficiently large. See
+    \Cref{app:rate-distortion-covering} for further discussion of this
+    assumption.}
     then a matching lower bound holds:
     \begin{equation}
         \cR_{\epsilon}(\vx)
@@ -484,16 +503,25 @@ property for a special case.
     defer it to \Cref{app:rate-distortion-covering}.
 \end{proof}
 
-The implication of \Cref{thm:covering-number-rate-distortion} can be summarized
-as follows: for sufficiently accurate coding of the distribution of
-$\vx$, the minimum rate distortion coding framework is completely characterized
-by the sphere packing problem on the support of $\vx$.
-The core of the proof of \Cref{thm:covering-number-rate-distortion} can indeed
-be generalized to more complex distributions such as sufficiently incoherent
-mixtures of manifolds, but we leave this for a future study.
+The upper bound in \Cref{thm:covering-number-rate-distortion} requires only that
+$\Supp(\vx)$ is a compact set, while our proof of the lower bound requires
+stronger regularity assumptions: specifically, that $\vx$ is uniformly
+distributed on $\Supp(\vx)$ and that $\Supp(\vx)$ is a mixture of
+low-rank Gaussians (with appropriate normalization).\footnote{Later in this Chapter, in \Cref{subsec:MCR2}, we
+will see an objective function whose maxima are normalized mixtures of low-rank
+Gaussians that correspond to the input data in a certain way.
+\Cref{ch:deep-networks} will further develop this framework for deep learning,
+showing that the structural assumption we make to prove the lower bound is
+not overly restrictive.}
+Under these assumptions, the implication of
+\Cref{thm:covering-number-rate-distortion} can be summarized as follows: for
+sufficiently accurate coding of the distribution of
+$\vx$ (i.e., as $\epsilon \to 0$), the minimum rate distortion coding framework
+is equivalent to
+the sphere packing problem on the support of $\vx$.
 So the rate distortion can be thought of as a ``probability-aware'' way to
 approximate the support of the distribution of
-\(\vx\) by a mixture of many small balls.
+\(\vx\) by a mixture of many small balls (\Cref{fig:continuation}).
 
 We now discuss another connection between this and the
 denoising-diffusion-entropy complexity hierarchy we discussed earlier in this
@@ -565,7 +593,7 @@ chapter.
     \end{align}
     We have seen the Gaussian entropy calculated in
     \Cref{eqn:entropy-Gaussian-multi}: when $\epsilon$ is small, it is equal, up
-    to additive constants, to the volumetric quantity $-\log_2
+    to additive constants, to the quantity $-\log_2
     \volume(B_{\epsilon})$ we have seen in the Shannon lower bound.
     In certain special cases (e.g., data supported on incoherent
     low-rank subspaces),
@@ -1149,7 +1177,25 @@ computational compression can be realized through either the
 denoising operation or clustering. \Cref{fig:Gaussian-Subspaces}
 illustrates this concept with our favorite example.
 
-Of course, the ultimate goal for identifying a data distribution is to use it to
+It is important to note that the clustering algorithm and the coding
+rate formulas developed in the previous section assumed that the data
+distribution is \textit{already} (approximately) a mixture of low-dimensional
+Gaussians.
+In practice, the raw data---images, audio, text---rarely satisfy this
+assumption directly: their intrinsic structures are typically
+\textit{nonlinear}. The purpose of this section is to develop a
+framework for \textit{transforming} data so that their representations
+do take the form of a mixture of incoherent low-dimensional subspaces,
+at which point the tools from the preceding section become directly
+applicable. That is, the preceding section answers ``how to compress
+and cluster data that are already Gaussian,'' while this section
+answers ``how to transform data so that they become Gaussian.'' As we
+will see in \Cref{ch:deep-networks}, deep networks are precisely the
+computational mechanism for realizing such transformations, with the
+network's architecture derived from optimizing the coding rate
+objective developed here.
+
+Indeed, the ultimate goal for identifying a data distribution is to use it to
 facilitate certain subsequent tasks such as segmentation, classification, or
 generation (of images). Hence, how the resulting distribution is ``represented''
 matters tremendously with respect to how information related to these
@@ -1789,6 +1835,7 @@ the network parameters. In particular, when $\bm \Pi$ is fixed to a
 group membership matrix that assigns $N$ data points into $K$ groups,
 Problem \eqref{eq:MCR pi} can recover Problem
 \eqref{eqn:maximal-rate-reduction}.
+
 
 \begin{figure}[t]
     \centering
