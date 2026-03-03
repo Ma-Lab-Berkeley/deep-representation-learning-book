@@ -308,7 +308,7 @@ The following are some tutorials, or long-form lectures, about content which is 
         `,
                 translations: `
 The following are (unofficial) community translations of the book.
-- [A Romanian translation](assets/book-main_ro.pdf), contributed by Jan Cavel at the [Piatra Institute](https://piatra.institute/).
+- [A Romanian translation of Version 1](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/book_v1_ro.pdf), contributed by Jan Cavel at the [Piatra Institute](https://piatra.institute/).
 `,
                 previousVersions: `
 - [Version 1 (PDF)](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/book_v1.pdf) — "Learning Deep Representations of Data Distributions", released August 18, 2025.
