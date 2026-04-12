@@ -3,7 +3,7 @@
 
 \begin{document}
 
-\chapter{作为展开优化算法的深度表示}
+\chapter{作为展开优化算法的深度表征}
 \label{ch:deep-networks}
 
 \begin{quote}
@@ -15,7 +15,7 @@
 
 在前面的章节中，我们展示了如何识别高维空间中的低维结构，\textit{主要侧重于线性结构}。
 例如，当观测数据 $\bm{x}$ 服从统计模型 $\bm{x} = \bm{U}\bm{z} + \bm{\varepsilon}$ 时，我们引入了主成分分析 (PCA) 来学习线性去噪器 $\hat{\bm{U}}^{\top}$。
-在这种设定下，学习到的表示是经过线性变换的输入数据 $\hat{\bm{U}}^{\top}\bm{x}$。
+在这种设定下，学习到的表征是经过线性变换的输入数据 $\hat{\bm{U}}^{\top}\bm{x}$。
 在线性模型假设下，人们可以通过高效的优化算法和强有力的理论保证来学习低维线性结构。
 此外，线性模型假设涵盖了广泛的应用和问题，包括人脸识别、磁共振图像恢复以及结构纹理恢复~\cite{Wright-Ma-2022}。
 
@@ -30,34 +30,34 @@
     \rightarrow \z^\ell \xrightarrow{\hspace{1mm} f^\ell \hspace{1mm}}
     \z^{\ell+1} \rightarrow  \cdots \to \z^{L+1} = \z.
 \end{equation}
-能够为下游应用学习有效的特征/表示。例如，训练好的深度神经网络 $f(\cdot, \bm \theta)$ 可用于将图像映射为特征向量，即 $\bm{z}_i = f(\bm{x}_i,\bm \theta)$，同时可以在这些表示 $\{\bm{z}_i\}$ 之上学习一个线性分类器。一个著名的突破是 AlexNet~\cite{krizhevsky2012imagenet}，这是一个使用超过一百万张自然图像训练的深度卷积神经网络，其性能超越了以往所有基于手工特征的方法。AlexNet 与以往方法的一个关键区别在于，前者\textit{从海量数据中学习非线性变换的参数}，并通过反向传播 (BP) \cite{Back-Prop} 进行训练，详见\Cref{app:optimization}的\Cref{app:BP-section}。
+能够为下游应用学习有效的特征/表征。例如，训练好的深度神经网络 $f(\cdot, \bm \theta)$ 可用于将图像映射为特征向量，即 $\bm{z}_i = f(\bm{x}_i,\bm \theta)$，同时可以在这些表征 $\{\bm{z}_i\}$ 之上学习一个线性分类器。一个著名的突破是 AlexNet~\cite{krizhevsky2012imagenet}，这是一个使用超过一百万张自然图像训练的深度卷积神经网络，其性能超越了以往所有基于手工特征的方法。AlexNet 与以往方法的一个关键区别在于，前者\textit{从海量数据中学习非线性变换的参数}，并通过反向传播 (BP) \cite{Back-Prop} 进行训练，详见\Cref{app:optimization}的\Cref{app:BP-section}。
 
 随后的流行做法是使用其他凭经验设计的人工深度神经网络对映射 $f$ 进行建模，并通过 BP 从随机初始化中学习参数 $\bm \theta$。从 AlexNet \cite{krizhevsky2012imagenet} 开始，现代深度网络的架构不断地被凭经验进行修改和改进。诸如 VGG \cite{simonyan2014very}、ResNet \cite{he2016deep}、DenseNet \cite{dense-net}、CNN、RNN 或 LSTM \cite{LSTM}、Transformer \cite{vaswani2017attention} 以及混合专家模型 (MoE) \cite{MoE,Fedus-2022} 等网络架构不断突破性能极限。作为提高深度网络性能努力的一部分，网络的几乎每个组件都经过了经验性的审查，并提出了各种修改和改进。它们不局限于非线性激活函数 \cite{maas2013rectifier,klambauer2017self,xu2015empirical,nwankpa2018activation}、跳跃连接 \cite{ronneberger2015u,he2016deep}、归一化 \cite{ioffe2015batch,ba2016layer,ulyanov2016instance,wu2018group,miyato2018spectral}、上/下采样或池化 \cite{scherer2010evaluation}、卷积~\cite{lecun1998gradient,krizhevsky2012imagenet} 等。然而，几乎所有这些修改都是通过多年的经验性{试错}或消融实验发展而来的。最近的一些实践甚至走向了极端，通过广泛的随机搜索技术来寻找有效的网络结构和训练策略，例如神经架构搜索 (NAS) \cite{NAS-1,Baker2017DesigningNN}、AutoML \cite{automl} 和元学习 (Learning to Learn) \cite{andrychowicz2016learning}。
 
 尽管深度神经网络得到了广泛应用，但目前尚不清楚这种构建网络背后的基本设计原则是什么。特别是，尚不清楚网络的每一层执行的是什么数学功能。在本章中，基于前几章的结果，我们将开发一个原则性的框架，该框架将为深度网络（包括其各个层以及整个网络）的作用提供完全严格的数学解释。
 
-为了理解深度网络以及如何更好地设计它们，我们必须从表征学习的目标开始。在前几章中，我们已经论证了该目标是识别本质上低维的数据分布，然后将其转换为紧凑且结构化（例如分段线性）的表示。正如我们在上一章中所看到的，识别低维数据分布的一般方法是通过一个逐步最小化分布的熵或编码率的压缩过程。然而，到目前为止，我们一直使用凭经验设计的深度网络来建模或近似旨在优化这些目标的操作，例如用于去噪的得分函数（在\Cref{sec:denoising-intro}中）或最大化编码率衰减的变换（在\Cref{sec:MCR-landscape}中）。
+为了理解深度网络以及如何更好地设计它们，我们必须从表征学习的目标开始。在前几章中，我们已经论证了该目标是识别本质上低维的数据分布，然后将其转换为紧凑且结构化（例如分段线性）的表征。正如我们在上一章中所看到的，识别低维数据分布的一般方法是通过一个逐步最小化分布的熵或编码率的压缩过程。然而，到目前为止，我们一直使用凭经验设计的深度网络来建模或近似旨在优化这些目标的操作，例如用于去噪的得分函数（在\Cref{sec:denoising-intro}中）或最大化编码率衰减的变换（在\Cref{sec:MCR-landscape}中）。
 
-正如我们在上一章（特别是\Cref{sec:chap4-representation-learning-problem}）中所论证的那样，人们可以通过从“惰性 (lazy)”表示（将所有数据建模为一个大高斯分布）中获得的表示信息来衡量所得表示的优劣。\footnote{我们在上一章中已经看到，这是对采样数据集解释的一种特定选择。}特别是，如果\textit{我们使用高斯混合（子空间）\footnote{我们在上一章中已经对其进行了深入研究。}作为原型分布来近似感兴趣的非线性分布}，那么我们可以使用相关高斯分布的率失真函数（之和）来有效地测量这种表示的编码率。那么，通过这种建模所获得的{\em 信息增益}或减少的（相对）熵，可以通过惰性表示的编码率与更精细表示的编码率之间的差值来衡量。因此，表征学习的目标就是最大化这种信息增益，这也称为编码率衰减目标。
+正如我们在上一章（特别是\Cref{sec:chap4-representation-learning-problem}）中所论证的那样，人们可以通过从“惰性 (lazy)”表征（将所有数据建模为一个大高斯分布）中获得的表征信息来衡量所得表征的优劣。\footnote{我们在上一章中已经看到，这是对采样数据集解释的一种特定选择。}特别是，如果\textit{我们使用高斯混合（子空间）\footnote{我们在上一章中已经对其进行了深入研究。}作为原型分布来近似感兴趣的非线性分布}，那么我们可以使用相关高斯分布的率失真函数（之和）来有效地测量这种表征的编码率。那么，通过这种建模所获得的{\em 信息增益}或减少的（相对）熵，可以通过惰性表征的编码率与更精细表征的编码率之间的差值来衡量。因此，表征学习的目标就是最大化这种信息增益，这也称为编码率衰减目标。
 
 正如我们将在本章中看到的，一旦表征学习的目标明确，深度神经网络的作用恰恰就是帮助迭代地优化该目标。深度神经网络的每一层都可以自然地推导为增量最大化信息增益的迭代优化步骤，这包括流行的 ResNet、CNN 和 Transformer 架构，以及其他更高级的变体。特别是，本章旨在回答关于深度网络的以下问题：
 \begin{itemize}
-    \item \Cref{sec:chap4-white-box-model-via-unrolling} --- 给定学习表示的优劣度量，如何通过针对该目标的展开优化来构建从数据到最优表示的非线性映射？
+    \item \Cref{sec:chap4-white-box-model-via-unrolling} --- 给定学习表征的优劣度量，如何通过针对该目标的展开优化来构建从数据到最优表征的非线性映射？
     \item \Cref{sec:chap4-white-box-transformer} --- 上述展开方法将如何为流行的 Transformer 架构提供原则性的解释；如果是这样，相关的目标和优化机制是什么？
     \item \Cref{sec:chap4-derive-white-box-transformer-variants} --- 该框架将如何指导我们设计更高效或更精简的深度架构？
 \end{itemize}
 
 \section{通过展开优化构建白盒深度网络}\label{sec:chap4-white-box-model-via-unrolling}
 
-现在，如果我们同意如\Cref{sec:chap4-representation-learning-problem}中所讨论的，最大化编码率衰减或信息增益会产生所需的表示，那么剩下的问题就是如何构建和学习从数据 $\X$ 到最优表示 $\Z^*$ 的（非线性）映射。这涉及设计一种网络架构和学习算法，使其能够有效地捕获数据中的潜在结构并忠实地实现最优表示。
+现在，如果我们同意如\Cref{sec:chap4-representation-learning-problem}中所讨论的，最大化编码率衰减或信息增益会产生所需的表征，那么剩下的问题就是如何构建和学习从数据 $\X$ 到最优表征 $\Z^*$ 的（非线性）映射。这涉及设计一种网络架构和学习算法，使其能够有效地捕获数据中的潜在结构并忠实地实现最优表征。
 
 \subsection{源自展开梯度下降的深度网络}
 
-在上一章中，我们提出了编码率衰减目标 \eqref{eqn:maximal-rate-reduction}，作为学习数据线性判别表示的原则性目标。然而，我们尚未指定用于从输入数据 $\x$ 中提取此类表示的特征映射 $\z = f(\x, \bm \theta)$ 的架构。一个直接的选择是使用传统的深度网络（如 ResNet）来实现 $f(\x, \bm \theta)$。正如我们在\Cref{eg:Rate-Reduction-CIFAR10}中所看到的，这种选择在经验上通常会带来不错的性能。尽管如此，采用任意深度网络仍然存在几个未解决的问题。虽然学习到的特征表示现在更具可解释性，但网络本身仍然{\em 不具备}可解释性。目前尚不清楚为什么任何选定的“黑盒”网络都能够优化所需的 MCR$^2$ 目标。良好的经验结果（例如使用 ResNet）并不一定能证明网络架构和算子的特定选择是合理的：为什么甚至需要深度分层模型；额外的层试图改进或简化什么；多宽和多深才足够；或者对于所使用的卷积（以流行的多通道形式）和非线性算子（例如 ReLU 或 softmax）是否有任何严格的理论依据？
+在上一章中，我们提出了编码率衰减目标 \eqref{eqn:maximal-rate-reduction}，作为学习数据线性判别表征的原则性目标。然而，我们尚未指定用于从输入数据 $\x$ 中提取此类表征的特征映射 $\z = f(\x, \bm \theta)$ 的架构。一个直接的选择是使用传统的深度网络（如 ResNet）来实现 $f(\x, \bm \theta)$。正如我们在\Cref{eg:Rate-Reduction-CIFAR10}中所看到的，这种选择在经验上通常会带来不错的性能。尽管如此，采用任意深度网络仍然存在几个未解决的问题。虽然学习到的特征表征现在更具可解释性，但网络本身仍然{\em 不具备}可解释性。目前尚不清楚为什么任何选定的“黑盒”网络都能够优化所需的 MCR$^2$ 目标。良好的经验结果（例如使用 ResNet）并不一定能证明网络架构和算子的特定选择是合理的：为什么甚至需要深度分层模型；额外的层试图改进或简化什么；多宽和多深才足够；或者对于所使用的卷积（以流行的多通道形式）和非线性算子（例如 ReLU 或 softmax）是否有任何严格的理论依据？
 
 在本章中，我们将展示使用梯度上升来最大化 \eqref{eqn:maximal-rate-reduction} 中定义的编码率衰减 $\Delta R_{\epsilon}(\Z \mid \bm \Pi)$，会自然地导出一个实现所需映射的“白盒”深度网络。所有网络层、线性/非线性算子和参数都是{\em 以纯前向传播的方式显式构建的}。此外，这种网络架构类似于现有的凭经验设计的深度网络，为其设计提供了原则性的理论依据。
 
-\paragraph{用于编码率衰减的梯度上升。} 从上一章中我们可以看到，为了寻找线性判别表示 (LDR)，在数学上，我们本质上是在寻找一个连续映射 $f(\cdot): \x \mapsto \z$，将数据 $\X = [\x_1, \ldots, \x_N] \in \Re^{D \times N}$（或从数据中提取的初始特征\footnote{正如我们将在下一节中看到这种特征提取的必要性。}）映射到最优表示 $\Z = [\z_1, \ldots, \z_N] \in \Re^{d \times N}$，从而最大化以下编码率衰减目标（另见 \eqref{eq:MCR pi}）：
+\paragraph{用于编码率衰减的梯度上升。} 从上一章中我们可以看到，为了寻找线性判别表征 (LDR)，在数学上，我们本质上是在寻找一个连续映射 $f(\cdot): \x \mapsto \z$，将数据 $\X = [\x_1, \ldots, \x_N] \in \Re^{D \times N}$（或从数据中提取的初始特征\footnote{正如我们将在下一节中看到这种特征提取的必要性。}）映射到最优表征 $\Z = [\z_1, \ldots, \z_N] \in \Re^{d \times N}$，从而最大化以下编码率衰减目标（另见 \eqref{eq:MCR pi}）：
 \begin{equation}\label{eq:mcr-formulation}
     \begin{split}
         \Delta R_{\epsilon}(\Z \mid \bm{\Pi}) \doteq
@@ -373,7 +373,7 @@ R_{\epsilon}}{\partial \bm Z}$。
             \caption{Loss (train/val)}
         \end{subfigure}
         \vspace{-0.1in}
-        \caption{\small 3D 高斯混合的原始样本和学习到的表示。我们通过散点图在 (\textbf{a}) 中可视化了数据点 $\bm{X}$（映射 $f(\cdot, \theta)$ 之前），在 (\textbf{b}) 中可视化了学习到的特征 $\bm{Z}$（映射 $f(\cdot, \theta)$ 之后）。在每个散点图中，每种颜色代表一类样本。在 (\textbf{c}) 中，我们还展示了目标函数值随时间变化的曲线图。}
+        \caption{\small 3D 高斯混合的原始样本和学习到的表征。我们通过散点图在 (\textbf{a}) 中可视化了数据点 $\bm{X}$（映射 $f(\cdot, \theta)$ 之前），在 (\textbf{b}) 中可视化了学习到的特征 $\bm{Z}$（映射 $f(\cdot, \theta)$ 之后）。在每个散点图中，每种颜色代表一类样本。在 (\textbf{c}) 中，我们还展示了目标函数值随时间变化的曲线图。}
         \label{fig:redu-3d-gaussian-diagram}
     \end{figure}
 
@@ -381,7 +381,7 @@ R_{\epsilon}}{\partial \bm Z}$。
 
 \subsection{源自不变编码率衰减的卷积网络}\label{sec:shift-invariant}
 
-在上一节中，我们使用针对编码率衰减目标的展开优化推导了深度网络 ReduNet 的逐层架构。具体而言，\eqref{eq:mcr-formulation} 中的压缩项 $R^c_\epsilon(\Z \mid\bm \Pi)$ 旨在压缩来自同一类的表示。然而，该公式没有考虑输入数据可能的域变换或形变。例如，将对象稍微向右平移不会改变图像的语义标签。在本节中，我们将演示如何通过最大化对某些域形变（如图像旋转和平移）具有不变性的编码率衰减目标来推导卷积层。
+在上一节中，我们使用针对编码率衰减目标的展开优化推导了深度网络 ReduNet 的逐层架构。具体而言，\eqref{eq:mcr-formulation} 中的压缩项 $R^c_\epsilon(\Z \mid\bm \Pi)$ 旨在压缩来自同一类的表征。然而，该公式没有考虑输入数据可能的域变换或形变。例如，将对象稍微向右平移不会改变图像的语义标签。在本节中，我们将演示如何通过最大化对某些域形变（如图像旋转和平移）具有不变性的编码率衰减目标来推导卷积层。
 
 对于许多聚类或分类任务（例如图像中的目标检测），如果两个样本相差某些类别的域形变或数据增强 $\cT = \{\tau \}$，我们认为它们是{\em 等价的}。因此，我们只对对此类形变具有{\em 不变性}的低维结构感兴趣（即 $\x \in \mathcal{M}$ 当且仅当对于所有 $\tau \in \cT$ 都有 $\tau(\x) \in \mathcal{M}$），已知这些结构具有复杂的几何和拓扑结构，在实践中很难精确学习，即使使用严格设计的 CNN 也是如此 \cite{Cohen-ICML-2016}。在这个框架中，这可以以一种非常自然的方式表述：所有等变实例都将被嵌入到同一个子空间中，从而使得该子空间本身对所考虑的变换具有不变性。
 
@@ -404,7 +404,7 @@ R_{\epsilon}}{\partial \bm Z}$。
         \centering
         \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter5/figs/ortho_diagram_2d.pdf}
     \end{subfigure}
-    \caption{对图像旋转（左）或平移（右）具有等变性/不变性的所求表示的图示：每个类的所有变换图像都被映射到同一个与其他子空间不相干的子空间中。嵌入在每个子空间中的特征对变换群是等变的，而每个子空间对此类变换是不变的。}\label{fig:ortho-invariance-diagram}
+    \caption{对图像旋转（左）或平移（右）具有等变性/不变性的所求表征的图示：每个类的所有变换图像都被映射到同一个与其他子空间不相干的子空间中。嵌入在每个子空间中的特征对变换群是等变的，而每个子空间对此类变换是不变的。}\label{fig:ortho-invariance-diagram}
 \end{figure}
 
 \paragraph{1D 序列数据与平移不变性} 为了对在平移下不变的一维数据 $\bm x = [x(0), x(1), \ldots, x(D-1)] \in \Re^D$ 进行分类，我们将 $\mathbb{G}$ 视为所有循环平移的群。每个观测值 $\bm x_i$ 生成一个平移副本族 $\{
@@ -478,7 +478,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     \label{eqn:lift-1d}
 \end{equation}
 这些滤波器可以是预先设计的促进不变性的滤波器，\footnote{对于像音频这样的 1D 信号，可以考虑传统的短时傅里叶变换 (STFT)；对于 2D 图像，可以考虑像 ScatteringNet \cite{scattering-net} 中那样的 2D 小波。} 或者是从数据中自适应学习的，\footnote{对于学习到的滤波器，可以像 PCANet \cite{chan2015pcanet} 中那样将滤波器学习为样本的主成分，或者从卷积字典学习 \cite{li2019multichannel,qu2019nonconvex} 中学习。} 或者是像我们在实验中所做的那样随机选择的。此操作将每个原始信号 $\x \in \Re^d$ 提升为 $C$ 通道特征，记为 $\bar{\z}  \doteq
-[\z[1], \ldots, \z[C]]^\top \in \Re^{C\times d}$。然后，我们可以在 $\bar{\z}$ 的向量表示上构建 ReduNet，记为 $\vec(\bar\z) \doteq [\z[1]^\top, \ldots, \z[C]^\top] \in \Re^{dC}$。相关的循环版本 $ \circm(\bar{\z})$ 及其数据协方差矩阵（记为 $\bar{\bm \Sigma}(\bar\z)$）对于其所有平移版本给出如下：
+[\z[1], \ldots, \z[C]]^\top \in \Re^{C\times d}$。然后，我们可以在 $\bar{\z}$ 的向量表征上构建 ReduNet，记为 $\vec(\bar\z) \doteq [\z[1]^\top, \ldots, \z[C]^\top] \in \Re^{dC}$。相关的循环版本 $ \circm(\bar{\z})$ 及其数据协方差矩阵（记为 $\bar{\bm \Sigma}(\bar\z)$）对于其所有平移版本给出如下：
 \begin{equation}
     \begin{aligned}
         \circm(\bar{\z}) &\doteq \left[
@@ -515,7 +515,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     \x = \big[\circm(\bm{D}_1), \circm(\bm{D}_2), \ldots,
     \circm(\bm{D}_K)\big] \bar \z,
 \end{equation}
-其中 $\bar \z$ 是稀疏的。\footnote{请注意，类似的稀疏表示模型早被提出并用于人脸识别等应用的分类任务中，展现出了极好的效果 \cite{Wright:2009,wagner2012toward}。最近，\cite{papyan2017convolutional} 提出了卷积稀疏编码模型，作为解释深度卷积网络结构的框架。} 关于如何从样本数据中学习最紧凑和最优的稀疏化字典（例如 \cite{li2019multichannel,qu2019nonconvex}），并随后求解逆问题以计算相关的稀疏代码 $\z$ 或 $\bar \z$，已有大量文献。最近 \cite{qu2020nonconvex,Qu2020Geometric} 的研究甚至表明，在宽泛的条件下，卷积字典学习问题可以得到有效且高效的解决。
+其中 $\bar \z$ 是稀疏的。\footnote{请注意，类似的稀疏表征模型早被提出并用于人脸识别等应用的分类任务中，展现出了极好的效果 \cite{Wright:2009,wagner2012toward}。最近，\cite{papyan2017convolutional} 提出了卷积稀疏编码模型，作为解释深度卷积网络结构的框架。} 关于如何从样本数据中学习最紧凑和最优的稀疏化字典（例如 \cite{li2019multichannel,qu2019nonconvex}），并随后求解逆问题以计算相关的稀疏代码 $\z$ 或 $\bar \z$，已有大量文献。最近 \cite{qu2020nonconvex,Qu2020Geometric} 的研究甚至表明，在宽泛的条件下，卷积字典学习问题可以得到有效且高效的解决。
 
 然而，对于分类等任务，我们不一定对精确的最优字典或每个单独信号的精确稀疏代码感兴趣。我们主要关心的是，每一类的稀疏代码集合作为一个整体，是否能与其他类的稀疏代码充分可分。在稀疏生成模型的假设下，如果卷积核 $\{\bm k_c\}_{c=1}^C$ 与上述稀疏化字典 $\bm D = [\bm D_1, \ldots, \bm D_K]$ 的“转置”或“逆”（也称为{\em 分析滤波器} \cite{Cosparse-Nam,Analysis-Filter}）匹配良好，那么某一类的信号将仅对这些滤波器的一小部分产生高响应，而对其他滤波器产生低响应（由于不相干性假设）。尽管如此，在实践中，通常足够数量（例如 $C$ 个）的随机滤波器 $\{\bm k_c\}_{c=1}^C$ 就足以确保提取的 $C$ 通道特征
 \begin{equation}
@@ -579,7 +579,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
 \end{remark}
 
 \paragraph{整体网络架构与比较。}
-根据上述推导，我们看到，为了找到多类信号/图像的平移不变的线性判别表示 (LDR)，稀疏编码、具有多通道卷积的多层架构、不同的非线性激活以及频谱计算，都成为有效且高效地实现该目标的{\em 必要}组件。\Cref{fig:learn-to-classify-diagram} 说明了通过对输入稀疏代码进行不变率衰减来学习这种表示的整体过程。
+根据上述推导，我们看到，为了找到多类信号/图像的平移不变的线性判别表征 (LDR)，稀疏编码、具有多通道卷积的多层架构、不同的非线性激活以及频谱计算，都成为有效且高效地实现该目标的{\em 必要}组件。\Cref{fig:learn-to-classify-diagram} 说明了通过对输入稀疏代码进行不变率衰减来学习这种表征的整体过程。
 
 \begin{figure}[t]
     \centering
@@ -593,7 +593,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     我们在图像 $\bm{x}\in\mathbb{R}^{H\times W}$ 上施加一个极坐标网格，其几何中心作为二维极坐标网格的中心（如 \Cref{fig:samples-invariant-1d-mnist-diagram} 所示）。
     对于每个半径 $r_i$，$i \in [C]$，我们可以针对每个角度 $\gamma_l =l\cdot({2\pi}/\Gamma)$ 采样 $\Gamma$ 个像素，其中 $l \in [\Gamma]$。
     然后，给定数据集中的样本图像 $\bm{x}$，我们将（采样后的）极坐标系中的图像表示为多通道信号 $\bm{x}_p \in\R^{\Gamma\times C}$。
-    这里的目标是学习一个旋转不变的表示，即我们期望学习 $f(\cdot, \theta)$ 使得 $\{f(\bm{x}_p \circ \mathfrak{g}, \theta)\}_{\mathfrak{g} \in\mathbb{G}}$ 位于同一个子空间中，其中 $\mathfrak{g}$ 是极角的循环平移。
+    这里的目标是学习一个旋转不变的表征，即我们期望学习 $f(\cdot, \theta)$ 使得 $\{f(\bm{x}_p \circ \mathfrak{g}, \theta)\}_{\mathfrak{g} \in\mathbb{G}}$ 位于同一个子空间中，其中 $\mathfrak{g}$ 是极角的循环平移。
     我们使用 $N=100$ 个训练样本（每个类别 $10$ 个），并设置 $\Gamma=200$，$C=15$ 进行极坐标采样。
     通过在极坐标系中执行上述采样，我们可以获得数据矩阵 $\bm{X}_p \in \mathbb{R}^{(\Gamma\cdot C) \times N}$。
     对于 ReduNet，我们设置层数/迭代次数 $L=40$，精度 $\epsilon=0.1$，步长 $\eta=0.5$。在第一层之前，我们通过与 20 个大小为 5 的随机高斯核进行一维循环卷积来对输入进行提升。
@@ -616,14 +616,14 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
             \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter5/figs/mnist1d_img1.pdf}
             \caption{损失}
         \end{subfigure}
-        \caption{\small MNIST 数字旋转图像的示例，每次旋转 18$^{\circ}$。(\textbf{左}) 极坐标表示示意图；(\textbf{右}) 数字 `0' 和 `1' 的旋转图像。}
+        \caption{\small MNIST 数字旋转图像的示例，每次旋转 18$^{\circ}$。(\textbf{左}) 极坐标表征示意图；(\textbf{右}) 数字 `0' 和 `1' 的旋转图像。}
         \label{fig:samples-invariant-1d-mnist-diagram}
     \end{figure}
 
-    为了评估学习到的表示，每个训练样本都通过其 20 个旋转版本进行数据增强，每个版本的平移步长为 10。我们计算了 $m \times 20$ 个增强训练输入 $\bm{X}_{\text{rotation}}$ 之间的余弦相似度，结果如 \Cref{fig:redu-invariant-1d-mnist-diagram} (\textbf{a}) 所示。
+    为了评估学习到的表征，每个训练样本都通过其 20 个旋转版本进行数据增强，每个版本的平移步长为 10。我们计算了 $m \times 20$ 个增强训练输入 $\bm{X}_{\text{rotation}}$ 之间的余弦相似度，结果如 \Cref{fig:redu-invariant-1d-mnist-diagram} (\textbf{a}) 所示。
     我们比较了所有增强版本学习到的特征（即 $\bar{\bm{Z}}_{\text{rotation}}$）之间的余弦相似度，并将结果总结在 \Cref{fig:redu-invariant-1d-mnist-diagram} (\textbf{b}) 中。
     正如我们所见，如此构建的旋转不变 ReduNet 能够将来自 10 个不同类别的训练数据（以及其所有旋转版本）映射到 10 个几乎正交的子空间中。也就是说，学习到的子空间对极角中的平移变换是真正不变的。接下来，我们随机抽取另外 $100$ 个测试样本，并遵循相同的增强过程。
-    在 \Cref{fig:redu-invariant-1d-mnist-diagram} (\textbf{c}) 中，我们可视化了 ReduNet 在训练和测试数据集上第 $\ell$ 层表示的 MCR$^{2}$ 损失。
+    在 \Cref{fig:redu-invariant-1d-mnist-diagram} (\textbf{c}) 中，我们可视化了 ReduNet 在训练和测试数据集上第 $\ell$ 层表征的 MCR$^{2}$ 损失。
     从这些结果中，我们可以发现构建的 ReduNet 确实能够最大化 MCR$^{2}$ 损失，并能泛化到测试数据。
 
     \begin{figure}[t]
@@ -661,22 +661,22 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
 
 在过去的几年里，随着可用于训练深度网络的数据量和质量急剧增加，该领域已经从将输入视为“原子”转变为将输入视为“词元序列”，其中每个词元都是整体输入的一部分。这种视角的转变在哲学和实用性上都有所改进：在哲学上，它允许我们测量和建模输入的每个部分及其相互作用；在实用性上，它允许我们使用类似的深度网络（如 Transformer 等\textit{序列到序列模型}）来学习各种数据分布。现在，我们需要理解在将数据视为词元序列的“以词元为中心”的模型中的表征学习，并应对上述挑战（例如，在率衰减框架的背景下，没有每个词元的标签）。
 
-形式上，令 \(\X = \mat{\x_{1}, \dots, \x_{N}} \in \bR^{D \times N}\) 表示代表我们数据源的随机变量。在视觉任务中，每个 \(\x_{i} \in \bR^{D}\) 被解释为一个\textit{词元}，通常对应于一个图像块。在语言任务中，每个 \(\x_{i} \in \bR^{D}\) 被解释为一个\textit{词元嵌入}，即离散词元（如单词或子词）的连续向量表示。\footnote{为了方便起见，我们在本章中稍微滥用一下术语，将离散词元及其相关的嵌入统称为词元。}  %
-\(\x_{i}\) 可能具有任意的相关结构。我们使用 \(\Z = \mat{\z_{1}, \dots, \z_{N}} \in \bR^{d \times N}\) 来表示定义我们表示的随机变量，其中 \(\z_{i} \in \bR^{d}\) 是对应词元 \(\x_i \in \bR^{D}\) 的表示。%
+形式上，令 \(\X = \mat{\x_{1}, \dots, \x_{N}} \in \bR^{D \times N}\) 表示代表我们数据源的随机变量。在视觉任务中，每个 \(\x_{i} \in \bR^{D}\) 被解释为一个\textit{词元}，通常对应于一个图像块。在语言任务中，每个 \(\x_{i} \in \bR^{D}\) 被解释为一个\textit{词元嵌入}，即离散词元（如单词或子词）的连续向量表征。\footnote{为了方便起见，我们在本章中稍微滥用一下术语，将离散词元及其相关的嵌入统称为词元。}  %
+\(\x_{i}\) 可能具有任意的相关结构。我们使用 \(\Z = \mat{\z_{1}, \dots, \z_{N}} \in \bR^{d \times N}\) 来表示定义我们表征的随机变量，其中 \(\z_{i} \in \bR^{d}\) 是对应词元 \(\x_i \in \bR^{D}\) 的表征。%
 
 \begin{remark}
-    在 Transformer 中，每个输入样本通常被转换为一个{\em 词元}序列。词元是从原始输入中提取的基本信息单元：在自然语言处理中，词元通常是单词或子词；在计算机视觉中，它们对应于图像块；在其他模态中，它们可能表示时间步长、空间位置或其他特定领域的单元。{\em 词元嵌入}是词元的连续向量表示，作为 Transformer 的输入。它将每个词元映射到高维空间中的一个点，使模型能够使用数值计算来处理符号输入。
-    {\em 词元表示}是编码词元语义或结构信息的向量，通常由 Transformer 的中间层或最终层产生。这些表示旨在捕获对下游任务（如分类、生成或回归）有用的输入的有意义特征。有关此词汇表及其与实现的关系的更多详细信息，请参阅 \Cref{sec:contrastive_learning}。
+    在 Transformer 中，每个输入样本通常被转换为一个{\em 词元}序列。词元是从原始输入中提取的基本信息单元：在自然语言处理中，词元通常是单词或子词；在计算机视觉中，它们对应于图像块；在其他模态中，它们可能表示时间步长、空间位置或其他特定领域的单元。{\em 词元嵌入}是词元的连续向量表征，作为 Transformer 的输入。它将每个词元映射到高维空间中的一个点，使模型能够使用数值计算来处理符号输入。
+    {\em 词元表征}是编码词元语义或结构信息的向量，通常由 Transformer 的中间层或最终层产生。这些表征旨在捕获对下游任务（如分类、生成或回归）有用的输入的有意义特征。有关此词汇表及其与实现的关系的更多详细信息，请参阅 \Cref{sec:contrastive_learning}。
 \end{remark}
 
-\paragraph{学习结构化和紧凑表示的目标。}
-受前面关于率衰减讨论的启发（\Cref{sec:chap4-white-box-model-via-unrolling}），我们提出，在这种以词元为中心的数据模型中，表征学习的目标是找到一个特征映射 \(f \colon \X \in \bR^{D \times N} \to \Z\in \bR^{d \times N}\)，它将具有潜在非线性和多模态分布的输入词元 \(\{\bm x_i\}_{i=1}^N \subset \R^D\) 转换为（分段）\textit{线性化且紧凑}的词元表示 \(\{\bm z_i\}_{i=1}^N \subset \bR^{d}\)。虽然词元表示 \(\{\z_{i}\}_{i = 1}^{N}\) 的{\em 联合}分布可能很复杂（且特定于任务），但我们进一步认为，要求单个词元表示的目标{\em 边缘}分布高度压缩和结构化、易于紧凑编码，是合理且实用的。特别是，我们要求该分布是\textit{低维（例如 \(K\) 个）高斯分布的混合}，使得第 \(k\) 个高斯分布的均值为 \(\Zero \in \bR^{d}\)，协方差为 \(\vSigma_{k} \succeq \Zero \in \bR^{d \times d}\)，并且其支撑集由正交基 \(\vU_{k} \in \bR^{d \times p}\) 张成。
-我们将所有高斯分布的基的集合记为 $\vU_{[K]} = \{\vU_k\}_{k=1}^K$。因此，为了最大化最终词元表示的\textit{信息增益} \cite{ma2022principles}，我们希望最大化它们的率衰减（见 \Cref{subsec:MCR2}），即：
+\paragraph{学习结构化和紧凑表征的目标。}
+受前面关于率衰减讨论的启发（\Cref{sec:chap4-white-box-model-via-unrolling}），我们提出，在这种以词元为中心的数据模型中，表征学习的目标是找到一个特征映射 \(f \colon \X \in \bR^{D \times N} \to \Z\in \bR^{d \times N}\)，它将具有潜在非线性和多模态分布的输入词元 \(\{\bm x_i\}_{i=1}^N \subset \R^D\) 转换为（分段）\textit{线性化且紧凑}的词元表征 \(\{\bm z_i\}_{i=1}^N \subset \bR^{d}\)。虽然词元表征 \(\{\z_{i}\}_{i = 1}^{N}\) 的{\em 联合}分布可能很复杂（且特定于任务），但我们进一步认为，要求单个词元表征的目标{\em 边缘}分布高度压缩和结构化、易于紧凑编码，是合理且实用的。特别是，我们要求该分布是\textit{低维（例如 \(K\) 个）高斯分布的混合}，使得第 \(k\) 个高斯分布的均值为 \(\Zero \in \bR^{d}\)，协方差为 \(\vSigma_{k} \succeq \Zero \in \bR^{d \times d}\)，并且其支撑集由正交基 \(\vU_{k} \in \bR^{d \times p}\) 张成。
+我们将所有高斯分布的基的集合记为 $\vU_{[K]} = \{\vU_k\}_{k=1}^K$。因此，为了最大化最终词元表征的\textit{信息增益} \cite{ma2022principles}，我们希望最大化它们的率衰减（见 \Cref{subsec:MCR2}），即：
 \begin{align}\label{eq:rate reduction}
     \mathrm{max}_{\bm Z \in \R^{d\times N}}\ \Delta R_{\epsilon}(\Z
     \mid \vU_{[K]}) \doteq R_{\epsilon}(\Z) - R^c_{\epsilon}(\Z \mid \vU_{[K]}).
 \end{align}
-这里，第一项 $R_{\epsilon}$ 是对整个词元表示集合的有损编码率的估计。更具体地说，如果我们将词元表示 $\{\bm z_i\}_{i=1}^N$ 视为来自单个零均值高斯分布的独立同分布 (i.i.d.) 样本，则在量化精度 $\epsilon > 0$ 下，它们的有损编码率由下式给出：
+这里，第一项 $R_{\epsilon}$ 是对整个词元表征集合的有损编码率的估计。更具体地说，如果我们将词元表征 $\{\bm z_i\}_{i=1}^N$ 视为来自单个零均值高斯分布的独立同分布 (i.i.d.) 样本，则在量化精度 $\epsilon > 0$ 下，它们的有损编码率由下式给出：
 \begin{equation}\label{eq:coding_rate}
     R_{\epsilon}(\Z) \doteq \frac{1}{2}\textrm{logdet}\left(\I +
     \frac{d}{N\epsilon^{2}}\Z^{\top}\Z\right) =
@@ -695,26 +695,26 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
 \end{equation}
 
 \begin{remark}
-    编码率的表达式 \eqref{eq:def-mcr-Rc} 可以看作是原始率衰减目标 \eqref{eq:MCRc} 中使用的编码率 \(R_\epsilon^{c}\) 的推广。特别是，原始目标是针对特定数据实现 \(\vX\) 的一组已知成员标签 \(\{\vPi_{k}\}\) 定义的。相比之下，当前目标是针对子空间 \(\vU_{[K]}\) 定义的，这些子空间独立于任何特定的实现，但被假设为支撑词元表示的分布。
-    假设一个词元表示 $\bm z_i$ 属于子空间 $\bm U_k$，并且这些子空间彼此近似正交，即对于所有 $k \neq l$，$\bm U_k^\top \bm U_l \approx \bm 0$。那么，可以验证投影 $\bm U_k\bm U_k^\top \bm z_i  = \bm z_i$ 且对于所有 $l \neq k$，$\bm U_l\bm U_l^\top \bm z_i \approx \bm 0$。这些正交投影有效地充当了隐式成员标签，标识了每个词元表示所属的子空间。
+    编码率的表达式 \eqref{eq:def-mcr-Rc} 可以看作是原始率衰减目标 \eqref{eq:MCRc} 中使用的编码率 \(R_\epsilon^{c}\) 的推广。特别是，原始目标是针对特定数据实现 \(\vX\) 的一组已知成员标签 \(\{\vPi_{k}\}\) 定义的。相比之下，当前目标是针对子空间 \(\vU_{[K]}\) 定义的，这些子空间独立于任何特定的实现，但被假设为支撑词元表征的分布。
+    假设一个词元表征 $\bm z_i$ 属于子空间 $\bm U_k$，并且这些子空间彼此近似正交，即对于所有 $k \neq l$，$\bm U_k^\top \bm U_l \approx \bm 0$。那么，可以验证投影 $\bm U_k\bm U_k^\top \bm z_i  = \bm z_i$ 且对于所有 $l \neq k$，$\bm U_l\bm U_l^\top \bm z_i \approx \bm 0$。这些正交投影有效地充当了隐式成员标签，标识了每个词元表征所属的子空间。
 \end{remark}
 
 \begin{figure}[t!]
     \centering
     \includegraphics[width=0.95\textwidth]{\toplevelprefix/chapters/chapter5/figs/coding-transform.png}
-    \caption{ \small\textbf{通过率衰减和稀疏性对三组表示的比较。} 每个 $S_i$ 代表一个线性子空间，蓝球的数量代表编码率之差 $\Delta R_{\epsilon}(\vZ \mid \vU_{[K]}) = R_\epsilon(\vZ) - R^c_\epsilon(\vZ \mid \vU_{[K]})$。
+    \caption{ \small\textbf{通过率衰减和稀疏性对三组表征的比较。} 每个 $S_i$ 代表一个线性子空间，蓝球的数量代表编码率之差 $\Delta R_{\epsilon}(\vZ \mid \vU_{[K]}) = R_\epsilon(\vZ) - R^c_\epsilon(\vZ \mid \vU_{[K]})$。
     }
     \label{fig:sparse-rate-reduction-diagram}
 \end{figure}
 
-\paragraph{稀疏率衰减。} 请注意，率衰减目标 \eqref{eq:rate reduction} 对表示和子空间的任意联合旋转是不变的。特别是，优化率衰减目标可能不会自然地导致轴对齐（即\textit{稀疏}）的表示。{例如，考虑 \Cref{fig:sparse-rate-reduction-diagram} 中学习到的三组表示。编码率衰减从 (a) 到 (b) 增加，但由于它在旋转下是不变的，因此从 (b) 到 (c) 保持不变。} 因此，我们希望对表示（及其支撑子空间）进行变换，使得表示 $\vZ$ 最终相对于所得表示空间的标准坐标变得稀疏\footnote{具体而言，具有很少的非零项。}{如 \Cref{fig:sparse-rate-reduction-diagram}(c) 所示}。因此，为了确保最终表示易于进行更紧凑的编码，我们希望对表示（及其支撑子空间）进行变换，使它们相对于所得表示空间的标准坐标变得\textit{稀疏}。\footnote{也就是说，具有最少的非零项。}
+\paragraph{稀疏率衰减。} 请注意，率衰减目标 \eqref{eq:rate reduction} 对表征和子空间的任意联合旋转是不变的。特别是，优化率衰减目标可能不会自然地导致轴对齐（即\textit{稀疏}）的表征。{例如，考虑 \Cref{fig:sparse-rate-reduction-diagram} 中学习到的三组表征。编码率衰减从 (a) 到 (b) 增加，但由于它在旋转下是不变的，因此从 (b) 到 (c) 保持不变。} 因此，我们希望对表征（及其支撑子空间）进行变换，使得表征 $\vZ$ 最终相对于所得表征空间的标准坐标变得稀疏\footnote{具体而言，具有很少的非零项。}{如 \Cref{fig:sparse-rate-reduction-diagram}(c) 所示}。因此，为了确保最终表征易于进行更紧凑的编码，我们希望对表征（及其支撑子空间）进行变换，使它们相对于所得表征空间的标准坐标变得\textit{稀疏}。\footnote{也就是说，具有最少的非零项。}
 在计算上，我们可以将上述两个目标结合成一个统一的优化目标：
 \begin{equation}
     \max_{f \in \mathcal{F}}\ [\Delta R_{\epsilon}(\Z \mid \vU_{[K]})
     - \lambda \|\bm{Z}\|_0] \qquad \text{s.t.}\ \Z = f(\X),
     \label{eq:sparse-rr}
 \end{equation}
-其中 $\mathcal{F}$ 表示一般的函数类，$\ell_0$ 范数 $\|\Z\|_0$ 促进了最终词元表示 \(\Z = f(\X)\) 的稀疏性。%
+其中 $\mathcal{F}$ 表示一般的函数类，$\ell_0$ 范数 $\|\Z\|_0$ 促进了最终词元表征 \(\Z = f(\X)\) 的稀疏性。%
 
 在实践中，$\ell_0$ 范数通常被松弛为 $\ell_1$ 范数，以提高计算的可追踪性并启用凸优化技术 \cite{Wright-Ma-2022}。受此启发，我们相应地松弛了问题 \eqref{eq:sparse-rr}，从而得到一个既忠实于原始稀疏性目标，又更易于使用高效算法的公式，如下所示：
 \begin{equation}
@@ -728,7 +728,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
 
 \paragraph{通过展开优化构建白盒网络架构。}
 
-尽管陈述起来很简单，但上述目标中的每一项在计算上都具有优化的挑战性 \cite{Wright-Ma-2022}。因此，很自然地采用一种近似方法，通过级联多个（例如 $L$ 个）简单的\textit{增量和局部}操作 $f^\ell$ 来实现全局变换 $f$ 以优化 \eqref{eq:sparse-rr}，这些操作将表示分布推向所需的简约模型分布：
+尽管陈述起来很简单，但上述目标中的每一项在计算上都具有优化的挑战性 \cite{Wright-Ma-2022}。因此，很自然地采用一种近似方法，通过级联多个（例如 $L$ 个）简单的\textit{增量和局部}操作 $f^\ell$ 来实现全局变换 $f$ 以优化 \eqref{eq:sparse-rr}，这些操作将表征分布推向所需的简约模型分布：
 \begin{equation}
     f\colon \X \xrightarrow{\hspace{1mm} f^{\mathrm{pre}} \hspace{1mm}}
     \Z^1 \rightarrow \cdots \rightarrow \Z^\ell
@@ -736,7 +736,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     \rightarrow  \cdots \xrightarrow{\hspace{1mm} f^{L}} \Z^{L+1} = \Z,
     \label{eq:incremental}
 \end{equation}
-其中 $f^{\mathrm{pre}}: \bR^{D} \rightarrow \bR^{d}$ 是预处理映射，它将每个输入词元 $\x_{i} \in \bR^{D}$ 转换为初始词元表示 $\z_{i}^{1} \in \bR^{d}$。
+其中 $f^{\mathrm{pre}}: \bR^{D} \rightarrow \bR^{d}$ 是预处理映射，它将每个输入词元 $\x_{i} \in \bR^{D}$ 转换为初始词元表征 $\z_{i}^{1} \in \bR^{d}$。
 每个增量\textit{前向映射} $\Z^{\ell + 1} = f^\ell(\Z^\ell)$（或称为“层”），在以其输入 $\Z^\ell$ 的分布为条件的情况下，转换词元分布以\textit{优化}上述稀疏率衰减目标 \eqref{eq:sparse-rr}。
 
 \begin{remark}
@@ -748,14 +748,14 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     \bm Z^{\ell+1/2} = \bm Z^\ell - \kappa \nabla_{\bm Z}
     R^c_\epsilon (\vZ \mid \vU_{[K]}^\ell).
 \end{align}
-接下来，我们对压缩后的词元进行\textit{稀疏化}，通过适当松弛的近端梯度步长生成 \(\vZ^{\ell + 1}\)，以最小化剩余项 $\lambda \norm{\vZ}_{1} - R_{\epsilon}(\vZ)$。正如我们稍后将详细论证的那样，我们可以通过求解关于字典 $\bm D^\ell$ 的稀疏表示问题来找到这样的 $\bm Z^{\ell+1}$：
+接下来，我们对压缩后的词元进行\textit{稀疏化}，通过适当松弛的近端梯度步长生成 \(\vZ^{\ell + 1}\)，以最小化剩余项 $\lambda \norm{\vZ}_{1} - R_{\epsilon}(\vZ)$。正如我们稍后将详细论证的那样，我们可以通过求解关于字典 $\bm D^\ell$ 的稀疏表征问题来找到这样的 $\bm Z^{\ell+1}$：
 \begin{equation}\label{eq:Z l+1}
     \vZ^{\ell+1} = \argmin_{{\vZ}}  \bigg\{\lambda \norm{\vZ}_1 +
     \frac{1}{2}\norm{\vZ^{\ell + 1/2} - \vD^{\ell} {\vZ}}_F^2\bigg\}.
 \end{equation}
 在下文中，我们提供了上述两个步骤中每一步的技术细节，并推导了用于其实现的高效更新。
 
-\paragraph{自注意力作为词元表示编码率的梯度下降。} 对于第一步 \eqref{eq:Z l+1/2}，编码率的梯度 \(\nabla_{\bm Z} R^c_\epsilon\) 的计算成本很高，因为它涉及 \(K\) 个独立的矩阵求逆，每个求逆对应于具有基 \(\vU_{k}^{\ell}\) 的 \(K\) 个子空间之一：
+\paragraph{自注意力作为词元表征编码率的梯度下降。} 对于第一步 \eqref{eq:Z l+1/2}，编码率的梯度 \(\nabla_{\bm Z} R^c_\epsilon\) 的计算成本很高，因为它涉及 \(K\) 个独立的矩阵求逆，每个求逆对应于具有基 \(\vU_{k}^{\ell}\) 的 \(K\) 个子空间之一：
 \begin{equation}
     \nabla_{\bm Z} R_{\epsilon}^c(\vZ \mid \vU_{[K]})
     = \frac{p}{N\epsilon^2}\sum_{k=1}^K \vU_k\vU_k^\top\vZ\Big(\I +
@@ -773,7 +773,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
         \frac{p}{N\epsilon^2}\right)^2\sum_{k = 1}^{K}
     \vU_{k}(\vU_{k}^\top\vZ)(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)}.
 \end{align}
-在这种近似中，我们通过投影特征之间的自相关 $(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)$ 来计算投影词元表示 $\{\bm U_k^\top\bm z_i\}$ 之间的相似度，并使用 softmax 将其转换为成员分布，即 $\softmax{(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)}$。
+在这种近似中，我们通过投影特征之间的自相关 $(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)$ 来计算投影词元表征 $\{\bm U_k^\top\bm z_i\}$ 之间的相似度，并使用 softmax 将其转换为成员分布，即 $\softmax{(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)}$。
 假设子空间的并集 $\bm U_{[K]}$ 张成了整个空间。那么，我们有 $\sum_{k = 1}^{K} \vU_{k}\vU_{k}^\top = \bm I$。因此，\eqref{eq:gd_rc_neumann} 变为：
 \begin{align}\label{eq:grad Rc}
     \nabla_{\bm Z} R_{\epsilon}^{c}(\vZ \mid \vU_{[K]})
@@ -804,7 +804,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     \eqref{eq:SSA} 中的 SSA 算子类似于典型 Transformer \citep{vaswani2017attention} 中的\textit{注意力算子}，不同之处在于，这里的值、键和查询的线性算子都被设置为与子空间基\textit{相同}，即 $\vV_{k} = \vK_{k} = \bm{Q}_{k} = \vU_k^*$。因此，我们将 $\mathrm{SSA}({\spcdot\mid\vU_k}): \bR^{d\times n} \rightarrow \bR^{p\times n}$ 命名为\textbf{子空间自注意力} (SSA) 算子。然后，\eqref{eq:Multi-Head-SSA} 中的整个 MSSA 算子，形式上定义为 \(\mathrm{MSSA}({\spcdot \mid \vU_{[K]}}) \colon \bR^{d \times n} \to \bR^{d \times n}\)，被称为\textbf{多头子空间自注意力} (MSSA) 算子，它通过使用依赖于模型的权重进行平均来聚合注意力头的输出，这在概念上类似于现有 Transformer 网络中流行的多头自注意力算子。整体梯度步长 \eqref{eq:gd-mcr-parts} 类似于 Transformer 中带有跳跃连接的多头自注意力。
 \end{remark}
 
-\paragraph{MLP 作为词元表示稀疏编码的近端梯度下降。} 对于交替最小化的第二步，我们需要最小化 $\lambda \norm{\vZ}_{1} - R_{\epsilon}(\vZ)$。请注意，梯度 \(\nabla R_{\epsilon}(\vZ)\) 涉及矩阵求逆，因此使用朴素的近端梯度（见 \Cref{subsec:pgd}）来优化此问题在大规模问题上变得难以处理。 %
+\paragraph{MLP 作为词元表征稀疏编码的近端梯度下降。} 对于交替最小化的第二步，我们需要最小化 $\lambda \norm{\vZ}_{1} - R_{\epsilon}(\vZ)$。请注意，梯度 \(\nabla R_{\epsilon}(\vZ)\) 涉及矩阵求逆，因此使用朴素的近端梯度（见 \Cref{subsec:pgd}）来优化此问题在大规模问题上变得难以处理。 %
 因此，我们采用一种不同的、简化的方法来在表示多样性和稀疏化之间进行权衡：我们假设一个（完备的）不相干或正交字典 $\vD^{\ell} \in \bR^{d \times d}$，并要求相对于 \(\vD^{\ell}\) 对中间迭代 $\vZ^{\ell + 1/2}$ 进行稀疏化。也就是说，$\vZ^{\ell + 1/2} \approx \vD^{\ell} \vZ^{\ell + 1}$，其中 $\vZ^{\ell + 1}$ 更稀疏；也就是说，它是 \(\vZ^{\ell + 1/2}\) 的\textit{稀疏编码}。字典 \(\vD^{\ell}\) 用于同时稀疏化所有词元。
 根据不相干性假设，我们有 $(\vD^{\ell})^\top(\vD^{\ell}) \approx \vI$。因此，由 \eqref{eq:coding_rate} 我们有：
 \begin{equation}
@@ -816,7 +816,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     \vZ^{\ell + 1} \approx \argmin_{\vZ}  \norm{\vZ}_1 \quad
     \mbox{subject to} \quad \vZ^{\ell + 1/2} = \vD^{\ell}\vZ.
 \end{align*}
-{上述稀疏表示规划通常通过将其松弛为无约束凸规划来求解，即 LASSO \citep{Wright-Ma-2022}：}
+{上述稀疏表征规划通常通过将其松弛为无约束凸规划来求解，即 LASSO \citep{Wright-Ma-2022}：}
 \begin{equation}
     \vZ^{\ell + 1} \approx \argmin_{\vZ} \left[\lambda \norm{\vZ}_1 +
     \frac{1}{2}\norm{\vZ^{\ell + 1/2} - \vD^{\ell} \vZ}_F^2 \right].
@@ -858,7 +858,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     \qquad
     \vZ^{\ell+1}\doteq \texttt{ISTA}(\vZ^{\ell+1/2} \mid \bm D^\ell).
 \end{equation}
-按照 \eqref{eq:incremental} 中表示的增量构造组合多个这样的层，我们获得了一个白盒 Transformer 架构，该架构将数据词元转换为紧凑且稀疏的不相干子空间并集，其中 $f^{\pre}: \bR^{D \times N} \rightarrow \bR^{d \times N}$ 是预处理映射，它将输入词元 $\vX \in \bR^{D \times N}$ 转换为第一层表示 $\vZ^{1} \in \bR^{d \times N}$。该架构的整体流程如 \Cref{fig:crate-diagram} 所示。
+按照 \eqref{eq:incremental} 中表示的增量构造组合多个这样的层，我们获得了一个白盒 Transformer 架构，该架构将数据词元转换为紧凑且稀疏的不相干子空间并集，其中 $f^{\pre}: \bR^{D \times N} \rightarrow \bR^{d \times N}$ 是预处理映射，它将输入词元 $\vX \in \bR^{D \times N}$ 转换为第一层表征 $\vZ^{1} \in \bR^{d \times N}$。该架构的整体流程如 \Cref{fig:crate-diagram} 所示。
 
 \begin{figure}[t!]
     \centering
@@ -866,15 +866,15 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     \vspace{-0.1in}
     \caption{
         \textbf{\textsc{crate} 白盒深度网络设计的“主循环”。}
-        在将输入数据编码为词元序列 $\vZ^0$ 之后，\textsc{crate} 构建了一个深度网络，该网络通过针对分布的局部模型进行连续的{\textit{\textbf{压缩}}}（生成 $\vZ^{\ell+1/2}$），以及针对全局字典进行{\textit{\textbf{稀疏化}}}（生成 $\vZ^{\ell+1}$），将数据转换为低维子空间的规范配置。重复堆叠这些块并通过反向传播训练模型参数，可以产生强大且可解释的数据表示。
+        在将输入数据编码为词元序列 $\vZ^0$ 之后，\textsc{crate} 构建了一个深度网络，该网络通过针对分布的局部模型进行连续的{\textit{\textbf{压缩}}}（生成 $\vZ^{\ell+1/2}$），以及针对全局字典进行{\textit{\textbf{稀疏化}}}（生成 $\vZ^{\ell+1}$），将数据转换为低维子空间的规范配置。重复堆叠这些块并通过反向传播训练模型参数，可以产生强大且可解释的数据表征。
     }
     \label{fig:crate-diagram}
 \end{figure}
 
 \begin{remark}[\textbf{前向传递和反向传播的作用}]\label{sub:forward_backward}
-    与 ReduNet \cite{chan2021redunet} 等其他展开优化方法相比，我们在每一层\textit{显式地建模}每个 $\vZ^\ell$ 和 $\vZ^{\ell + 1/2}$ 的分布，要么通过线性子空间的混合，要么通过字典稀疏生成。我们引入了这样一种解释：在每一层 \(\ell\)，学习到的子空间基 \(\vU_{[K]}^{\ell}\) 和学习到的字典 \(\vD^{\ell}\) 共同作为一个\textit{码本}或\textit{分析滤波器}，对每一层 \(\ell\) 的中间表示进行编码和转换。由于第 \(\ell\) 层的输入分布首先由 \(\vU_{[K]}^{\ell}\) 建模，然后由 \(\vD^{\ell}\) 转换，因此每一层的输入分布是不同的，所以我们需要在每一层有一个单独的码本以获得最简约的编码。这些码本的参数（即子空间基和字典）迄今为止被假设为完全已知，实际上是从数据中学习的（例如通过端到端训练中的\textit{反向传播}）。
+    与 ReduNet \cite{chan2021redunet} 等其他展开优化方法相比，我们在每一层\textit{显式地建模}每个 $\vZ^\ell$ 和 $\vZ^{\ell + 1/2}$ 的分布，要么通过线性子空间的混合，要么通过字典稀疏生成。我们引入了这样一种解释：在每一层 \(\ell\)，学习到的子空间基 \(\vU_{[K]}^{\ell}\) 和学习到的字典 \(\vD^{\ell}\) 共同作为一个\textit{码本}或\textit{分析滤波器}，对每一层 \(\ell\) 的中间表征进行编码和转换。由于第 \(\ell\) 层的输入分布首先由 \(\vU_{[K]}^{\ell}\) 建模，然后由 \(\vD^{\ell}\) 转换，因此每一层的输入分布是不同的，所以我们需要在每一层有一个单独的码本以获得最简约的编码。这些码本的参数（即子空间基和字典）迄今为止被假设为完全已知，实际上是从数据中学习的（例如通过端到端训练中的\textit{反向传播}）。
 
-    因此，我们的方法在由此推导出的白盒深度神经网络的前向“优化”和反向“学习”之间具有清晰的概念分离。也就是说，在其前向传递中，我们将每一层解释为一个算子，该算子以其输入分布的学习模型（即码本）为条件，将该分布转换为更简约的表示。在其反向传播中，该模型针对每一层输入分布的码本被更新，以更好地拟合某种（监督的）输入输出关系，如 \Cref{fig:forward-backward} 所示。这种概念上的解释意味着模型表示对特定任务和损失具有一定程度的不可知性；特别是，许多类型的任务和损失将确保每一层的模型得到拟合，从而确保模型产生简约的表示。
+    因此，我们的方法在由此推导出的白盒深度神经网络的前向“优化”和反向“学习”之间具有清晰的概念分离。也就是说，在其前向传递中，我们将每一层解释为一个算子，该算子以其输入分布的学习模型（即码本）为条件，将该分布转换为更简约的表征。在其反向传播中，该模型针对每一层输入分布的码本被更新，以更好地拟合某种（监督的）输入输出关系，如 \Cref{fig:forward-backward} 所示。这种概念上的解释意味着模型表征对特定任务和损失具有一定程度的不可知性；特别是，许多类型的任务和损失将确保每一层的模型得到拟合，从而确保模型产生简约的表征。
 \end{remark}
 
 我们现在通过测量所提出的网络 \textsc{crate} 在 ImageNet-1K 上的 top-1 分类准确率以及在几个广泛使用的下游数据集上的迁移学习性能，来展示其经验性能。
@@ -895,7 +895,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
         \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter5/figs/backward.png}
         \caption{\bf 反向传播}
     \end{subfigure}
-    \caption{\small {\bf 深度网络中前向传递和反向传播的作用}。(a) 给定固定的子空间和字典 $\{(\bm U_{[K]}^{\ell}, \bm D^{\ell})\}_{\ell=1}^L$，每一层在前向传递中对表示执行压缩和稀疏化；(b) 反向传播从训练数据中学习子空间和字典 $\{(\bm U_{[K]}^{\ell}, \bm D^{\ell})\}_{\ell=1}^L$。 }
+    \caption{\small {\bf 深度网络中前向传递和反向传播的作用}。(a) 给定固定的子空间和字典 $\{(\bm U_{[K]}^{\ell}, \bm D^{\ell})\}_{\ell=1}^L$，每一层在前向传递中对表征执行压缩和稀疏化；(b) 反向传播从训练数据中学习子空间和字典 $\{(\bm U_{[K]}^{\ell}, \bm D^{\ell})\}_{\ell=1}^L$。 }
     \label{fig:forward-backward}
 \end{figure}
 
@@ -937,12 +937,12 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
 \section{通过设计得到的深度架构变体}
 \label{sec:chap4-derive-white-box-transformer-variants}
 
-到目前为止，我们希望我们已经提供了令人信服的证据，证明（流行的）深度网络的作用是实现某些优化算法，以最小化学习表示的编码率（或最大化信息增益）。然而，熟悉优化方法的读者可能已经注意到，上述架构（ReduNet 或 CRATE）对应于相当基础的优化技术。它们在效率或有效性方面可能有很大的改进空间。此外，如果我们相信所提出的用于解释深度网络的理论框架是正确的，那么它不仅应该有助于解释现有的架构，还应该指导我们开发更高效、更有效的架构。在本节中，我们展示了情况可能确实如此：由此产生的新架构不仅完全可解释，而且具有保证的正确性和提高的效率。
+到目前为止，我们希望我们已经提供了令人信服的证据，证明（流行的）深度网络的作用是实现某些优化算法，以最小化学习表征的编码率（或最大化信息增益）。然而，熟悉优化方法的读者可能已经注意到，上述架构（ReduNet 或 CRATE）对应于相当基础的优化技术。它们在效率或有效性方面可能有很大的改进空间。此外，如果我们相信所提出的用于解释深度网络的理论框架是正确的，那么它不仅应该有助于解释现有的架构，还应该指导我们开发更高效、更有效的架构。在本节中，我们展示了情况可能确实如此：由此产生的新架构不仅完全可解释，而且具有保证的正确性和提高的效率。
 
 \subsection{纯注意力 Transformer 架构} \label{sub:aot}
 
-在本小节中，我们提出了一种极简的 Transformer 架构，该架构由基于 MSSA 算子的可解释层组成。为了推导出一个仅包含必要组件的完全可解释的 Transformer 架构，我们认为表征学习的目标是将一组嘈杂的初始词元表示压缩为低维子空间的混合。 %
-在这里，我们假设初始词元表示 $\bm Z^{(1)}$ 是从受噪声扰动的低秩高斯混合中采样的，如下所示：
+在本小节中，我们提出了一种极简的 Transformer 架构，该架构由基于 MSSA 算子的可解释层组成。为了推导出一个仅包含必要组件的完全可解释的 Transformer 架构，我们认为表征学习的目标是将一组嘈杂的初始词元表征压缩为低维子空间的混合。 %
+在这里，我们假设初始词元表征 $\bm Z^{(1)}$ 是从受噪声扰动的低秩高斯混合中采样的，如下所示：
 \begin{definition}\label{def:MoG}
     令 $C_1,\dots,C_K$ 为索引集 $[N]$ 的一个划分，$\bm U_k \in \mathcal{O}^{d \times p_k}$ 表示每个 $k \in [K]$ 的第 $k$ 个子空间的正交基。如果对于每个 $k \in [K]$，
     \begin{align}\label{eq:MoG}
@@ -950,15 +950,15 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
         \underbrace{\sum_{j \neq k}^K \bm U_j \bm e_{i,j}}_{\bf
         噪声},\ \forall i \in C_k,
     \end{align}
-    其中对于所有 $i \in C_k$ 和 $k \in [K]$，$\bm{a}_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\bm{I}_{p_k})$ 且 $\bm{e}_{i,j} \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\delta^2\bm{I}_{p_j})$，$\{\bm{a}_i\}$ 和 $\{\bm{e}_{i,j}\}$ 分别相互独立，且 $\{\bm{a}_i\}$ 独立于 $\{\bm{e}_{i,j}\}$，则我们称词元表示 $\{\bm z_i \}_{i=1}^N \subseteq \R^d$ 是从嘈杂的低秩高斯混合分布中采样的。
+    其中对于所有 $i \in C_k$ 和 $k \in [K]$，$\bm{a}_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\bm{I}_{p_k})$ 且 $\bm{e}_{i,j} \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\delta^2\bm{I}_{p_j})$，$\{\bm{a}_i\}$ 和 $\{\bm{e}_{i,j}\}$ 分别相互独立，且 $\{\bm{a}_i\}$ 独立于 $\{\bm{e}_{i,j}\}$，则我们称词元表征 $\{\bm z_i \}_{i=1}^N \subseteq \R^d$ 是从嘈杂的低秩高斯混合分布中采样的。
 \end{definition}
-该模型作为近似现实世界预训练 LLM 中词元表示的理想化框架。它假设词元表示是从带有噪声的多个低秩高斯分布的混合中采样的。在该模型下，表征学习的目标是将一组嘈杂的初始词元表示压缩到相应的子空间中。此外，该模型与关于预训练大型语言模型中词元表示结构的两个公认假设非常吻合：“线性表示假设” \citep{jiang2024origins,park2023linear} 和“叠加假设” \citep{elhage2022toy,yun2021transformer}。
+该模型作为近似现实世界预训练 LLM 中词元表征的理想化框架。它假设词元表征是从带有噪声的多个低秩高斯分布的混合中采样的。在该模型下，表征学习的目标是将一组嘈杂的初始词元表征压缩到相应的子空间中。此外，该模型与关于预训练大型语言模型中词元表征结构的两个公认假设非常吻合：“线性表征假设” \citep{jiang2024origins,park2023linear} 和“叠加假设” \citep{elhage2022toy,yun2021transformer}。
 
 \begin{remark}
-    线性表示假设认为，LLM 中的词元表示位于编码语义特征的低维线性子空间中。类似地，叠加假设表明，这些表示可以近似地表达为这些特征向量的稀疏线性组合。在 \Cref{def:MoG} 中，子空间的每个基 $\bm U_k$ 都可以解释为一组语义特征，其中每个特征对应于词元含义的特定方面。然后，词元表示被近似地表达为这些子空间基的稀疏线性组合，捕获词元的基本语义成分，同时忽略不相关的维度。
+    线性表征假设认为，LLM 中的词元表征位于编码语义特征的低维线性子空间中。类似地，叠加假设表明，这些表征可以近似地表达为这些特征向量的稀疏线性组合。在 \Cref{def:MoG} 中，子空间的每个基 $\bm U_k$ 都可以解释为一组语义特征，其中每个特征对应于词元含义的特定方面。然后，词元表征被近似地表达为这些子空间基的稀疏线性组合，捕获词元的基本语义成分，同时忽略不相关的维度。
 \end{remark}
 
-\paragraph{词元表示的去噪算子。} 现在，我们展示 MSSA 算子（见 \eqref{eq:Multi-Head-SSA}）可以对由上述模型生成的词元表示进行增量去噪。具体来说，我们考虑对于每个 $\ell =1 ,\dots,L$，
+\paragraph{词元表征的去噪算子。} 现在，我们展示 MSSA 算子（见 \eqref{eq:Multi-Head-SSA}）可以对由上述模型生成的词元表征进行增量去噪。具体来说，我们考虑对于每个 $\ell =1 ,\dots,L$，
 \begin{align}\label{eq:MSSA}
     \bm Z^{\ell+1} =  \bm Z^{\ell} + \eta \sum_{k=1}^K \bm U_k\bm
     U_k^T \bm Z^{\ell} \varphi \left(\bm Z^{\ell^T}\bm U_k\bm
@@ -978,10 +978,10 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
         \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter5/figs/SNR2.png}
         \caption{噪声水平 $\delta = 0.5$}
     \end{subfigure}
-    \caption{{\bf 纯注意力 Transformer 的去噪性能。} 在这里，我们从 \Cref{def:MoG} 中的低秩高斯混合模型中采样初始 token 表示。然后，我们应用 \eqref{eq:MSSA} 来更新 token 表示，并报告每一层的信噪比 (SNR)。}  \label{fig:MSSA}
+    \caption{{\bf 纯注意力 Transformer 的去噪性能。} 在这里，我们从 \Cref{def:MoG} 中的低秩高斯混合模型中采样初始 token 表征。然后，我们应用 \eqref{eq:MSSA} 来更新 token 表征，并报告每一层的信噪比 (SNR)。}  \label{fig:MSSA}
 \end{figure}
 
-现在，令 $\bm Z_k^{\ell}$ 的列表示第 $\ell$ 层来自第 $k$ 个子空间的 token 表示。为了量化去噪能力，我们定义第 $\ell$ 层 token 表示的每个块的信噪比 (SNR) 如下：
+现在，令 $\bm Z_k^{\ell}$ 的列表示第 $\ell$ 层来自第 $k$ 个子空间的 token 表征。为了量化去噪能力，我们定义第 $\ell$ 层 token 表征的每个块的信噪比 (SNR) 如下：
 \begin{align}\label{def:SNR}
     \mathrm{SNR}(\bm Z_k^{\ell}) \doteq  \frac{\|\bm U_k\bm U_k^T\bm
     Z_k^{\ell} \|_F}{\|(\bm I - \bm U_k\bm U_k^T)\bm Z_k^{\ell}
@@ -1021,10 +1021,10 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
         \mathrm{SNR}(\bm Z_k^{\ell}),\ \forall k \in [K].
     \end{align}
 \end{theorem}
-该定理表明，当初始 token 表示从噪声水平为 $O(\sqrt{\log N}/\sqrt{p})$ 的低秩高斯混合分布中采样时，我们证明了所提出的 Transformer 的每一层都以线性速率对 token 表示进行去噪。这表明了 MSSA 算子在跨层降低噪声方面的高效性。值得注意的是，我们的理论结果得到了 \Cref{fig:MSSA} 中实验观察的有力支持。该定理为通过展开 (\ref{eq:MSSA}) 导出的 Transformer 架构的实际去噪能力提供了理论基础。
+该定理表明，当初始 token 表征从噪声水平为 $O(\sqrt{\log N}/\sqrt{p})$ 的低秩高斯混合分布中采样时，我们证明了所提出的 Transformer 的每一层都以线性速率对 token 表示进行去噪。这表明了 MSSA 算子在跨层降低噪声方面的高效性。值得注意的是，我们的理论结果得到了 \Cref{fig:MSSA} 中实验观察的有力支持。该定理为通过展开 (\ref{eq:MSSA}) 导出的 Transformer 架构的实际去噪能力提供了理论基础。
 
 \begin{remark}
-    在该模型下，表征学习的目标是将一组含噪的初始 token 表示压缩到相应的子空间中。然而，我们需要指出的是，在实际应用中，token 表示表现出更复杂的结构，表征学习的目标是通过压缩 token 集合来找到紧凑且结构化的表示。
+    在该模型下，表征学习的目标是将一组含噪的初始 token 表征压缩到相应的子空间中。然而，我们需要指出的是，在实际应用中，token 表征表现出更复杂的结构，表征学习的目标是通过压缩 token 集合来找到紧凑且结构化的表征。
 \end{remark}
 
 \paragraph{纯注意力 Transformer。} 现在，我们正式提出一种纯注意力 Transformer 架构。具体而言，通过将迭代优化步骤 (\ref{eq:MSSA}) 展开为深度网络的层，我们在 \Cref{fig:transformer} 中构建了一个 Transformer 架构。所提出架构的每一层仅由 MSSA 算子和跳跃连接组成。对于语言任务，我们在 MSSA 算子之前额外加入了 LayerNorm 以提高性能。完整的架构通过堆叠这些层，以及必要的特定任务预处理和后处理步骤（例如位置编码、token 嵌入和适应不同应用的最终特定任务头）来构建。
@@ -1338,7 +1338,7 @@ wang2024global, wang2025attention, wu2025token, yu2023white}。这些贡献涵�
         \hline
         可解释性 & 黑盒 & 白盒 \\ [0.5ex]
         \hline
-        表示 & 隐藏/潜在 & 非相干子空间 \\ [0.5ex]
+        表征 & 隐藏/潜在 & 非相干子空间 \\ [0.5ex]
         \hline
     \end{tabular}
 \end{center}
