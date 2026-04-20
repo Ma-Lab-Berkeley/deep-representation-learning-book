@@ -699,6 +699,12 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     假设一个词元表示 $\bm z_i$ 属于子空间 $\bm U_k$，并且这些子空间彼此近似正交，即对于所有 $k \neq l$，$\bm U_k^\top \bm U_l \approx \bm 0$。那么，可以验证投影 $\bm U_k\bm U_k^\top \bm z_i  = \bm z_i$ 且对于所有 $l \neq k$，$\bm U_l\bm U_l^\top \bm z_i \approx \bm 0$。这些正交投影有效地充当了隐式成员标签，标识了每个词元表示所属的子空间。
 \end{remark}
 
+\begin{remark}
+值得注意的是，这组关于表示学习的理想特征，与目前关于训练好的 Transformer 模型（一种应用广泛的神经网络架构）中 token 表示结构的两个著名经验性假设高度契合：即“线性表示假设” \citep{jiang2024origins,park2023linear} 与“叠加假设” \citep{elhage2022toy,yun2021transformer} 。线性表示假设认为，Transformer 模型中的 token 表示位于编码语义特征的低维线性子空间中。同样，叠加假设建议，这些表示可以近似地表示为这些特征向量的稀疏线性组合。
+正如我们稍后在本章图 \Cref{fig:crate_segmentation_specialization} 中所看到的，子空间基 $\bm U_k$ 可以被解释为一组语义特征，其中每个特征对应于 token 含义的一个特定方面。Token 表示随后被近似地表示为这些子空间基的稀疏线性组合，在忽略无关维度的同时，捕捉了 token 的核心语义成分。
+\end{remark}
+
+
 \begin{figure}[t!]
     \centering
     \includegraphics[width=0.95\textwidth]{\toplevelprefix/chapters/chapter5/figs/coding-transform.png}
@@ -773,7 +779,7 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
         \frac{p}{N\epsilon^2}\right)^2\sum_{k = 1}^{K}
     \vU_{k}(\vU_{k}^\top\vZ)(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)}.
 \end{align}
-在这种近似中，我们通过投影特征之间的自相关 $(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)$ 来计算投影词元表示 $\{\bm U_k^\top\bm z_i\}$ 之间的相似度，并使用 softmax 将其转换为成员分布，即 $\softmax{(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)}$。
+在这种近似中，我们通过投影特征之间的自相关 $(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)$ 来计算投影词元表示 $\{\bm U_k^\top\bm z_i\}_{i = 1}^{n}$ 之间的相似度。即使 \(\vZ\) 中的每个 token 特征都经过了归一化，该矩阵的范数仍可能随着序列长度的增加而任意增长\footnote{考虑到实际选择中 \(\epsilon^{2} = p/N\)，即使用更精确的编码来容纳来自更多样本的更多信息}。这使得我们的诺伊曼近似（Neumann approximation）变得越来越差（因为真实的梯度并不会随序列长度而任意增大）。为了解决这个实际问题并使我们的公式更具通用性，我们可以改用任意核函数来衡量相似性。其中一个与我们的动机特别契合的核函数，即仅针对属于同一子空间的 token 进行自回归，是局部（Nadaraya-Watson）核。它通过 softmax 进行成员身份估计 \citep{chaudhari2021attentive}，即计算（相对）相似度为 $\softmax{(\vU_{k}^\top\vZ)^\top(\vU_{k}^\top\vZ)}$。
 假设子空间的并集 $\bm U_{[K]}$ 张成了整个空间。那么，我们有 $\sum_{k = 1}^{K} \vU_{k}\vU_{k}^\top = \bm I$。因此，\eqref{eq:gd_rc_neumann} 变为：
 \begin{align}\label{eq:grad Rc}
     \nabla_{\bm Z} R_{\epsilon}^{c}(\vZ \mid \vU_{[K]})
@@ -877,11 +883,13 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     因此，我们的方法在由此推导出的白盒深度神经网络的前向“优化”和反向“学习”之间具有清晰的概念分离。也就是说，在其前向传递中，我们将每一层解释为一个算子，该算子以其输入分布的学习模型（即码本）为条件，将该分布转换为更简约的表示。在其反向传播中，该模型针对每一层输入分布的码本被更新，以更好地拟合某种（监督的）输入输出关系，如 \Cref{fig:forward-backward} 所示。这种概念上的解释意味着模型表示对特定任务和损失具有一定程度的不可知性；特别是，许多类型的任务和损失将确保每一层的模型得到拟合，从而确保模型产生简约的表示。
 \end{remark}
 
-我们现在通过测量所提出的网络 \textsc{crate} 在 ImageNet-1K 上的 top-1 分类准确率以及在几个广泛使用的下游数据集上的迁移学习性能，来展示其经验性能。
-我们将结果总结在 \Cref{tab:crate_comparison_with_sota} 中。
-迁移学习的方法是从预训练网络初始化，使用交叉熵损失进行微调。
-由于设计的白盒 Transformer 架构在注意力块 (\texttt{MSSA}) 和非线性块 (\texttt{ISTA}) 中都利用了参数共享，因此 \textsc{crate}{-Base} 模型（2280 万参数）的参数数量与 ViT-Small（2205 万参数）~\cite{dosovitskiy2020image} 相似，并且不到相同配置的 ViT-Base（8654 万参数）参数数量的 30\%。
-从 \Cref{tab:crate_comparison_with_sota} 中，我们发现，在模型参数数量相似的情况下，我们提出的网络实现了与 ViT 相似的 ImageNet-1K 和迁移学习性能，同时具有简单且有原则的设计。此外，在相同的训练超参数集下，我们在 \textsc{crate} 中观察到了有希望的缩放行为——我们通过扩大模型规模持续提高了性能。总而言之，\textsc{crate} 通过直接实现我们有原则的架构，在现实世界的大规模数据集上取得了有希望的性能。我们将在最终的应用 \Cref{ch:applications} 中提供有关图像分类实验结果的实现和分析的更多细节。
+关于 CRATE，我们可以提出三个自然的问题：
+\begin{itemize}
+    \item 这种构建的 CRATE 模型是否通过优化稀疏率衰减（sparse rate reduction）学习到了好的特征？
+    \item 这种构建的 CRATE 模型是否利用其高质量特征在预测任务中表现出色？
+    \item 由于其简化的设计，这种构建的 CRATE 模型是否表现出了有趣的现象（例如与可解释性相关的现象）？
+\end{itemize}
+我们主张这三个问题的答案都是“是”。首先，\Cref{fig:crate_compression_sparsity} 考察了网络是如何优化稀疏率衰减的每一项的；在正向传播过程中，每一层都持续降低了特征的压缩度量和稀疏度量。其次，在 \Cref{tab:crate_comparison_with_sota} 中，我们展示了在相似的参数量下，\textsc{crate} 在迁移学习设置中的 Top-1 分类准确率与最常用的视觉 Transformer (ViT) \citep{dosovitskiy2020image} 神经网络架构相当，并且具有有希望的缩放行为——我们通过扩大模型规模持续提高了性能。总而言之，\textsc{crate} 通过直接实现我们有原则的架构，在现实世界的大规模数据集上取得了有希望的性能。我们将在最终的应用 \Cref{ch:applications} 中提供有关图像分类实验结果的实现和分析的更多细节。
 
 \begin{figure}[t]
     \begin{subfigure}[t]{0.48\textwidth}
@@ -897,6 +905,21 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     \end{subfigure}
     \caption{\small {\bf 深度网络中前向传递和反向传播的作用}。(a) 给定固定的子空间和字典 $\{(\bm U_{[K]}^{\ell}, \bm D^{\ell})\}_{\ell=1}^L$，每一层在前向传递中对表示执行压缩和稀疏化；(b) 反向传播从训练数据中学习子空间和字典 $\{(\bm U_{[K]}^{\ell}, \bm D^{\ell})\}_{\ell=1}^L$。 }
     \label{fig:forward-backward}
+\end{figure}
+
+\begin{figure}[t!]
+    \centering
+    \begin{subfigure}{0.49\textwidth}
+        \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter5/figs/crate_compression_layer.pdf}
+        \caption{}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter5/figs/crate_sparsity_layer.pdf}
+        \caption{}
+    \end{subfigure}
+    \caption{\small 通过 CRATE 前向传播优化压缩与稀疏度量。 我们测量了每一层输出端的压缩度量 \(R_{\epsilon}^{c}(\vZ^{\ell + 1/2})\) (a) 以及稀疏度量 \(\norm{\vZ^{\ell + 1}}_{1}\) (b)。我们观察到，正如理论所预测的那样，这两个度量在前向传播过程中均有所下降，并且几乎每一层都单调地降低了各项度量。（唯一的例外是最后一层的稀疏性，因为稠密特征对于预测至关重要。)}
+    \label{fig:crate_compression_sparsity}
 \end{figure}
 
 \begin{table*}[t!]
@@ -934,37 +957,52 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     \end{tabular}}
 \end{table*}
 
+\begin{figure}[t!]
+    \centering
+    \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter5/figs/crate_semantic_heads.pdf}
+    \caption{可视化 CRATE 的注意力图：模型在进行分类时关注什么？ 我们对最后一层的注意力图进行了可视化，这是网络中 token 与 token 之间交互的最后来源，因此在某种意义上，它们是对模型利用输入图像的哪些部分进行预测最精细的描述。我们观察到一种极其有趣的行为：当仅在分类任务上进行训练时，注意力图能够识别出图像中的前景物体；此外，它们会自然地专门化（naturally specialize）于前景中不同类型的物体！这一实证结果使我们将后几层的子空间解释为：每个子空间分别对应一组几乎互不相交的概念。}
+    \label{fig:crate_segmentation_specialization}
+\end{figure}
+
 \section{通过设计得到的深度架构变体}
 \label{sec:chap4-derive-white-box-transformer-variants}
 
 到目前为止，我们希望我们已经提供了令人信服的证据，证明（流行的）深度网络的作用是实现某些优化算法，以最小化学习表示的编码率（或最大化信息增益）。然而，熟悉优化方法的读者可能已经注意到，上述架构（ReduNet 或 CRATE）对应于相当基础的优化技术。它们在效率或有效性方面可能有很大的改进空间。此外，如果我们相信所提出的用于解释深度网络的理论框架是正确的，那么它不仅应该有助于解释现有的架构，还应该指导我们开发更高效、更有效的架构。在本节中，我们展示了情况可能确实如此：由此产生的新架构不仅完全可解释，而且具有正确性保证并提升了效率。
 
+\begin{table}[!t]
+    \caption{AoT 在视觉任务上的评估：在 ImageNet 数据集上的 Top-1 准确率。}
+    \centering
+    \begin{tabular}{lcccc}
+        \toprule
+        Models & Accuracy  & \# of Parameters \\
+        \midrule
+        \midrule
+        AoT   & 71.7\% & 22M \\
+        CRATE & 79.5\%  & 39M  \\
+        ViT & 72.4 \% & 22M \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:aot_vision}
+\end{table}
+
 \subsection{纯注意力 Transformer 架构} \label{sub:aot}
+在本小节中，我们提出并回答这样一个问题：“能够在大规模数据上表现良好，且证明可以压缩表征的最简单的神经网络是什么？”
+根据我们之前的理论，答案应当是堆叠的 MSSA 层，其设计初衷是作为有损的压缩算子。该网络架构足够简单，使得严谨、系统地分析其压缩或去噪性能成为可能。为此，让我们将子空间模型形式化，初始 token 表示 $\bm Z^{1}$ 采样自低秩高斯分布的噪声混合，其支撑在由 \(\vU_{k} \in \R^{d \times p}\) 张成的子空间上，具体如下：我们将 \(N\) 个 token 索引划分为已知的子集 \(C_{1}, \dots, C_{K}\)，使得：
+\begin{equation}\label{def:MoG}
+    \bm z_i = \underbrace{\bm U_{k} \bm a_i}_{signal} +
+    \underbrace{\sum_{j \neq k}^K \bm U_j \bm e_{i,j}}_{
+    noise},\ \forall i \in C_k,
+\end{equation}
+其中对于所有 $i \in C_k$ 和 $k \in [K]$，$\bm{a}_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\bm{I}_{p_k})$ 且 $\bm{e}_{i,j} \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\delta^2\bm{I}_{p_j})$，$\{\bm{a}_i\}$ 和 $\{\bm{e}_{i,j}\}$ 分别相互独立，且 $\{\bm{a}_i\}$ 独立于 $\{\bm{e}_{i,j}\}$。
 
-在本小节中，我们提出了一种极简的 Transformer 架构，该架构由基于 MSSA 算子的可解释层组成。为了推导出一个仅包含必要组件的完全可解释的 Transformer 架构，我们认为表征学习的目标是将一组嘈杂的初始词元表示压缩为低维子空间的混合。 %
-在这里，我们假设初始词元表示 $\bm Z^{(1)}$ 是从受噪声扰动的低秩高斯混合中采样的，如下所示：
-\begin{definition}\label{def:MoG}
-    令 $C_1,\dots,C_K$ 为索引集 $[N]$ 的一个划分，$\bm U_k \in \mathcal{O}^{d \times p_k}$ 表示每个 $k \in [K]$ 的第 $k$ 个子空间的正交基。如果对于每个 $k \in [K]$，
-    \begin{align}\label{eq:MoG}
-        \bm z_i = \underbrace{\bm U_{k} \bm a_i}_{\bf 信号} +
-        \underbrace{\sum_{j \neq k}^K \bm U_j \bm e_{i,j}}_{\bf
-        噪声},\ \forall i \in C_k,
-    \end{align}
-    其中对于所有 $i \in C_k$ 和 $k \in [K]$，$\bm{a}_i \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\bm{I}_{p_k})$ 且 $\bm{e}_{i,j} \overset{i.i.d.}{\sim} \mathcal{N}(\bm{0},\delta^2\bm{I}_{p_j})$，$\{\bm{a}_i\}$ 和 $\{\bm{e}_{i,j}\}$ 分别相互独立，且 $\{\bm{a}_i\}$ 独立于 $\{\bm{e}_{i,j}\}$，则我们称词元表示 $\{\bm z_i \}_{i=1}^N \subseteq \R^d$ 是从嘈杂的低秩高斯混合分布中采样的。
-\end{definition}
-该模型作为近似现实世界预训练 LLM 中词元表示的理想化框架。它假设词元表示是从带有噪声的多个低秩高斯分布的混合中采样的。在该模型下，表征学习的目标是将一组嘈杂的初始词元表示压缩到相应的子空间中。此外，该模型与关于预训练大型语言模型中词元表示结构的两个公认假设非常吻合：“线性表示假设” \citep{jiang2024origins,park2023linear} 和“叠加假设” \citep{elhage2022toy,yun2021transformer}。
 
-\begin{remark}
-    线性表示假设认为，LLM 中的词元表示位于编码语义特征的低维线性子空间中。类似地，叠加假设表明，这些表示可以近似地表达为这些特征向量的稀疏线性组合。在 \Cref{def:MoG} 中，子空间的每个基 $\bm U_k$ 都可以解释为一组语义特征，其中每个特征对应于词元含义的特定方面。然后，词元表示被近似地表达为这些子空间基的稀疏线性组合，捕获词元的基本语义成分，同时忽略不相关的维度。
-\end{remark}
-
-\paragraph{词元表示的去噪算子。} 现在，我们展示 MSSA 算子（见 \eqref{eq:Multi-Head-SSA}）可以对由上述模型生成的词元表示进行增量去噪。具体来说，我们考虑对于每个 $\ell =1 ,\dots,L$，
+\paragraph{词元表示的去噪算子。} 现在，我们展示 MSSA 算子（见 \eqref{eq:Multi-Head-SSA}）可以对由上述模型生成的词元表示进行增量去噪。具体来说，我们考虑一种广义的 MSSA 算子，对于每个 $\ell \in [L]$，
 \begin{align}\label{eq:MSSA}
     \bm Z^{\ell+1} =  \bm Z^{\ell} + \eta \sum_{k=1}^K \bm U_k\bm
     U_k^T \bm Z^{\ell} \varphi \left(\bm Z^{\ell^T}\bm U_k\bm
     U_k^T\bm Z^{\ell} \right),
 \end{align}
-其中 $\{\bm U_k\}_{k=1}^K$ 在 \Cref{def:MoG} 中定义，$\eta > 0$ 是步长，$\varphi$ 是逐元素算子，例如 softmax、ReLU 或其他函数。为了简化我们的推导，我们假设 \Cref{def:MoG} 中的子空间彼此正交，即对于所有 $k \neq j$，$\bm U_k^T\bm U_j = \bm 0$。请注意，这个假设并不具有限制性，因为在高维空间中，随机的低维子空间以高概率彼此不相干，即 $\bm U_k^T\bm U_j \approx \bm 0$ \citep{Wright-Ma-2022}。\footnote{人们可以通过稍微复杂的分析，直接将我们的结果推广到非正交子空间。}
+其中 $\eta > 0$ 是步长，$\varphi$ 是逐元素算子，例如 softmax、ReLU 或其他函数。为了简化我们的推导，我们假设 \Cref{def:MoG} 中的子空间彼此正交，即对于所有 $k \neq j$，$\bm U_k^T\bm U_j = \bm 0$。请注意，这个假设并不具有限制性，因为在高维空间中，随机的低维子空间以高概率彼此不相干，即 $\bm U_k^T\bm U_j \approx \bm 0$ \citep{Wright-Ma-2022}。\footnote{人们可以通过稍微复杂的分析，直接将我们的结果推广到非正交子空间。}
 
 \begin{figure}[t]
     \begin{subfigure}[t]{0.45\textwidth}
@@ -987,14 +1025,14 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
     Z_k^{\ell} \|_F}{\|(\bm I - \bm U_k\bm U_k^T)\bm Z_k^{\ell}
     \|_F},\quad \forall k \in [K].
 \end{align}
-为了简化分析，我们假设 $p=p_1=\dots=p_K$，$N_1=\dots=N_K=N/K$，并且
+为了简化分析，我们假设 $\abs{C_{1}} = \cdots = \abs{C_{K}} =N/K$，并且
 \begin{align}\label{eq:orth}
     \begin{bmatrix}
         \bm U_1 & \dots & \bm U_K
     \end{bmatrix} \in \mathcal{O}^{d\times Kp}.
 \end{align}
 
-基于上述设置，我们现在来刻画 MSSA 算子的去噪性能。
+基于上述设定，我们现在可以刻画稍作修改后的 MSSA 算子的去噪性能，该算子会对 softmax 中过小的项进行阈值化处理。
 
 \begin{figure*}[t]
     \begin{center}
@@ -1023,17 +1061,11 @@ $$\circm(\bm Z^2) = \big[ \circm( \bm z_{1}^1 + \eta g( \bm z_{1}^1,
 \end{theorem}
 该定理表明，当初始 token 表示从噪声水平为 $O(\sqrt{\log N}/\sqrt{p})$ 的低秩高斯混合分布中采样时，我们证明了所提出的 Transformer 的每一层都以线性速率对 token 表示进行去噪。这表明了 MSSA 算子在跨层降低噪声方面的高效性。值得注意的是，我们的理论结果得到了 \Cref{fig:MSSA} 中实验观察的有力支持。该定理为通过展开 (\ref{eq:MSSA}) 导出的 Transformer 架构的实际去噪能力提供了理论基础。
 
-\begin{remark}
-    在该模型下，表征学习的目标是将一组含噪的初始 token 表示压缩到相应的子空间中。然而，我们需要指出的是，在实际应用中，token 表示表现出更复杂的结构，表征学习的目标是通过压缩 token 集合来找到紧凑且结构化的表示。
-\end{remark}
-
-\paragraph{纯注意力 Transformer。} 现在，我们正式提出一种纯注意力 Transformer 架构。具体而言，通过将迭代优化步骤 (\ref{eq:MSSA}) 展开为深度网络的层，我们在 \Cref{fig:transformer} 中构建了一个 Transformer 架构。所提出架构的每一层仅由 MSSA 算子和跳跃连接组成。对于语言任务，我们在 MSSA 算子之前额外加入了 LayerNorm 以提高性能。完整的架构通过堆叠这些层，以及必要的特定任务预处理和后处理步骤（例如位置编码、token 嵌入和适应不同应用的最终特定任务头）来构建。
-
-一般来说，标准的仅解码器 Transformer 架构由以下关键组件构成 \cite{vaswani2017attention}：(1) 位置编码，(2) 多头 QKV 自注意力机制，(3) 前馈 MLP 网络，(4) 层归一化，以及 (5) 残差连接。相比之下，我们提出的 Transformer 架构采用了一种精简设计，包含了几项关键的简化。具体而言，它采用了共享 QKV 子空间自注意力机制，排除了 MLP 层，并降低了 LayerNorm 的使用频率。
+\paragraph{纯注意力 Transformer。} 为了验证这种去噪能力能够转化为在实际数据和任务上的合理性能，我们正式提出了一种纯注意力机制的 Transformer 架构，简称为 AoT。具体而言，通过将迭代优化步骤 (\ref{eq:MSSA}) 展开为深度网络的层，我们在 \Cref{fig:transformer} 中构建了一个 Transformer 架构。所提出架构的每一层仅由 MSSA 算子和跳跃连接组成。对于语言任务，我们在 MSSA 算子之前额外加入了 LayerNorm 以提高性能。完整的架构通过堆叠这些层，以及必要的特定任务预处理和后处理步骤（例如位置编码、token 嵌入和适应不同应用的最终特定任务头）来构建。\Cref{tab:aot_vision} 展示了这种极简 Transformer 在视觉分类任务上的性能；尽管设计极简，其性能依然合理。在接下来的内容中，我们将讨论对 CRATE 公式的一种概念性改进，这同时也提升了性能和效率。
 
 \subsection{线性时间注意力：Token 统计 Transformer}\label{sub:tost}
 
-在本小节中，我们基于编码率降低目标提出了一种新的 Transformer 注意力算子，其计算复杂度随 token 数量线性增长。具体而言，我们推导了 MCR$^2$ 目标的一种新颖变分形式，并表明由该变分目标的展开梯度下降产生的架构导致了一个称为 Token 统计自注意力 (\texttt{TSSA}) 的新注意力模块。\texttt{TSSA} 具有{\em 线性的计算和内存复杂度}，并且从根本上背离了计算 token 之间成对相似度的典型注意力架构。回顾 \eqref{eq:MCR pi}，$\bm \Pi = [\bm \pi_1, \ldots, \bm \pi_K] \in \R^{N \times K}$ 表示一个随机的“分组分配”矩阵（即 $\bm \Pi \bm
+在本小节中，我们基于编码率降低目标提出了一种新的 Transformer 注意力算子，其计算复杂度随 token 数量线性增长。具体而言，我们推导了 MCR$^2$ 目标的一种新颖变分形式，并表明由该变分目标的展开梯度下降产生的架构导致了一个称为 Token 统计自注意力 (\texttt{TSSA}) 的新注意力模块。\texttt{TSSA} 具有{\em 线性的计算和内存复杂度}，并且从根本上背离了计算 token 之间成对相似度的典型注意力架构。将 Transformer 中的传统注意力算子替换为 TSSA，会产生一种名为 Token 统计 Transformer (ToST) 的新神经网络架构；该架构具有极高的效率，并展现出了令人期待的实证性能。作为预备知识，让我们回顾 \eqref{eq:MCR pi} 中的内容，$\bm \Pi = [\bm \pi_1, \ldots, \bm \pi_K] \in \R^{N \times K}$ 表示一个随机的“分组分配”矩阵（即 $\bm \Pi \bm
     1 = \bm 1$ 且 $\Pi_{ik} \geq 0, \  \forall (i,k) \in [N] \times [K]$），其中 $\Pi_{ik}$ 表示将第 $i$ 个 token 分配给第 $k$ 个组的概率。
 
 \paragraph{编码率的新变分形式。} 首先，我们考虑基于矩阵谱的凹函数的类 MCR$^2$ 目标的一般形式。也就是说，对于给定的半正定 (PSD) 矩阵 $\bm M \in \PSD(d)$ 和任意标量 $c \geq 0$，我们有 $\log \det (\I + c \bm M) = \sum_{i=1}^{d} \log( 1 + c \lambda_i(\bm
@@ -1116,6 +1148,22 @@ $\nabla f(x) = (d / \epsilon^{2}) (1+ (d / \epsilon^{2}) x)^{-1}$ 仅仅是一�
     \label{fig:vcrate-architecture}
 \end{figure}
 
+\begin{figure}[!t]
+    \centering
+    \begin{subfigure}{0.475\textwidth}
+        \includegraphics[width=0.49\textwidth]{\toplevelprefix/chapters/chapter5/figs/tost_inference_time_vit.pdf}
+        \includegraphics[width=0.49\textwidth]{\toplevelprefix/chapters/chapter5/figs/tost_gpu_memory_vit.pdf}
+        \caption{}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.475\textwidth}
+        \includegraphics[width=0.49\textwidth]{\toplevelprefix/chapters/chapter5/figs/tost_inference_time_gpt2.pdf}
+        \includegraphics[width=0.49\textwidth]{\toplevelprefix/chapters/chapter5/figs/tost_gpu_memory_gpt2.pdf}
+        \caption{}
+    \end{subfigure}
+    \caption{\small ToST 在实际应用中的时间与内存复杂度，与实证设计的 ViT (a) 和 GPT-2 (b) 进行对比。我们观察到，相比于传统 Transformer 的二次方级开销，ToST 仅需要线性的时间和内存。}
+\end{figure}
+
 \paragraph{模型解释。} 给定 \eqref{eq:layer-operation-orig} 中提出的注意力算子，首先回顾 $\bm\Pi$ 的行是非负的且和为 1，因此我们的算子对 $K$ 个类似“注意力头”的算子进行加权平均，然后添加一个残差连接。利用 \(\sum_{k = 1}^{K}\Pi_{jk} = 1\)，我们可以将 \eqref{eq:layer-operation-orig} 重写为： %
 \vspace{-2mm}
 \begin{equation}
@@ -1176,6 +1224,70 @@ U_{[K]})\) 给出如下：
 \end{equation}
 其中 \(\bm\pi_{k}\) 是在 \eqref{eq:pi} 中定义的 \(\bm\Pi = \bm\Pi(\Z \mid \bm
 U_{[K]})\) 的列，\(\bm D\) 在 \eqref{eq2:grad Rcf} 中定义。
+
+通过以标准的 Transformer 架构为基础，并将其中的注意力算子（attention operator）替换为 TSSA，我们得到了一种名为 “Token 统计 Transformer”（Token Statistics Transformer, ToST）的架构， 其可视化如 \Cref{fig:vcrate-architecture} 所示。我们想再次强调，TSSA 算子缓解了注意力算子通常面临的时间和内存复杂度问题，特别是将二次方级的时间和内存复杂度降低到了线性级别，这使得 ToST 比起其实证设计的对应模型（指标准 Transformer）要高效得多。下面我们将简要展示 ToST 架构的实证性能与效率。
+
+\begin{table*}[t!]
+    \centering
+    \caption{\small ToST 在 ImageNet 预训练下，不同模型规模在各数据集上的 Top-1 准确率。 对于 ImageNet/ImageNetReaL，我们直接评估其 Top-1 准确率。对于其他数据集，我们在 ImageNet 上对模型进行预训练，然后通过微调评估其迁移学习性能。我们观察到，ToST 的性能随模型规模而增长，并且能够与实证设计的 ViT 竞争。}
+    \label{tab:tost_in1k_transfer}
+    \small
+    \setlength{\tabcolsep}{10.6pt}
+    \resizebox{0.95\textwidth}{!}{%
+        \begin{tabular}{@{}lccc|cc@{}}
+            \toprule
+            Datasets & ToST-T(iny) & ToST-S(mall) &
+            ToST-M(edium) &  ViT-S &
+            ViT-B(ase)\\
+            \toprule
+            \# parameters & 5.8M & 22.6M & 68.1M &  22.1M & 86.6 M  \\
+            \midrule
+            \midrule
+            ImageNet & 67.3 & 77.9 & 80.3 & 79.8 & 81.8 \\
+            ImageNet ReaL & 72.2  & 84.1 & 85.6 &  85.6 & 86.7 \\
+            \midrule
+            CIFAR10 & 95.5 & 96.5 & 97.5 &  98.6 & 98.8 \\
+            CIFAR100 & 78.3 & 82.7 & 84.5 &  88.8 & 89.3 \\
+            Oxford Flowers-102 & 88.6 & 92.8 & 94.2 &  94.0 & 95.7 \\
+            Oxford-IIIT-Pets & 85.6 & 91.1 & 92.8 & 92.8 & 94.1 \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table*}
+
+\begin{table*}
+    \centering
+    \caption{\small ToST 的长上下文性能。 我们在 Long Range Arena（一个针对长上下文任务的基准测试）上展示了其性能。在此基准测试中，与包括 Transformer 本身在内的每一种 Transformer 变体相比，ToST 都展现出了绝对领先的性能和效率。}
+    \label{tab:tost_lra}
+    \resizebox{0.8\textwidth}{!}{%
+        \begin{tabular}{@{}lccccccc@{}}
+            \toprule
+            Model        & ListOps  & Text     & Retrieval & Image
+            & Pathfinder & Avg      \\
+            \midrule
+            \midrule
+            Reformer              & 37.27 & 56.10
+            & 53.40              & 38.07             & 68.50
+            & 50.56             \\
+            BigBird               & 36.05             & 64.02
+            & 59.29              & 40.83             & 74.87
+            & 54.17             \\
+            LinFormer         & 16.13             & 65.90
+            & 53.09              & 42.34             &
+            75.30               & 50.46             \\
+            Performer             & 18.01             & 65.40
+            & 53.82              & 42.77             & 77.05
+            & 51.18             \\
+            Transformer           & 37.11             & 65.21
+            & 79.14              & 42.94
+            & 71.83              & 59.24            \\
+            ToST & 37.25    &
+            66.75    & 79.46     & 46.62
+            &    69.41      &     59.90 \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table*}
 
 \subsection{因果 CRATE}
 \label{sec:causal-crate}
@@ -1418,6 +1530,25 @@ wang2024global, wang2025attention, wu2025token, yu2023white}。这些贡献涵�
     $\sum_{k=0}^\infty \bm A^k$ 收敛。 \\
     (ii) {\bf 步骤 2}：计算矩阵乘积 $(\bm I - \bm A)
     \sum_{k=0}^\infty \bm A^k$。
+\end{exercise}
+
+\begin{exercise}
+    在本练习中，我们将考虑一种使用了分布均值的编码率度量 \(R_{\epsilon}^{c, \mu}\), 即针对从低秩高斯混合模型中（非独立同分布地）抽取的 token 的编码率：
+    \begin{equation}
+        \vz_{i} \sim \frac{1}{K}\sum_{k = 1}^{K}\dNorm(\vmu_{k},
+        \vU_{k}\vU_{k}^{\top}).
+    \end{equation}
+    1. 请论证在该模型下，\(\vZ\) 的一个合适的编码率为：
+    \begin{equation}
+        R_{\epsilon}^{c, \mu}(\vZ) = \sum_{k =
+        1}^{K}R_{\epsilon}(\vU_{k}^{\top}(\vZ - \vmu_{k}\vone^{\top})).
+    \end{equation}
+    \smallskip
+
+    \noindent
+    2.类似于我们推导 MSSA 的过程，从该编码率推导出一种新的类注意力算子。其关键区别是什么？
+    \medskip
+        
 \end{exercise}
 
 \begin{exercise}
