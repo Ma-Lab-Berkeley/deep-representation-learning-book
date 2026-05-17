@@ -1116,34 +1116,34 @@ DINO 训练流水线的更简单版本来优化 SimDINO。在
 
 \paragraph{评估结果。} 在下游分类性能方面，我们获得了 \Cref{tab:dino_imagenet_linear_probing} 中的性能。我们观察到，在公平比较下，SimDINO 的性能远高于 DINO。此外，它也稳定得多：DINO 的规定设置无法训练 ViT-L(arge) 模型。另一方面，\Cref{fig:dino_attention_maps_saliency} 展示了 DINO 和我们简化的 DINO 中平均显著性图的可视化，观察到不同模型之间的显著性图看起来非常相似，这表明模型学习到的特征在捕获细粒度细节方面至少同样出色。\Cref{tab:dino_segmentation} 中的分割和目标检测性能定量地证实了这一主张，其中 SimDINO 特征显示出比 DINO 特征实质性的改进。
 
-\section{通过文本绑定的弱监督图像表示}\label{sec:CLIP}
+\section{以文本作为弱监督信号的图像表示学习}\label{sec:CLIP}
 %\yima{Robin, please provide a vignette about CLIP or its simplified version. Sam will give a general description of concepts and methods for joint image/text embedding and related work in Chapter 7. }
 
-另一种有影响力的对比学习方法摆脱了纯粹的视觉比较，转而利用图像和语言之间的自然对齐。这类工作不再仅仅通过同一图像的多个视图来定义相似性，而是利用了现实世界中许多图像都伴随有提供弱语义监督的文本描述这一事实。这种范式的一个突出例子是 CLIP（对比语言-图像预训练，Contrastive Language–Image Pretraining）\citep{Radford2021-ir}。在 CLIP 中，图像及其对应的标题被视为正样本对，而不匹配的图像-文本对被视为负样本对。学习目标鼓励图像的表示接近其关联标题的表示，并远离其他图像的标题。通过将视觉表示建立在自然语言的基础上，CLIP 学习到了语义丰富的特征，这些特征捕获了超越单纯外观的高级概念。
+另一种主流对比学习范式摆脱了纯粹的视觉比较，转而利用图像和语言之间自然存在的对齐。这类范式不再仅仅通过同一图像的多个视图来定义相似性，而是利用了现实世界中许多图像都伴有提供弱语义监督的文本描述的这一事实（例如互联网上的图片部分都伴有描述或总结其内容的标题）。这种范式的一个杰出案例是 CLIP（Contrastive Language–Image Pretraining）\citep{Radford2021-ir}。在 CLIP 中，图像及其对应的标题被视为正样本对，而不匹配的图像-标题对被视为负样本对。目标函数鼓励图像的表示接近其对应标题的表示，并远离其他图像的、不匹配的标题表示。通过将视觉表示建立在自然语言的基础上，CLIP 编码的图片表示含有丰富的自然语义，是超越单纯外观、规律、纹理的高级概念。
 
-\subsection{数据}
+\subsection{数据收集}
 
-我们将用于探索 CLIP 方法的数据是{\em 文本-图像对}，而不仅仅是图像。最初的 CLIP 工作构建了一个大型网络规模的语料库，包含从互联网公开来源收集的约 4 亿个文本-图像对。每个样本由一张图像和一段相关的自然语言字符串（例如，标题、名称或简短描述）组成，该字符串在网络上与图像共同出现，提供了一种微弱且嘈杂的监督形式。为了鼓励对视觉概念的广泛覆盖，CLIP 论文描述了通过搜索文本与大约 500{,}000 个查询之一匹配的图像对来构建此数据集，并通过每个查询最多包含 20{,}000 个图像对来近似平衡结果。该数据集未公开发布，因此大多数社区对 CLIP 的复现和扩展都依赖于开放的网络规模文本-图像对数据集。其中最常见的是 LAION~\citep{schuhmann2022laion5bopenlargescaledataset} 系列：LAION-400M 提供了 4 亿个经过 CLIP 过滤的图像对，而 LAION-5B 将此方案扩展到了 58.5 亿个图像对。
+CLIP 使用的训练数据是{\em 文本-图像对}，而不仅仅是图像。CLIP 工作构建了一个大型的语料库，包含从互联网公开来源收集的约 4 亿个文本-图像对。每个样本由一张图像和一段相关的自然语言字符串（例如，标题、名称或简短描述）组成，该字符串在网络上与图像共同出现，提供了一种微弱且嘈杂的监督形式（弱监督）。该数据集未公开发布，因此大多数社区对 CLIP 的复现和扩展都依赖于其他开源的大规模文本-图像对数据集。其中最常见的是 LAION~\citep{schuhmann2022laion5bopenlargescaledataset} 系列：LAION-400M 包含了 4 亿个经过筛选的图像对，而 LAION-5B 扩展到了 58.5 亿个图像对。
 
-由于原始的网络抓取图像对通常非常嘈杂（例如，图像与其关联文本不匹配、模板化的替代文本、垃圾信息、重复项或不安全内容），因此 CLIP 风格的数据集通常使用后处理管道构建，在训练之前对候选数据进行过滤和清理。典型的方法包括基本质量过滤（例如，丢弃文本极短或图像极小或损坏的图像对）、语言识别以保留目标语言的标题、去重以及删除潜在的恶意内容。
+由于从网络抓取的图像-文本对通常非常嘈杂（例如，图像与标题不匹配、垃圾信息、重复项或不安全内容），因此该类型数据集会在训练之前对候选数据再进行过滤和清理。典型的方法包括基本质量过滤（例如，丢弃文本极短或图像损坏的图像-文本对）、语言识别以保留目标语言的标题、去重以及删除潜在的恶意内容。
 
-\subsection{CLIP 任务与目标}
-我们的目标是学习数据的良好表示。然而，在 CLIP 设置中，“相似性”的概念不是由同一图像的两个增强视图引起的，而是由自然语言描述提供的弱语义监督引起的。具体而言，我们希望图像表示接近其关联标题的表示，并远离其他图像的标题。等价地，如果两张图像具有相似的文本描述，它们学习到的视觉特征应该是相似的，而由不相关文本描述的图像在潜在空间中应该被分开。
+\subsection{CLIP 目标函数}
+CLIP 的目标是学习图像数据的良好表示。在 CLIP 中，“相似性”的概念并不定义于同一图像的两个增强视图之上，而是定义于一张图像和其匹配文本的弱语义监督。具体而言，我们希望图像表示接近其关联标题的表示，并远离其他图像的、不匹配的标题。换言之，如果两张图像具有相似的文本描述，它们学习到的视觉表示应该是相似的，而由不相关文本描述的图像表示在潜在空间中应该被分开。
 
-我们使用\textit{余弦相似度}（cosine similarity）来形式化表示之间的“相似性”概念。具体而言，设 \(f_{\theta}\) 为图像编码器，\(g_{\plainphi}\) 为文本编码器（其架构将在下一节中详细说明），两者都映射到一个公共潜在空间 \(\vZ \in \mathbb{R}^{d}\)。给定图像 \(\vX \in \cI\) 和文本字符串 \(\vT \in \cT\)，我们形成归一化嵌入：
+我们使用\textit{余弦相似度}（cosine similarity）来形式化图像表示之间的“相似性”概念。具体而言，设 \(f_{\theta}\) 为图像编码器，\(g_{\plainphi}\) 为文本编码器（其架构将在下一节中详细说明），两者都映射到一个公共潜在空间 \(\vZ \in \mathbb{R}^{d}\)。给定图像 \(\vX \in \cI\) 和文本字符串 \(\vT \in \cT\)，我们计算归一化表示为：
 \begin{equation}
     \vz^{I}_{\theta}(\vX) \doteq \frac{f_{\theta}(\vX)}{\|f_{\theta}(\vX)\|_2},
     \qquad
     \vz^{T}_{\plainphi}(\vT) \doteq \frac{g_{\plainphi}(\vT)}{\|g_{\plainphi}(\vT)\|_2}.
 \end{equation}
-那么嵌入之间的余弦相似度定义为：
+那么表示之间的余弦相似度定义为：
 \begin{equation}
     s(\vX,\vT)
     =
     \left\langle \vz^{I}_{\theta}(\vX), \vz^{T}_{\plainphi}(\vT)\right\rangle
     \in [-1,1].
 \end{equation}
-因此，我们的目标是最大化匹配对之间的余弦相似度，并最小化不匹配对之间的余弦相似度。为了实现这一点，我们可以使用如 \Cref{sub:text-cond} 中讨论的简单对称交叉熵损失。具体而言，给定一个包含 \(n\) 个文本-图像对的小批量 \((\vX_i, \vT_i)_{i=1}^{n}\)，我们可以将损失定义为：
+因此，我们的目标是最大化匹配的图像-文本对之间的余弦相似度，并最小化不匹配对之间的余弦相似度。为了实现这一点，我们可以使用如 \Cref{sub:text-cond} 中讨论的简单对称交叉熵损失。具体而言，给定一个包含 \(n\) 个图像-文本对的小批次 \((\vX_i, \vT_i)_{i=1}^{n}\)，我们可以将损失定义为：
 \begin{equation}\label{eq:practical_clip_loss}
     \cL_{\text{CLIP}} = -\frac{1}{n}\left(
     \sum_{i=1}^{n}
@@ -1156,9 +1156,9 @@ DINO 训练流水线的更简单版本来优化 SimDINO。在
 其中 \(\tau > 0\) 是控制 softmax 函数锐度的温度参数。 
 
 \subsection{架构：视觉塔}\label{sub:clip_vision_tower}
-CLIP 的目标是在同一个潜在空间中学习图像和文本表示。因此，其架构训练了一个视觉编码器 \(f_{\theta}: \cI \to \mathbb{R}^{d} \) 和一个文本编码器 \(g_{\plainphi}: \cT \to \mathbb{R}^{d} \)，这也被称为“双塔架构”（dual-tower architecture）。
+CLIP 的目标是在同一个潜在空间中学习图像和文本表示。因此，其架构训练了一个视觉编码器 \(f_{\theta}: \cI \to \mathbb{R}^{d} \) 和一个文本编码器 \(g_{\plainphi}: \cT \to \mathbb{R}^{d} \)，也被称为“双塔架构”（dual-tower architecture）。
 
-在架构方面，大多数视觉主干网络都可以使用：例如，卷积网络如 ResNet~\citep{He2016-lc}，以及 Vision Transformer~\citep{dosovitskiy2020image}（在 \Cref{sub:contrastive_learning_architecture} 中有详细说明）都是 CLIP 的有效选择。在实践中，由于更好的性能和多功能性，Vision Transformer 更为常用。与 DINO 类似，我们将类别标记特征 \(\vz_{\cls}\) 作为每张图像的表示：\(f_{\theta}(\vX) = \vz_{\cls}\)。这是因为类别标记旨在聚合关于整个图像的全局信息，并且通常用于下游预测任务。
+在架构方面，大多数视觉主干网络都可以使用，例如卷积网络 ResNet~\citep{He2016-lc} 和 Vision Transformer~\citep{dosovitskiy2020image}（在 \Cref{sub:contrastive_learning_architecture} 中有详细说明）。在实践中，由于其优越性能和灵活性，Vision Transformer 更为常用。与 DINO 类似，我们将聚合特征 \(\vz_{\cls}\) 作为每张图像的表示：\(f_{\theta}(\vX) = \vz_{\cls}\)。这是因为类别标记旨在聚合关于整个图像的全局信息，并且通常用于下游预测任务。
 
 % \paragraph{Feature Extractor.}
 % Following the backbone, CLIP requires an additional feature extractor \(f^{\text{ext}}_{\theta}: \mathbb{R}^{t \times d^\prime} \to \mathbb{R}^{1 \times d^\prime} \), where \(t\) is the sequence length of the backbone's output and \(d^\prime\) is its hidden dimension. There are two mainstream designs of CLIP’s \(f^{\text{ext}}_{\theta}\), differing only in how they aggregate the backbone’s sequence output into a single \(d\)-dimensional image representation. The first is a \emph{mean extractor}: assume the backbone produces a sequence of latent features \([\vz_1,\dots,\vz_t] \in \mathbb{R}^{t\times d'}\), we take the pooled feature to be the average of token embeddings,
@@ -1182,27 +1182,27 @@ CLIP 的目标是在同一个潜在空间中学习图像和文本表示。因此
 % which is the final output of \(f^{I}_{\theta}\) and will later be used in the objective.
 
 \subsection{架构：文本塔}
-CLIP 文本塔 \(g_{\plainphi}\) 通常采用类似于前面描述的 Vision Transformer 的基于 Transformer 的架构。主要区别在于嵌入层，它用于将文本序列转换为潜在空间 \(\vZ \in \mathbb{R}^{d}\) 中的潜在表示序列。 
+CLIP 文本塔 \(g_{\plainphi}\) 通常采用基于 Transformer 的架构。主要区别在于嵌入层，它用于将文本序列转换为潜在空间 \(\vZ \in \mathbb{R}^{d}\) 中的表示序列。 
 
-\paragraph{嵌入。} 给定文本序列 \(\vT \in \cT\)（例如，句子或文档），我们使用映射 \(g_{\plainphi}^{\text{emb}}\) 将其嵌入为 \(\R^d\) 中的标记序列，如下所示。
+\paragraph{嵌入} 给定文本序列 \(\vT \in \cT\)（例如，句子或文档），我们使用映射 \(g_{\plainphi}^{\text{emb}}\) 将其嵌入为 \(\R^d\) 中的表示序列，过程如下所示。
 \begin{enumerate}
-    \item 首先，我们将 \(\vT\) 标记化为来自大小为 \(|\cV|\) 的词汇表 \(\cV\) 的离散符号（子词/字符）序列。具体而言，分词器 \(t^{\tok} : \cT \to \cV^{N}\) 生成一个长度为 \(N\) 的标记序列\footnote{在实践中，人们通常会用特殊标记（例如，用于指示序列开始和结束的 \(\langle \text{bos}\rangle\) 和 \(\langle \text{eos}\rangle\) 标记）来扩充此序列，并可能对较短的序列进行填充，但我们保持符号的通用性，并将这些视为 \(\cV\) 的元素。} \((\tau_{1},\dots,\tau_{N})\)，其中 \(\tau_i \in \cV\)。
-    \item 我们通过词汇映射 \(\cV\to\{1,\dots,|\cV|\}\) 将标记转换为整数索引，得到索引序列 \((s_{1},\dots,s_{N})\)。我们将这些索引放入矩阵 \(\vS \in \{0,1\}^{|\cV|\times N}\) 中，其中第 \(i\) 列是独热向量 \(\ve_{s_i}\)。
+    \item 首先，我们利用大小为 \(|\cV|\) 的词汇表 \(\cV\) 将 \(\vT\) 词元化为离散符号（子词/字符）序列。具体而言，分词器 \(t^{\tok} : \cT \to \cV^{N}\) 生成一个长度为 \(N\) 的词元序列\footnote{在实践中，人们通常会用特殊词元（例如，用于指示序列开始和结束的 \(\langle \text{bos}\rangle\) 和 \(\langle \text{eos}\rangle\) 标记）来扩充此序列，并可能对较短的序列进行填充；但为保持符号的通用性，并将这些视为 \(\cV\) 的元素。} \((\tau_{1},\dots,\tau_{N})\)，其中 \(\tau_i \in \cV\)。
+    \item 我们通过词汇映射 \(\cV\to\{1,\dots,|\cV|\}\) 将词元转换为整数索引，得到索引序列 \((s_{1},\dots,s_{N})\)。我们将这些索引放入矩阵 \(\vS \in \{0,1\}^{|\cV|\times N}\) 中，其中第 \(i\) 列是独热向量 \(\ve_{s_i}\)。
     \item 然后我们对 \(\vS\) 执行以下操作，将其投影到 \(\R^{d \times (N+1)}\)：
         \begin{equation}
             \vS \mapsto [\vz_{\cls}^{1}, \vW^{\tok}\vS] + \vE^{\pos}.
         \end{equation}
         这是 \(g_{\plainphi}^{\text{emb}}\) 的最终输出。这里我们有三个可训练参数 \(\vW^{\tok}\)、\(\vz_{\cls}^{1}\) 和 \(\vE^{\pos}\)，它们的用途如下：
         \begin{itemize}
-            \item \(\vW^{\tok} \in \R^{d \times |\cV|}\) 是一个矩阵，其第 \(j\) 列是第 \(j\) 个词汇项的学习嵌入向量。因此 \(\vW^{\tok}\vS
-                \in \R^{d\times N}\) 将每个离散标记映射为 \(\R^{d}\) 中的连续特征。
-            \item \(\vz_{\cls}^{1} \in \R^{d}\) 是一个特殊的\textit{分类}（或\textit{摘要}）标记。启发式地，它旨在聚合关于整个序列的全局信息，并且通常用于下游预测任务。
-            \item \(\vE^{\pos} \in \R^{d \times n}\) 是一个\textit{位置编码}，用于区分不同位置的标记。由于自注意力在标记维度上是排列等变的，\(\vE^{\pos}\) 注入了顺序信息，使得整体映射对标记的排列不再是不变的。
+            \item \(\vW^{\tok} \in \R^{d \times |\cV|}\) 是一个矩阵，其第 \(j\) 列是第 \(j\) 个词元的嵌入向量。因此 \(\vW^{\tok}\vS
+                \in \R^{d\times N}\) 将每个离散词元映射为 \(\R^{d}\) 中的连续表示。
+            \item \(\vz_{\cls}^{1} \in \R^{d}\) 是一个特殊的\textit{分类}（或\textit{摘要}）词元。它旨在聚合关于整个序列的全局信息，并且通常用于下游预测任务。
+            \item \(\vE^{\pos} \in \R^{d \times n}\) 是一个\textit{位置编码}，用于标记词元在句子中的位置。由于自注意力在词元序列维度上是排列等变的，\(\vE^{\pos}\) 注入了顺序信息，使得词元的排列影响整体映射。
         \end{itemize}
 \end{enumerate}
-所有参数 \(\vz_{\cls}^{1}, \vW^{\tok}, \vE^{\pos}\) 都包含在参数集 \(\theta\) 中。词汇表 \(\cV\) 和分词器 \(t^{\tok}\) 是固定的。 
+所有参数 \(\vz_{\cls}^{1}, \vW^{\tok}, \vE^{\pos}\) 都包含在参数集 \(\theta\) 中。词汇表 \(\cV\) 和分词器 \(t^{\tok}\) 是固定的。
 
-文本塔的其他组件，如主干网络和特定任务头部，遵循与图像塔相似的设计选择，为简洁起见予以省略。还值得注意的是，后续工作证明了在选择 CLIP 文本编码器方面具有极大的灵活性：大型语言模型中包含的固定文本表示，甚至简单的词袋特征，也可能是有效的。我们在 \Cref{sub:follow-up} 中讨论这些变体。
+文本塔的其他组件，如主干网络和特定任务头部，遵循与图像塔相似的设计选择，为简洁起见予以省略。还值得注意的是，后续工作证明了在选择 CLIP 文本编码器方面具有极大的灵活性：大型语言模型中包含的固定文本表示，甚至简单的词袋（Bag-of-Words）表示，也是有效的。我们在 \Cref{sub:follow-up} 中讨论这些变体。
 
 % \paragraph{Backbone.} Now, our text input (a string) has been transformed into a sequence of latent representations
 % \([\vz_{\cls}, \vz_{1}, \ldots, \vz_{n}]\) in the latent space \(\R^{d}\). Therefore, its subsequent processing follows the same procedure as in \cref{sub:contrastive_learning_architecture} for image latent representations.
@@ -1212,17 +1212,17 @@ CLIP 文本塔 \(g_{\plainphi}\) 通常采用类似于前面描述的 Vision Tra
 % \paragraph{Task-specific Head.} The text transformer adopts a linear head similar to the one in \cref{sub:clip_vision_tower}.
 
 \subsection{优化策略}
-我们使用标准的端到端随机优化过程（例如带动量的 SGD、AdamW）来训练 CLIP。下面我们展示一个通用过程。
+我们使用标准的端到端随机优化算法（例如加入动量的 SGD、AdamW）来训练 CLIP。下面我们展示一个通用过程。
 
 在每个时间步 \(k\)，我们：
 \begin{itemize}
-    \item \textbf{子采样成对数据。} 采样一个包含 \(n\) 个成对示例的小批量
+    \item \textbf{子采样成对数据。} 采样一个包含 \(n\) 个图像-文本对的小批次
     \[
         \{(\vX_i^{(k)}, \vT_i^{(k)})\}_{i=1}^{n} \subseteq \cX \times \cT,
     \]
     其中 \(\vX_i^{(k)}\) 是图像，\(\vT_i^{(k)}\) 是其关联文本。
 
-    \item \textbf{计算潜在表示。} 对于每个数据对 \((\vX_i^{(k)}, \vT_i^{(k)})\)，使用视觉和文本编码器 \(f_{\theta}\) 和 \(g_{\plainphi}\) 计算归一化嵌入：
+    \item \textbf{计算潜在表示。} 对于每个数据对 \((\vX_i^{(k)}, \vT_i^{(k)})\)，使用视觉和文本编码器 \(f_{\theta}\) 和 \(g_{\plainphi}\) 计算归一化表示：
     \begin{equation}
         z_{\theta}^{I}(\vX_i^{(k)}) \doteq \frac{f_{\theta}(\vX_i^{(k)})}{\|f_{\theta}(\vX_i^{(k)})\|_2},
         \qquad
@@ -1243,7 +1243,7 @@ CLIP 文本塔 \(g_{\plainphi}\) 通常采用类似于前面描述的 Vision Tra
         \right).
     \end{equation}
 
-    \item \textbf{计算梯度。} 计算随机损失相对于两个参数集的梯度：
+    \item \textbf{计算梯度。} 计算损失相对于两个参数集的梯度：
     \begin{equation}
         \nabla_{\theta}\hat{\cL}_{\text{CLIP}}^{(k)}(\theta,\plainphi),
         \qquad
@@ -1264,12 +1264,12 @@ CLIP 文本塔 \(g_{\plainphi}\) 通常采用类似于前面描述的 Vision Tra
 
 
 \subsection{评估方法}\label{sub:clip_eval}
-由于 CLIP 是与架构无关的，因此可以应用大多数针对视觉和语言编码器的标准评估协议。例如，可以通过在视觉编码器之上训练一个轻量级分类头来执行线性探测，以评估在图像分类任务中学习到的表示的质量。此外，得益于 CLIP 的双塔架构，无需任何额外训练即可执行零样本分类（zero-shot classification）。
+由于 CLIP 并没有提出新的视觉编码器架构，因此可以应用大多数针对视觉编码器的评估方法。例如，可以通过在视觉编码器之上训练一个轻量级分类头来执行线性探测，以评估图像表示在分类任务上的表现。此外，得益于 CLIP 的双塔架构，无需任何额外训练即可执行零样本分类（zero-shot classification）。
 
-回顾在标准的 \(n\) 分类图像分类设置中，我们给定一个图像数据集
+在标准的 \(n\) 类图像分类任务中，我们给定一个图像数据集
 \(\{\vX_i\}_{i=1}^{N}\subseteq\cI\)，每张图像都标注有集合
 \(\cL \doteq \{\ell_1,\ldots,\ell_n\}\) 中的 \(n\) 个类别标签之一（例如，\(\ell_j \in \{\text{cat},\text{dog},\ldots\}\)）。
-我们的目标是利用预训练模型构建一个预测管道 \(P\)，使得
+我们的目标是利用预训练模型构建一个预测管线 \(P\)，使得
 \(P:\cI\to\{1,\ldots,n\}\) 将每张图像 \(\vX_i\) 映射到预测的类别索引
 \(\hat{y}_i \doteq P(\vX_i)\)。将真实类别标签写为其索引 \(y_i \in \{1,\ldots,n\}\)，
 则 \(P\) 在该数据集上的（top-1）分类准确率计算为
@@ -1277,10 +1277,10 @@ CLIP 文本塔 \(g_{\plainphi}\) 通常采用类似于前面描述的 Vision Tra
 \frac{1}{N}\sum_{i=1}^{N}\boldsymbol{1}\{\hat{y}_i = y_i\}.
 \]
 
-在 CLIP 中，我们可以使用文本编码器 \(g_{\plainphi}\) 构建一个文本字典 \(\vD\in\R^{n\times d}\)，其第 \(j\) 行是第 \(j\) 个类别标签的归一化潜在表示。
+在 CLIP 中，我们可以使用文本编码器 \(g_{\plainphi}\) 构建一个文本字典 \(\vD\in\R^{n\times d}\)，其第 \(j\) 行是第 \(j\) 个类别标签的归一化潜在文本表示。
 具体而言，对于每个类别 \(\ell_j \in \cL\)，我们构建一个文本描述（提示，prompt）\(\vT_j\)（例如，
-“一张 \(\ell_j\) 的照片”），并计算其归一化嵌入
-\(\vz_j^T \doteq \frac{g_{\plainphi}(\vT_j)}{\|g_{\plainphi}(\vT_j)\|_2} \in \R^{d}\)。将这些按行堆叠得到
+“一张 \(\ell_j\) 的照片”），并计算其归一化表示
+\(\vz_j^T \doteq \frac{g_{\plainphi}(\vT_j)}{\|g_{\plainphi}(\vT_j)\|_2} \in \R^{d}\)。将这些表示按行堆叠得到
 \[
 \vD \doteq 
 \mat{(\vz_1^T)^{\top}\\ \vdots \\ (\vz_n^T)^{\top}}
@@ -1296,20 +1296,20 @@ CLIP 文本塔 \(g_{\plainphi}\) 通常采用类似于前面描述的 Vision Tra
 \vd_i \doteq \vD\,\vz_i^I \in \R^{n},
 \]
 其第 \(j\) 个元素 \(\vd_i[j]\) 是第 \(i\) 张图像和第 \(j\) 个类别标签
-在共享潜在空间中的余弦相似度。根据 CLIP 训练目标，鼓励图像与其匹配文本的相似度高于与不匹配文本的相似度；因此，较大的余弦相似度表明
-\(\vX_i\) 与类别 \(\ell_j\) 之间的对齐更紧密。因此，我们通过下式预测类别索引：
+在共享潜在空间中的余弦相似度。CLIP 的训练目标使得图像与其匹配文本的相似度高于与不匹配文本的相似度；因此，较大的余弦相似度表明
+\(\vX_i\) 与类别 \(\ell_j\) 之间的对齐更紧密。因此，我们通过此式预测类别索引：
 \[
 \hat{y}_i \doteq \arg\max_{j \in \{1,\ldots,n\}} \vd_i[j].
 \]
-最后，我们可以如上所述计算分类准确率。 
+最后，我们可以如前文所述计算分类准确率。 
 
-这种零样本决策协议不仅限于分类，还自然适用于\emph{检索}（retrieval）任务，
-其中目标是给定查询从大型数据库中返回最相关的项目（例如，检索与文本查询最相关的图像，或检索与图像查询最相关的文本）。例如，在文本到图像的检索中，我们不是从类别名称提示构建字典，而是通过编码和归一化所有数据库图像 \(\{\vX_m\}_{m=1}^{M}\) 来构建\emph{图像字典}，
-将它们的嵌入堆叠成
-\(\vD\in\R^{M\times d}\)。给定查询文本 \(\vT\)，我们计算其归一化嵌入
+这种零样本分类方法不仅限于分类，还自然适用于\emph{检索}（retrieval）任务。
+检索的目标是，给定一个查询，从大型数据库中返回最相关的项目（例如，检索与文本查询最相关的图像，或检索与图像查询最相关的文本）。例如，在文本到图像的检索中，我们不再是如分类任务般通过编码类别名称构建文本字典，而是通过编码和归一化所有数据库图像 \(\{\vX_m\}_{m=1}^{M}\) 来构建\emph{图像字典}，
+将它们的表示堆叠成
+\(\vD\in\R^{M\times d}\)。给定查询文本 \(\vT\)，我们计算其归一化表示
 \(\vz^T \doteq g_{\plainphi}(\vT)/\|g_{\plainphi}(\vT)\|_2\)，形成相似度得分
-\(\vd \doteq \vD\vz^T\in\R^{M}\)，然后根据这些得分对图像进行排序（等价地，返回前 \(K\) 个
-索引）。 
+\(\vd \doteq \vD\vz^T\in\R^{M}\)，然后根据这些得分对图像进行排序并返回前 \(K\) 个
+索引作为结果。 
 % More broadly, this simple embedding-and-dot-product pipeline is arguably the most distinctive and
 % practically important feature of CLIP.
 
@@ -1317,7 +1317,7 @@ CLIP 文本塔 \(g_{\plainphi}\) 通常采用类似于前面描述的 Vision Tra
 
 \subsection{实验设置与结果}
 
-接下来，我们展示原始 CLIP 论文中的结果，将 CLIP 与监督 ResNet 基线在几个经典分类基准上进行比较。在所有基准测试中，CLIP 均使用 \Cref{sub:clip_eval} 中描述的零样本分类协议进行评估。ResNet 实验设置的完整细节在~\citep{He2016-lc} 中提供；在这里，我们简要介绍评估数据集，并总结与这些比较相关的 CLIP 训练和评估设置。
+接下来，我们展示原始 CLIP 论文中的结果，将有监督的 ResNet 视觉编码器作为基线，在几个经典分类任务上进行比较。在所有测试中，CLIP 均使用 \Cref{sub:clip_eval} 中描述的零样本分类方法。ResNet 实验设计的完整细节在~\citep{He2016-lc} 中提供；在这里，我们简要介绍分类评估数据集，并总结 CLIP 的训练和评估设置。
 
 \paragraph{评估数据。}
 \begin{itemize}
@@ -1326,35 +1326,35 @@ CLIP 文本塔 \(g_{\plainphi}\) 通常采用类似于前面描述的 Vision Tra
     它通常被划分为 50{,}000 张训练图像和 10{,}000 张测试图像。
 
     \item \textbf{CIFAR-100~\citep{krizhevsky2009learning}。}
-    CIFAR-100 具有与 CIFAR-10 相同的整体大小和图像分辨率（60{,}000 张 RGB \(32\times 32\) 图像，按 50{,}000/10{,}000 划分训练/测试集），但它更具挑战性，因为它包含 100 个细粒度类别（每个类别 600 张图像）。
-    这 100 个类别还被额外分组为 20 个超类。
+    CIFAR-100 具有与 CIFAR-10 相同的整体大小和图像分辨率（60{,}000 张 RGB \(32\times 32\) 图像，按 50{,}000/10{,}000 划分训练/测试集）。但它更具挑战性，因为它包含 100 个细粒度类别（每个类别 600 张图像）。
+    这 100 个类别还被额外分组为 20 个超类（superclass）。
 
     \item \textbf{PASCAL VOC 2007 (VOC2007)~\citep{everingham2010pascal}。}
-    PASCAL VOC 2007 是一个用于对象识别的经典计算机视觉基准，支持图像分类、目标检测和分割等任务。
+    PASCAL VOC 2007 是一个经典计算机视觉任务测试集，支持图像分类、目标检测和分割等任务。
     它侧重于 20 个对象类别（例如，人、车、狗）。
 
     \item \textbf{ImageNet-1K~\citep{imagenet_cvpr09}。}
     ImageNet-1K 是 ILSVRC 2012 的一个子集，包含 1{,}000 个对象类别。
-    该子集包括 1{,}281{,}167 张训练图像、50{,}000 张验证图像和 100{,}000 张测试图像，并在大规模视觉识别和预训练中发挥了核心作用。
+    该子集包括 1{,}281{,}167 张训练图像、50{,}000 张验证图像和 100{,}000 张测试图像，并在大规模视觉任务测试和模型预训练中发挥了核心作用。
 \end{itemize}
 
 \paragraph{模型设置。}
-在此处展示的 CLIP 模型中，Vision Transformer 被用作视觉编码器 \(f_{\theta}\)，并实例化为三种 ViT 变体之一：ViT-B/32、ViT-B/16 或 ViT-L/14。这里，\(\text{B}\)（“Base”）和 \(\text{L}\)（“Large”）指定了 Transformer 的宽度/深度（例如，ViT-B 通常使用 12 个 Transformer 块，嵌入维度 \(d=768\) 和 12 个注意力头，而 ViT-L 使用 24 个块，\(d=1024\) 和 16 个头），而后缀 \(/32\)、\(/16\) 和 \(/14\) 表示用于将输入图像分块的像素\emph{图块大小}（patch size）。较小的图块大小（例如 16 或 14）在固定分辨率下每张图像会产生更多的标记，这增加了计算量，但由于更细的空间粒度，通常会提高准确率。
+在此处展示的 CLIP 模型中，Vision Transformer 被用作视觉编码器 \(f_{\theta}\)，有三种规格：ViT-B/32、ViT-B/16 或 ViT-L/14。这里，\(\text{B}\)（“Base”）和 \(\text{L}\)（“Large”）指定了 Transformer 的宽度/深度（例如，ViT-B 通常包含 12 个 Transformer 层，表示维度 \(d=768\) 和 12 个注意力头，而 ViT-L 包含 24 层，\(d=1024\) 和 16 个注意力头），而后缀 \(/32\)、\(/16\) 和 \(/14\) 为将图像分块后每块的边长（patch size），单位为像素。较小的图块边长（例如 16 或 14）使每张图像在固定分辨率下被分为更多的图块。这增加了计算量，但由于更细的空间粒度，通常会提高下游任务的准确率。
 
 \paragraph{优化设置。}
-所有基于 ViT 的 CLIP 模型都使用带有解耦权重衰减的 Adam 优化器（即 AdamW 风格的正则化）训练 32 个 epoch，其中权重衰减应用于除增益和偏置之外的所有参数。学习率使用余弦调度进行衰减。可学习的温度参数 \(\tau\)（用于缩放对比对数几率）被初始化为等效于 \(0.07\)，并被裁剪以防止将对数几率缩放超过 100，这被发现对于训练稳定性是必要的。最后，训练使用非常大的小批量大小 \(32{,}768\)。
+所有基于 ViT 的 CLIP 模型都使用带有权重衰减的 Adam 优化器（即 AdamW ）训练 32 个 epoch。学习率按照余弦调度（cosine schedule）递减。可学习的温度参数 \(\tau\) 被初始化为 \(0.07\)，并被设有上限 100。此设置对于训练稳定性十分必要。最后，训练使用非常大的批次，一个批次中有 \(32{,}768\) 个图像-文本对。
 
-\paragraph{结果。}\Cref{tab:clip_vs_resnet} 报告了三种 CLIP ViT 变体（B/32、B/16、L/14）的零样本 top-1 准确率，并将它们与监督 ResNet-50 和 ResNet-101 基线进行了比较。
-在所有四个数据集上，CLIP 始终优于监督 ResNet。
-进一步扩展 CLIP 主干网络会产生额外的收益，ViT-L/14 在 CIFAR-10 上达到 \(98.0\)，在 CIFAR-100 上达到 \(87.5\)，在 VOC2007 上达到 \(89.6\)，在 ImageNet 上达到 \(83.9\)。
-尽管如此，该表应被解释为两个\emph{系统}之间的比较，而不是受控的主干网络消融实验：CLIP 受益于大规模图像-文本预训练，并通过零样本提示进行评估，而 ResNet 基线依赖于监督预训练，并需要标记数据来在每个基准上拟合探测器。
-因此，一致的优势主要证明了 CLIP 在零样本协议下可迁移表示的强度，而不是确立 ViT 在纯架构或数据匹配上优于 ResNet。
+\paragraph{结果。}\Cref{tab:clip_vs_resnet} 报告了三种 CLIP ViT（B/32、B/16、L/14）的零样本 top-1 分类准确率，并将它们与有监督训练的 ResNet-50 和 ResNet-101 进行了比较。
+在所有四个数据集上，CLIP 表现始终优于监督 ResNet。
+进一步增加 CLIP 视觉编码器参数量会产生额外的收益，ViT-L/14 在 CIFAR-10 上准确率达到 \(98.0\)，在 CIFAR-100 上达到 \(87.5\)，在 VOC2007 上达到 \(89.6\)，在 ImageNet 上达到 \(83.9\)。
+尽管如此，该表应被解释为两个\emph{系统}以及训练方法之间的比较，而不是受控的主干网络消融实验：CLIP 受益于大规模图像-文本预训练，并通过零样本提示进行评估，而 ResNet 依赖于监督预训练，并需要标记数据以在每个测试集上微调分类头。
+因此，CLIP 在测试集上的更优表现主要证明其图像表示质量优秀，可在零样本、无需微调的情况下完成下游任务，而不是确立 ViT 在纯架构上优于 ResNet。
 
 \begin{table}[t]
 \centering
 \begin{tabular}{@{}llcccc@{}}
 \toprule
-主干网络 & 变体 & CIFAR-10 & CIFAR-100 & VOC2007 & ImageNet \\
+视觉编码器 & 规格 & CIFAR-10 & CIFAR-100 & VOC2007 & ImageNet \\
 \midrule
 CLIP-ViT & B/32 & 95.1 & 80.5 & 87.7 & 76.1 \\
 CLIP-ViT & B/16 & 96.2 & 83.1 & 89.2 & 80.2 \\
@@ -1364,19 +1364,19 @@ ResNet & 50  & 91.8 & 74.5 & 83.8 & 74.3 \\
 ResNet & 101 & 93.0 & 77.2 & 84.4 & 75.8 \\
 \bottomrule
 \end{tabular}
-\caption{各种 CLIP 主干网络和 ResNet 基线在下游数据集上的性能。}
+\caption{各种 CLIP 视觉编码器和 ResNet 基线在下游数据集上的表现。}
 \label{tab:clip_vs_resnet}
 \end{table}
 
 \subsection{简化扩展：LIFT}\label{sub:follow-up}
 
-尽管有效，但 CLIP 表现出几个局限性。首先，从头开始联合训练文本编码器和图像编码器的计算成本很高，通常需要极大的批量和海量数据集才能达到强大的对齐和下游迁移。其次，以这种方式训练的模型可能在组合理解（compositional understanding）方面遇到困难——捕获文本中的词序、图像中的空间布局以及对象-属性或对象-对象关系——部分原因是检索式对比监督可能会奖励那些降低细粒度组合特征权重的捷径解决方案。LIFT（使用固定文本编码器的语言-图像对齐，Language–Image alignment with a Fixed Text encoder）~\citep{yang2025languageimagealignmentfixedtext} 重新审视了这些管道背后的一个核心假设：最佳对齐需要两个编码器的联合端到端训练。相反，LIFT 利用了现代大型语言模型（LLM）已经产生高度信息化的文本嵌入这一观察结果。具体而言，LIFT 固定了一个强大的预训练文本编码器（例如，源自 LLM 或在 LLM 上微调的编码器），离线计算文本嵌入，并仅训练图像编码器以对齐这些固定目标。
+尽管有效，但 CLIP 范式有着几个局限性。首先，从零开始共同训练文本编码器和图像编码器的计算成本很高，通常需要极大的批量和海量数据集才能达到高质量的跨模态对齐和下游任务迁移。其次，以这种方式训练的模型可能在组合语义理解（compositional understanding）方面遇到困难，例如难以捕获文本中的词序、图像中的空间布局以及对象-属性或对象-对象关系。文献证明，一个潜在原因是 CLIP 的对比学习方法会奖励图像表示提取图像全局信息，而同时忽略图像不同细部之间的关系。LIFT（Language–Image alignment with a Fixed Text encoder）~\citep{yang2025languageimagealignmentfixedtext} 重新审视了 CLIP 背后的一个核心假设：最佳对齐需要同时端到端训练两个编码器。与 CLIP 不同的是，LIFT 利用了现代大型语言模型（LLM）已经产生的高度信息化文本表示。具体而言，LIFT 固定了一个强大的预训练文本编码器（例如，源自 LLM 或在 LLM 上微调的编码器），离线计算文本表示，并仅训练图像编码器。
 
 \paragraph{架构。}
-LIFT 保留了与 CLIP 相同的双塔公式，即视觉编码器和文本编码器映射到共享的潜在空间，但关键区别在于文本塔是\emph{固定的}，并且可以由任何强大的基于 LLM 的文本编码器 \(g_{\plainphi}:\cT\to\R^{d}\) 实例化以生成文本嵌入，其中 \(\plainphi\) 在训练期间不更新。在我们的实现中，我们采用 NV-Embed-V2 文本编码器，其嵌入维度为 \(d=4096\)。由于文本塔 \(g_{\plainphi}\) 是固定的，我们可以离线预计算所有文本嵌入 \(\{g_{\plainphi}(\vT)\}\)，并在训练期间仅在线计算梯度并更新图像编码器 \(f_{\theta}\)。图像塔 \(f_{\theta}:\cI\to\R^{d}\) 遵循与 \Cref{sub:clip_vision_tower} 中相同的结构，投影头输出维度设置为 \(d\)，以匹配固定文本嵌入空间的维度。除了固定 \(g_{\plainphi}\) 和匹配投影维度外，其余组件（包括对比损失和优化过程）遵循与 CLIP 相同的设计原则。
+LIFT 保留了与 CLIP 相同的双塔结构，即视觉编码器和文本编码器映射到共享的潜在空间，但关键区别在于文本塔是\emph{固定的}，可以使用任何基于 LLM 的文本编码器 \(g_{\plainphi}:\cT\to\R^{d}\) ，其中 \(\plainphi\) 在训练期间不更新。在我们的实现中，我们采用 NV-Embed-V2 文本编码器，其文本表示维度为 \(d=4096\)。由于文本塔 \(g_{\plainphi}\) 是固定的，我们可以离线预计算所有文本表示 \(\{g_{\plainphi}(\vT)\}\)，并在训练期间仅在线计算梯度并更新图像编码器 \(f_{\theta}\)。图像塔 \(f_{\theta}:\cI\to\R^{d}\) 遵循与 \Cref{sub:clip_vision_tower} 中相同的结构，投影头输出维度设置为 \(d\)，以匹配固定文本表示的潜在空间维度。除了固定 \(g_{\plainphi}\) 和匹配图像投影维度外，其余组件（包括对比损失和优化过程）均遵循与 CLIP 相同的设计原则。
 
 \paragraph{评估方法。} 
-组合理解是 CLIP 的一个已知局限性。我们在七个 SugarCrepe~\citep{hsieh2023sugarcrepe} 任务上评估 LIFT 和 CLIP，其中每张图像 \(\vX\) 都配有一个\emph{正样本}（正确）标题 \(\vT_{\text{pos}}\) 和一个\emph{负样本}标题 \(\vT_{\text{neg}}\)，后者是通过添加、替换或交换 \(\vT_{\text{pos}}\) 中的对象、属性或关系构建的。一些示例见图 \ref{fig:SugarCrepe-examples}。模型被要求通过比较标题-图像的余弦相似度来识别正确的标题。形式上，对于每个样本 \(i\in\{1,\dots,N\}\)，我们计算归一化嵌入：
+组合语义理解是 CLIP 的一个已知局限性。我们在七个聚焦组合语义理解的 SugarCrepe~\citep{hsieh2023sugarcrepe} 任务上评估 LIFT 和 CLIP，其中每张图像 \(\vX\) 都配有一个\emph{正样本}（正确）标题 \(\vT_{\text{pos}}\) 和一个\emph{负样本}标题 \(\vT_{\text{neg}}\)，后者是通过添加、替换或交换 \(\vT_{\text{pos}}\) 中的对象、属性或关系构建的。一些示例见图 \ref{fig:SugarCrepe-examples}。模型被要求通过比较图像-标题的余弦相似度来识别正确的标题。形式上，对于每个样本 \(i\in\{1,\dots,N\}\)，我们计算归一化表示：
 \[
 \vz_i^{I} \doteq \frac{f_{\theta}(\vX_i)}{\|f_{\theta}(\vX_i)\|_2},\qquad
 \vz_{i,\text{pos}}^{T} \doteq \frac{g_{\plainphi}(\vT_{i,\text{pos}})}{\|g_{\plainphi}(\vT_{i,\text{pos}})\|_2},\qquad
@@ -1396,12 +1396,12 @@ s_{i,\text{neg}} \doteq \langle \vz_i^{I}, \vz_{i,\text{neg}}^{T} \rangle.
 \begin{figure}
 \centering
 \includegraphics[width=\textwidth]{\toplevelprefix/chapters/chapter8/figs/negative_caption_demo.pdf}
-\caption{来自两个 SugarCrepe 任务的原始标题（顶部）及其负样本对应物（底部）：\texttt{replace relation}（左）和 \texttt{swap attribute}（右）。}
+\caption{来自两个 SugarCrepe 任务的原始正确标题（顶部）及其对应的负样本标题（底部）：\texttt{replace relation}（左）和 \texttt{swap attribute}（右）。}
 \label{fig:SugarCrepe-examples}
 \end{figure}
 
 \paragraph{实验结果。}
-如 \Cref{tab:Compositionality} 所示，当在 DataComp-1B 上训练时，LIFT 在所有七个任务上均优于 CLIP，平均准确率提高了 \textbf{6.8\%}。LIFT 在 \texttt{add attribute}、\texttt{replace attribute} 和 \texttt{replace relation} 任务上取得了显著的收益。这些改进有力地证明了基于 LLM 的文本编码器 \(g_{\plainphi}\) 捕获了更具信息量的文本表示，从而能够更准确地建模对象-属性关联和对象-对象关系。另一方面，我们可以看到，与其他 SugarCrepe 任务相比，LIFT 在 \texttt{swap object} 和 \texttt{swap attribute} 上的准确率相对较低。我们将此局限性归因于对比学习目标，该目标主要侧重于对齐低阶统计量。应对这一挑战需要探索更精细的语言-图像对齐信息论度量，这是未来工作的一个关键方向。
+如 \Cref{tab:Compositionality} 所示，当在 DataComp-1B 数据集上训练时，LIFT 在所有七个任务上均优于 CLIP，平均准确率提高了 \textbf{6.8\%}。LIFT 在 \texttt{add attribute}、\texttt{replace attribute} 和 \texttt{replace relation} 任务上取得了显著的收益，有力地证明了基于 LLM 的文本编码器 \(g_{\plainphi}\) 捕获了更具信息量的文本表示，从而能够更准确地建模对象-属性关联和对象-对象关系。另一方面，我们可以看到，与其他 SugarCrepe 任务相比，LIFT 在 \texttt{swap object} 和 \texttt{swap attribute} 上的准确率相对较低。我们将此局限性归因于对比学习目标，该目标主要侧重于对齐低阶统计量。应对这一挑战需要从信息论视角探索更精细的图像-文本对齐度量，这是未来工作的一个关键方向。
 
 \begin{table}[t]
 \centering
@@ -1409,14 +1409,14 @@ s_{i,\text{neg}} \doteq \langle \vz_i^{I}, \vz_{i,\text{neg}}^{T} \rangle.
 \begin{tabular}{@{}lllccccccc@{}}
 \toprule
 & & & \multicolumn{2}{c}{添加} & \multicolumn{3}{c}{替换} & \multicolumn{2}{c}{交换} \\
-方法 & 数据集 & 见过样本数 & 对象 & 属性 & 对象 & 属性 & 关系 & 对象 & 属性 \\
+方法 & 数据集 & 训练样本数 & 对象 & 属性 & 对象 & 属性 & 关系 & 对象 & 属性 \\
 \midrule
 OpenCLIP & DataComp & 1.28B & 82.3 & 73.7 & 91.7 & 79.4 & 61.2 & 59.6 & 56.9 \\
 LIFT     & DataComp & 1.28B & \textbf{89.0} & \textbf{86.1} & \textbf{93.2} & \textbf{86.0} & \textbf{70.6} & \textbf{64.1} & \textbf{63.4} \\
 \bottomrule
 \end{tabular}%
 }
-\caption{LIFT 和 CLIP 在七个 SugarCrepe 任务上的性能。我们使用开源的 CLIP 实现 OpenCLIP~\citep{ilharco_gabriel_2021_5143773}，并在开源文本-图像对数据集 DataComp~\citep{gadre2023datacompsearchgenerationmultimodal} 上训练 OpenCLIP 和 LIFT。我们报告了每个任务的准确率，最佳结果以粗体显示。}
+\caption{LIFT 和 CLIP 在七个 SugarCrepe 任务上的性能。我们使用开源的 OpenCLIP~\citep{ilharco_gabriel_2021_5143773} 项目复现 CLIP 模型，并在开源图像-文本对数据集 DataComp~\citep{gadre2023datacompsearchgenerationmultimodal} 上训练 OpenCLIP 和 LIFT。我们报告了每个任务的准确率，胜出结果以粗体显示。}
 \label{tab:Compositionality}
 \end{table}
 
