@@ -12,6 +12,9 @@
 # at $output_dir/$tex_base.pdf alongside the HTML output.
 #
 # Set KEEP_BUILD_DIR=1 to preserve the temp directory for debugging.
+# Set BOOK_BUILD_STRICT=1 to fail on compilation errors and unresolved PDF refs.
+# Set BOOK_BUILD_DIAGNOSTICS to retain stage logs even after a failed build.
+# Set BOOK_PYTHON to a Python executable to bypass the full uv project environment.
 
 set -euo pipefail
 
@@ -39,14 +42,43 @@ TEX_BASE="$(basename "$TEX_REL" .tex)"
 OUTPUT_DIR="${2:-$REPO_ROOT/website/html}"
 [[ "$OUTPUT_DIR" != /* ]] && OUTPUT_DIR="$REPO_ROOT/$OUTPUT_DIR"
 
+STRICT_BUILD="${BOOK_BUILD_STRICT:-0}"
+if [[ "$STRICT_BUILD" != "0" && "$STRICT_BUILD" != "1" ]]; then
+    echo "Error: BOOK_BUILD_STRICT must be 0 or 1" >&2
+    exit 1
+fi
+DIAGNOSTICS_DIR="${BOOK_BUILD_DIAGNOSTICS:-}"
+if [[ -n "$DIAGNOSTICS_DIR" && "$DIAGNOSTICS_DIR" != /* ]]; then
+    DIAGNOSTICS_DIR="$REPO_ROOT/$DIAGNOSTICS_DIR"
+fi
+if [[ -n "${BOOK_PYTHON:-}" ]]; then
+    PYTHON_CMD=("$BOOK_PYTHON")
+else
+    PYTHON_CMD=(uv run python3)
+fi
+
 # Create temp build directory named after the tex file (parallel-safe)
 BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/build-${TEX_BASE}-XXXXXX")"
+BUILD_PHASE="setup"
+collect_stage_logs() {
+    [[ -n "$DIAGNOSTICS_DIR" && -d "${SOURCE_DIR:-}" ]] || return 0
+    mkdir -p "$DIAGNOSTICS_DIR"
+    local ext
+    for ext in log aux blg lg; do
+        if [[ -f "$SOURCE_DIR/$TEX_BASE.$ext" ]]; then
+            cp "$SOURCE_DIR/$TEX_BASE.$ext" "$DIAGNOSTICS_DIR/$BUILD_PHASE.$ext"
+        fi
+    done
+}
 cleanup() {
+    local result=$?
+    collect_stage_logs || echo "Warning: could not preserve build logs" >&2
     if [ "${KEEP_BUILD_DIR:-}" = "1" ]; then
         echo "Build dir preserved: $BUILD_DIR"
     else
         rm -rf "$BUILD_DIR"
     fi
+    return "$result"
 }
 trap cleanup EXIT
 
@@ -75,6 +107,7 @@ mkdir -p "$SOURCE_DIR" "$MAKE4HT_DIR" "$MACROS_DIR" \
 
 rsync -a \
     --exclude=".git/" \
+    --exclude="/_build_*/" \
     --exclude="website/_build_*/" \
     --exclude="website/html/" \
     "$REPO_ROOT/" "$SOURCE_DIR/"
@@ -108,16 +141,38 @@ fi
 # Stage 1: Build PDF
 # ---------------------------------------------------------------------------
 echo "[Stage 1] Building PDF..."
+BUILD_PHASE="pdf"
+PDF_ARGS=(-pdf -interaction=nonstopmode -shell-escape)
+if [[ "$STRICT_BUILD" == "1" ]]; then
+    PDF_ARGS+=(-halt-on-error)
+else
+    PDF_ARGS+=(-f)
+fi
+PDF_STATUS=0
 (
     cd "$SOURCE_DIR"
-    latexmk -pdf -interaction=nonstopmode -shell-escape -f "$TEX_REL" || true
-)
+    latexmk "${PDF_ARGS[@]}" "$TEX_REL"
+) || PDF_STATUS=$?
+collect_stage_logs
+if [[ "$STRICT_BUILD" == "1" && "$PDF_STATUS" != "0" ]]; then
+    echo "Error: PDF compilation failed (exit $PDF_STATUS)" >&2
+    exit "$PDF_STATUS"
+fi
 
 PDF_FILE="$SOURCE_DIR/${TEX_BASE}.pdf"
 if [ -f "$PDF_FILE" ]; then
     echo "  PDF built successfully"
 else
     echo "  Warning: PDF was not produced"
+    [[ "$STRICT_BUILD" == "0" ]] || exit 1
+fi
+
+if [[ "$STRICT_BUILD" == "1" ]]; then
+    LOG_ARGS=(tex-log "$SOURCE_DIR/$TEX_BASE.log" --references)
+    if [[ -f "$SOURCE_DIR/$TEX_BASE.blg" ]]; then
+        LOG_ARGS+=(--biber-log "$SOURCE_DIR/$TEX_BASE.blg")
+    fi
+    "${PYTHON_CMD[@]}" "$PIPELINE_DIR/validate_build.py" "${LOG_ARGS[@]}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -132,12 +187,14 @@ if [ -f "$SNAPSHOT_AUX" ] && ! grep -q '\\ifx\\rEfLiNK\\UnDef' "$SNAPSHOT_AUX"; 
     echo "  Using AUX from PDF build"
 else
     echo "  Warning: no usable AUX; eqref fallback may be limited"
+    [[ "$STRICT_BUILD" == "0" ]] || exit 1
 fi
 
 # ---------------------------------------------------------------------------
 # Stage 3: make4ht
 # ---------------------------------------------------------------------------
 echo "[Stage 3] Running make4ht..."
+BUILD_PHASE="html"
 CFG_FILE="$PIPELINE_DIR/book.cfg"
 MK4_FILE="$PIPELINE_DIR/book.mk4"
 (
@@ -152,6 +209,15 @@ MK4_FILE="$PIPELINE_DIR/book.mk4"
         "" \
         "-shell-escape"
 )
+collect_stage_logs
+if [[ "$STRICT_BUILD" == "1" ]]; then
+    # TeX4ht refs may still need postprocess.py's PDF-AUX recovery at this stage.
+    "${PYTHON_CMD[@]}" "$PIPELINE_DIR/validate_build.py" tex-log "$SOURCE_DIR/$TEX_BASE.log"
+    if ! compgen -G "$MAKE4HT_DIR/*.html" >/dev/null; then
+        echo "Error: make4ht produced no HTML files" >&2
+        exit 1
+    fi
+fi
 
 echo "  make4ht output: $(ls "$MAKE4HT_DIR"/*.html 2>/dev/null | wc -l) HTML files"
 echo ""
@@ -162,7 +228,7 @@ echo ""
 echo "[Stage 4] Generating MathJax macros..."
 MACROS_JSON="$MACROS_DIR/macros.json"
 
-(cd "$REPO_ROOT" && uv run python3 "$PIPELINE_DIR/generate_macros.py" \
+(cd "$REPO_ROOT" && "${PYTHON_CMD[@]}" "$PIPELINE_DIR/generate_macros.py" \
     "$MACROS_JSON" \
     "$SOURCE_DIR/math-macros.sty" \
     "$SOURCE_DIR/book-macros.sty" \
@@ -178,7 +244,7 @@ echo "[Stage 5] Injecting MathJax macros..."
 
 rsync -a --delete "$MAKE4HT_DIR/" "$MATHJAX_DIR/"
 
-(cd "$REPO_ROOT" && uv run python3 "$PIPELINE_DIR/inject_mathjax_macros.py" \
+(cd "$REPO_ROOT" && "${PYTHON_CMD[@]}" "$PIPELINE_DIR/inject_mathjax_macros.py" \
     "$MATHJAX_DIR" "$MACROS_JSON")
 
 echo ""
@@ -190,7 +256,7 @@ echo "[Stage 6] Post-processing..."
 
 rsync -a --delete "$MATHJAX_DIR/" "$POST_INPUT_DIR/"
 
-(cd "$REPO_ROOT" && uv run python3 "$PIPELINE_DIR/postprocess.py" \
+(cd "$REPO_ROOT" && "${PYTHON_CMD[@]}" "$PIPELINE_DIR/postprocess.py" \
     --input "$POST_INPUT_DIR" \
     --output "$POST_OUTPUT_DIR" \
     --aux "$REF_AUX" \
