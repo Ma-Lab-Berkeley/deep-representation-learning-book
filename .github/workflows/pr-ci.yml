@@ -1,0 +1,191 @@
+name: Pull Request CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# PR code, including TeX shell escapes, runs without deployment permissions.
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Build validation tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install website-only dependencies
+        run: python -m pip install -r website/latex_to_html/requirements-ci.txt
+      - name: Check build script syntax
+        run: bash -n website/latex_to_html/build.sh
+      - name: Test build validation
+        run: python -B -m unittest discover -s website/latex_to_html -v
+
+  build:
+    name: PDF and HTML (${{ matrix.lang }})
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lang: en
+            tex_file: book-main.tex
+            pdf_file: book-main.pdf
+          - lang: zh
+            tex_file: book-main_zh.tex
+            pdf_file: book-main_zh.pdf
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Strict PDF and HTML build
+        uses: xu-cheng/texlive-action@475ab07999e9709e524c3708488c8c170d3a6611
+        with:
+          # Match the production deployment's TeX Live image and Debian snapshot.
+          docker_image: ghcr.io/xu-cheng/texlive-debian@sha256:394f96c67d6c0db340897848a34c99391e7be469d05f24f6ba1430173d1323f5
+          run: |
+            set -euo pipefail
+            export DEBIAN_FRONTEND=noninteractive
+            cat >/etc/apt/sources.list.d/debian.sources <<'EOF'
+            Types: deb
+            URIs: https://snapshot.debian.org/archive/debian/20260306T000000Z
+            Suites: trixie trixie-updates
+            Components: main
+            Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+            Types: deb
+            URIs: https://snapshot.debian.org/archive/debian-security/20260306T000000Z
+            Suites: trixie-security
+            Components: main
+            Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+            EOF
+            echo 'Acquire::Check-Valid-Until "false";' >/etc/apt/apt.conf.d/99snapshot
+            apt-get update -y
+            apt-get install -y python3 python3-venv imagemagick rsync ghostscript
+
+            python3 -m venv /tmp/book-ci-python
+            export BOOK_PYTHON=/tmp/book-ci-python/bin/python
+            "$BOOK_PYTHON" -m pip install -r website/latex_to_html/requirements-ci.txt
+
+            # Only workspace files survive the TeX Live action's disposable container.
+            export BOOK_BUILD_STRICT=1
+            export BOOK_BUILD_DIAGNOSTICS="$GITHUB_WORKSPACE/_build_ci/diagnostics"
+            mkdir -p "$BOOK_BUILD_DIAGNOSTICS"
+            # Match deployment: XeTeX's main_memory is baked into its format.
+            export TEXMFCNF="$PWD:"
+            fmtutil-user --byfmt xelatex \
+              2>&1 | tee "$BOOK_BUILD_DIAGNOSTICS/format.log"
+            bash website/latex_to_html/build.sh '${{ matrix.tex_file }}' _build_ci/output \
+              2>&1 | tee "$BOOK_BUILD_DIAGNOSTICS/build.log"
+            "$BOOK_PYTHON" website/latex_to_html/validate_build.py html _build_ci/output \
+              --pdf '_build_ci/output/${{ matrix.pdf_file }}' \
+              2>&1 | tee "$BOOK_BUILD_DIAGNOSTICS/validation.log"
+      - name: Upload generated book
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-book-${{ matrix.lang }}
+          path: _build_ci/output/
+          if-no-files-found: error
+          retention-days: 3
+      - name: Preserve build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-book-diagnostics-${{ matrix.lang }}
+          path: _build_ci/diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
+
+  links:
+    name: Bilingual site and internal links
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install website-only dependencies
+        run: python -m pip install -r website/latex_to_html/requirements-ci.txt
+      - name: Copy checked-in site shell
+        run: |
+          mkdir -p _build_ci/site/deep-representation-learning-book _build_ci/reports
+          cp -a website/html/. _build_ci/site/deep-representation-learning-book/
+      - name: Download English build
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-book-en
+          path: _build_ci/site/deep-representation-learning-book/
+      - name: Download Chinese build
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-book-zh
+          path: _build_ci/site/deep-representation-learning-book/zh/
+      - name: Assemble and validate the published layout
+        id: assemble
+        run: |
+          site=_build_ci/site/deep-representation-learning-book
+          mkdir -p "$site/assets"
+          mv "$site/book-main.pdf" "$site/assets/book-main.pdf"
+          mv "$site/zh/book-main_zh.pdf" "$site/assets/book-main_zh.pdf"
+          python -B website/latex_to_html/validate_build.py html "$site" --pdf "$site/assets/book-main.pdf" --write-link-manifest
+          python -B website/latex_to_html/validate_build.py html "$site/zh" --pdf "$site/assets/book-main_zh.pdf" --write-link-manifest
+      - name: Check internal files and fragment targets
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
+        with:
+          lycheeVersion: v0.24.2
+          token: ''
+          fail: true
+          failIfEmpty: true
+          output: _build_ci/reports/internal-links.md
+          args: >-
+            --offline --no-ignore --no-progress
+            --include-fragments=anchor-only --index-files index.html
+            --root-dir '${{ github.workspace }}/_build_ci/site'
+            --remap '^https?://ma-lab-berkeley\.github\.io/deep-representation-learning-book/ file://${{ github.workspace }}/_build_ci/site/deep-representation-learning-book/'
+            './_build_ci/site/**/*.html'
+      - name: Report external HTTP links (advisory)
+        id: external
+        timeout-minutes: 10
+        if: ${{ !cancelled() && steps.assemble.outcome == 'success' }}
+        continue-on-error: true
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
+        with:
+          lycheeVersion: v0.24.2
+          token: ''
+          fail: false
+          failIfEmpty: false
+          output: _build_ci/reports/external-links.md
+          args: >-
+            --no-ignore --no-progress --scheme http --scheme https
+            --exclude-all-private --timeout 15 --max-retries 1 --max-concurrency 4
+            --exclude '^https?://ma-lab-berkeley\.github\.io/deep-representation-learning-book/'
+            './_build_ci/site/**/*.html'
+      - name: Flag advisory link failures
+        if: ${{ !cancelled() && (steps.external.outcome == 'failure' || (steps.external.outputs.exit_code != '' && steps.external.outputs.exit_code != '0')) }}
+        run: echo '::warning::External link check reported failures; inspect the external-links report. This check is advisory because remote hosts may block or rate-limit CI.'
+      - name: Preserve assembled site and link reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-bilingual-site-and-links
+          path: |
+            _build_ci/site/
+            _build_ci/reports/
+          if-no-files-found: warn
+          retention-days: 3
