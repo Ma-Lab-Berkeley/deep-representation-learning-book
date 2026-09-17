@@ -71,6 +71,39 @@ python -m http.server -d website/html
 
 Note: The AI helper calls a variety of different models by making queries to a [Cloudflare Worker](https://workers.cloudflare.com/) proxy. We use this proxy because we do not want to expose API keys to everyone. As such, the worker will unfortunately not be open-sourced. If you really need access, talk to [Druv](https://druvpai.github.io/).
 
+### Pull Request Validation
+
+The `Pull Request CI` workflow checks contributions without deploying the site:
+
+- Runs the build-validator and build-script regression tests.
+- Builds the full English and Chinese PDFs and HTML with the deployment's pinned TeX Live image. Strict mode rejects compiler failures, unresolved PDF references/citations, duplicate labels, and pending reference reruns.
+- Checks generated chapters, appendices, bibliography, search indexes, PDF signatures, and unresolved reference markers in final HTML.
+- Assembles the bilingual site with the deployment layout, then checks local files and fragment targets, including search-index destinations, with lychee.
+- Reports external HTTP link failures as advisory only, since remote sites can block or rate-limit CI. Internal link failures block CI.
+
+The workflow uses read-only repository permissions and does not require secrets. GitHub may require maintainer approval before running a fork's workflow. Build diagnostics (including failed builds) and the assembled site/link reports are available as workflow artifacts.
+
+To run the lightweight tests without the research dependencies:
+
+```bash
+python3 -m venv .venv-ci
+.venv-ci/bin/python -m pip install -r website/latex_to_html/requirements-ci.txt
+.venv-ci/bin/python -B -m unittest discover -s website/latex_to_html -v
+```
+
+With the website build prerequisites installed, reproduce one strict build from the repository root:
+
+```bash
+export BOOK_PYTHON="$PWD/.venv-ci/bin/python"
+export BOOK_BUILD_STRICT=1
+export BOOK_BUILD_DIAGNOSTICS="$PWD/_build_ci/en-diagnostics"
+bash website/latex_to_html/build.sh book-main.tex _build_ci/en
+"$BOOK_PYTHON" website/latex_to_html/validate_build.py html _build_ci/en \
+  --pdf _build_ci/en/book-main.pdf
+```
+
+For Chinese, use `book-main_zh.tex`, `_build_ci/zh`, and `book-main_zh.pdf`, with a separate diagnostics directory. Without `BOOK_BUILD_STRICT=1`, the existing build behavior is unchanged. `BOOK_PYTHON` selects a Python executable instead of `uv run python3`; `KEEP_BUILD_DIR=1` also preserves the temporary source/build files. The workflow's `--write-link-manifest` option creates a CI-only HTML helper for checking search destinations; it is not deployed.
+
 ## Raising an Issue
 
 ### Prerequisites for Raising an Issue
