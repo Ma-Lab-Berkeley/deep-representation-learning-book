@@ -269,14 +269,22 @@ def remove_make4ht_navigation(soup: BeautifulSoup):
 # and add our own styling classes.
 
 _THEOREM_HEAD_RE = re.compile(
-    r"^(Theorem|Definition|Lemma|Corollary|Proposition|Example|Remark|"
+    r"^((?:Theorem|Definition|Lemma|Corollary|Proposition|Example|Remark|"
     r"Exercise|Proof|Assumption|Axiom|Notation|Key Idea|Method|Model|"
-    r"Claim|Conjecture|Idea|Fact|Problem|Question)\b",
+    r"Claim|Conjecture|Idea|Fact|Problem|Question)\b|"
+    r"(?:定理|推论|关键思想|引理|方法|命题|公理|假设|定义|模型|记号|"
+    r"例|断言|猜想|练习|想法|事实|问题|注)(?=\s|[0-9A-Z.(（]|$))",
     re.IGNORECASE,
 )
 
 _THEOREM_NAME_MAP = {
     "key idea": "keyidea",
+    "定理": "theorem", "推论": "corollary", "关键思想": "keyidea",
+    "引理": "lemma", "方法": "method", "命题": "proposition",
+    "公理": "axiom", "假设": "assumption", "定义": "definition",
+    "模型": "model", "记号": "notation", "例": "example",
+    "断言": "claim", "猜想": "conjecture", "练习": "exercise",
+    "想法": "idea", "事实": "fact", "问题": "problem", "注": "remark",
 }
 
 
@@ -299,7 +307,7 @@ def tag_theorem_environments(soup: BeautifulSoup):
         head = div.find(["span", "strong", "b"], class_=lambda c: c and "head" in str(c))
         if not head:
             head = div.find(["strong", "b"])
-        if head:
+        if head and head.find_parent("div") is div:
             _classify_theorem_div(div, head)
 
     # Tag proof environments (make4ht uses class "proof")
@@ -318,7 +326,7 @@ def _classify_theorem_div(div: Tag, head: Tag | None = None):
     if head is None:
         return
 
-    text = head.get_text(strip=True)
+    text = head.get_text(" ", strip=True)
     m = _THEOREM_HEAD_RE.match(text)
     if not m:
         return
