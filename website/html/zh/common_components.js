@@ -243,6 +243,15 @@
                 courses: `
 以下是与本书相关或使用了本书材料的高校课程：
 
+ - 香港大学，DATA8014，2026年秋季
+   - 讲座 1（追求智能的本质）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec01.pdf)、[视频](https://youtu.be/FzM74Alism0)
+   - 讲座 2（解析方法与线性模型）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec02.pdf)、[视频](https://youtu.be/iiBo0UCdLJ4)
+   - 讲座 3（学习线性与混合线性模型）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec03.pdf)、[视频](https://youtu.be/iJo2orkZwkk)
+   - 讲座 4（深度表示学习的优化基础）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec04.pdf)、[视频](https://youtu.be/kqikj_qDDvU)
+   - 讲座 5（通过去噪学习低维分布）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec05.pdf)、[视频](https://youtu.be/BYUgMA8d3n8)
+   - 讲座 6（通过有损压缩追求低维结构）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec06.pdf)、[视频](https://youtu.be/cFIaFIqyGIM)
+   - 讲座 7（通过最大化率缩减构建深度网络）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec07.pdf)、[视频](https://youtu.be/pI3cHrnybOE)
+   - 讲座 8（通过稀疏率缩减的白盒 Transformer 用于表示学习）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec08.pdf)、[视频](https://youtu.be/zx-gcCapvUk)
  - 香港大学，DATA8014，2025年秋季
    - 讲座 1（追求智能的本质）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec01.pdf)、[视频 1](https://youtu.be/H6vt_OBO0dk)、[视频 2](https://youtu.be/vcpHffMi6NY)、[视频 3](https://youtu.be/7Q-SYdzeR0M)
    - 讲座 2（解析方法与线性模型）：[幻灯片](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec02.pdf)、[视频 1](https://youtu.be/ybxj5U1cUdM)、[视频 2](https://youtu.be/iJ3GNlWCc4k)、[视频 3](https://youtu.be/Giz1r7cajPY)
