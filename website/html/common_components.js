@@ -267,6 +267,15 @@ This book would have not been possible without the financial support for these r
                 courses: `
 The following are university courses related to or using material from the book.
 
+- The University of Hong Kong, DATA8014, Fall 2026
+  - Lecture 1 (Pursuing the Nature of Intelligence): [slides](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec01.pdf), [video](https://youtu.be/FzM74Alism0)
+  - Lecture 2 (Analytic Approach and Linear Models): [slides](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec02.pdf), [video](https://youtu.be/iiBo0UCdLJ4)
+  - Lecture 3 (Learning Linear and Mixed Linear Models): [slides](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec03.pdf), [video](https://youtu.be/iJo2orkZwkk)
+  - Lecture 4 (Optimization Foundations of Deep Representation Learning): [slides](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec04.pdf), [video](https://youtu.be/kqikj_qDDvU)
+  - Lecture 5 (Learning Low-Dimensional Distributions via Denoising): [slides](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec05.pdf), [video](https://youtu.be/BYUgMA8d3n8)
+  - Lecture 6 (Pursuing Low-Dimensional Structures via Lossy Compression): [slides](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec06.pdf), [video](https://youtu.be/cFIaFIqyGIM)
+  - Lecture 7 (Deep Networks from Maximizing Rate Reduction): [slides](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec07.pdf), [video](https://youtu.be/pI3cHrnybOE)
+  - Lecture 8 (White-Box Transformers for Representation Learning via Sparse Rate Reduction): [slides](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa26_slides/lec08.pdf), [video](https://youtu.be/zx-gcCapvUk)
 - The University of Hong Kong, DATA8014, Fall 2025
   - Lecture 1 (Pursuing the Nature of Intelligence): [slides](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec01.pdf), [video part 1](https://youtu.be/H6vt_OBO0dk), [video part 2](https://youtu.be/vcpHffMi6NY), [video part 3](https://youtu.be/7Q-SYdzeR0M)
   - Lecture 2 (Analytic Approach and Linear Models): [slides](https://pub-8cdab817e1ea4a47805f543e0f3b71eb.r2.dev/hku_data8014fa25_slides/lec02.pdf), [video part 1](https://youtu.be/ybxj5U1cUdM), [video part 2](https://youtu.be/iJ3GNlWCc4k), [video part 3](https://youtu.be/Giz1r7cajPY)
